@@ -12,7 +12,7 @@
     border:2px solid rgba(200,210,240,.35); color:#e8ecf8; font-size:14px; font-weight:700;
     display:flex; align-items:center; justify-content:center; touch-action:none; }
   .btn.on { background:rgba(255,255,255,.4); }
-  #left { left:14px; bottom:22px; } #right { left:96px; bottom:22px; } #down { left:55px; bottom:98px; width:56px; height:56px; }
+  #left { left:14px; bottom:22px; } #right { left:96px; bottom:22px; } #down { left:55px; bottom:92px; width:50px; height:50px; } #up { left:55px; bottom:148px; width:50px; height:50px; }
   #jump { right:14px; bottom:90px; } #atk { right:92px; bottom:22px; width:76px; height:76px; } #run { right:14px; bottom:12px; width:60px; height:60px; }
   #gear { position:fixed; top:8px; right:8px; width:40px; height:40px; border-radius:8px; border:1px solid #445; background:rgba(20,24,36,.8);
     color:#cfd6e6; font-size:20px; }
@@ -29,11 +29,12 @@
 </head>
 <body>
 <canvas id="c" width="800" height="450"></canvas>
-<div id="help">A/D move · Shift run · Space jump · J attack · S+J in air = pogo</div>
+<div id="help">A/D move · Shift run · Space jump · J slash · W+J up-slash · S+J in air = pogo</div>
 <button id="gear">⚙</button>
 <div id="panel"></div>
 <div class="btn" id="left" data-k="left">◀</div>
 <div class="btn" id="right" data-k="right">▶</div>
+<div class="btn" id="up" data-k="up">▲</div>
 <div class="btn" id="down" data-k="down">▼</div>
 <div class="btn" id="run" data-k="run">RUN</div>
 <div class="btn" id="jump" data-k="jump">JUMP</div>
@@ -41,13 +42,14 @@
 <script>
 // ---------- Tunable settings (sliders) ----------
 const DEFAULTS = {
-  gravity:   [1800, 600, 3500, 50, 'Gravity'],
-  walk:      [170, 60, 400, 5, 'Walk speed'],
+  gravity:   [2200, 600, 3500, 50, 'Gravity'],
+  walk:      [200, 60, 400, 5, 'Walk speed'],
   run:       [300, 100, 700, 10, 'Run speed'],
   jump:      [620, 300, 1000, 10, 'Jump power'],
   atkRange:  [70, 30, 150, 5, 'Attack range'],
-  atkCd:     [0.30, 0.1, 1, 0.05, 'Attack cooldown (s)'],
-  knock:     [260, 0, 700, 10, 'Knockback'],
+  atkCd:     [0.32, 0.1, 1, 0.02, 'Attack cooldown (s)'],
+  knock:     [260, 0, 700, 10, 'Enemy knockback'],
+  hitstop:   [0.06, 0, 0.2, 0.01, 'Hit freeze (s)'],
   shake:     [6, 0, 20, 1, 'Screen shake'],
 };
 const S = {};
@@ -84,10 +86,10 @@ function fit() {
 addEventListener('resize', fit); fit();
 
 // ---------- Input (keyboard + multi-touch buttons) ----------
-const keys = { left:0, right:0, down:0, run:0, jump:0, atk:0 };
+const keys = { left:0, right:0, up:0, down:0, run:0, jump:0, atk:0 };
 let jumpPressed = false, atkPressed = false;
 const map = { ArrowLeft:'left', KeyA:'left', ArrowRight:'right', KeyD:'right', ArrowDown:'down', KeyS:'down',
-  ShiftLeft:'run', ShiftRight:'run', Space:'jump', ArrowUp:'jump', KeyW:'jump', KeyJ:'atk', KeyK:'atk', KeyZ:'atk' };
+  ShiftLeft:'run', ShiftRight:'run', Space:'jump', KeyC:'jump', ArrowUp:'up', KeyW:'up', KeyJ:'atk', KeyK:'atk', KeyZ:'atk' };
 function setKey(k, v) {
   if (v && !keys[k]) { if (k === 'jump') jumpPressed = true; if (k === 'atk') atkPressed = true; }
   keys[k] = v;
@@ -121,7 +123,9 @@ const wall = { x:WALL_X, y:250, w:40, h:150, hp:3, maxHp:3, alive:true, flash:0 
 const orb = { x:2250, y:FLOOR - 40, got:false };
 const dummy = { x:1000, y:FLOOR - 64, w:40, h:64, hp:5, maxHp:5, flash:0, vx:0, dead:0, hits:0 };
 const p = { x:100, y:FLOOR - 56, w:28, h:52, vx:0, vy:0, face:1, ground:false,
-  atkT:0, atkCd:0, atkDir:0, hitSet:null };
+  atkT:0, atkCd:0, atkDir:0, hitSet:null, coyote:0, buffer:0, slashSide:1 };
+const parts = []; let freeze = 0;
+function spark(x, y, n, col) { for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, v = 80 + Math.random() * 260; parts.push({ x, y, vx:Math.cos(a) * v, vy:Math.sin(a) * v - 60, t:0.35 + Math.random() * 0.25, col }); } }
 let cam = 0, shake = 0, msg = '', msgT = 0;
 
 function allSolids() { return wall.alive ? solids.concat(wall) : solids; }
@@ -143,42 +147,48 @@ function moveBody(b, dt) {
 function attackBox() {
   const r = S.atkRange;
   if (p.atkDir === 2) return { x:p.x + p.w/2 - 22, y:p.y + p.h, w:44, h:r * 0.8 };
+  if (p.atkDir === 1) return { x:p.x + p.w/2 - 22, y:p.y - r * 0.8, w:44, h:r * 0.8 };
   const x = p.face > 0 ? p.x + p.w : p.x - r;
   return { x, y:p.y + 2, w:r, h:p.h - 4 };
 }
 
 function hit(target, isWall) {
-  const dir = p.atkDir === 2 ? 0 : p.face;
-  target.flash = 0.12; shake = S.shake;
+  const dir = p.atkDir ? 0 : p.face;
+  target.flash = 0.12; shake = S.shake; freeze = S.hitstop;
+  spark(target.x + target.w / 2, target.y + target.h / 2, isWall ? 10 : 14, isWall ? '#a89880' : '#fff');
   if (isWall) {
     target.hp--;
     if (target.hp <= 0) { target.alive = false; say('The wall crumbles... a hidden passage!'); shake = S.shake * 2; }
   } else {
-    target.hp--; target.hits++; target.vx = dir * S.knock;
+    target.hp--; target.hits++; target.vx = (dir || p.face) * S.knock; if (p.atkDir === 1) target.vy = -250;
     if (target.hp <= 0) target.dead = 2;
   }
   if (p.atkDir === 2) { p.vy = -S.jump * 0.75; p.ground = false; }          // pogo
-  else if (!p.ground) p.vx -= dir * 80;
 }
 
 function update(dt) {
+  if (freeze > 0) { freeze -= dt; return; }                                // hit-stop
+  for (let i = parts.length - 1; i >= 0; i--) { const q = parts[i]; q.t -= dt; q.vy += 900 * dt; q.x += q.vx * dt; q.y += q.vy * dt; if (q.t <= 0) parts.splice(i, 1); }
   // movement
   const dir = keys.right - keys.left;
   const speed = keys.run ? S.run : S.walk;
   const target = dir * speed;
-  const accel = p.ground ? 3000 : 1800;
+  const accel = p.ground ? 12000 : 7000;                                  // near-instant, like the Knight
   p.vx += Math.max(-accel * dt, Math.min(accel * dt, target - p.vx));
   if (dir) p.face = dir;
-  if (jumpPressed && p.ground) { p.vy = -S.jump; p.ground = false; }
-  if (!keys.jump && p.vy < -S.jump * 0.35) p.vy = -S.jump * 0.35;          // variable jump height
-  p.vy = Math.min(p.vy + S.gravity * dt, 1200);
+  p.coyote = p.ground ? 0.09 : p.coyote - dt;                              // coyote time
+  p.buffer = jumpPressed ? 0.1 : p.buffer - dt;                            // jump buffer
+  if (p.buffer > 0 && p.coyote > 0) { p.vy = -S.jump; p.ground = false; p.coyote = p.buffer = 0; }
+  if (!keys.jump && p.vy < -S.jump * 0.3) p.vy = -S.jump * 0.3;            // variable jump height
+  p.vy = Math.min(p.vy + S.gravity * (p.vy > 0 ? 1.35 : 1) * dt, 1000);    // heavier fall
   moveBody(p, dt);
 
   // attack
   p.atkCd -= dt; p.atkT -= dt;
   if (atkPressed && p.atkCd <= 0) {
     p.atkT = 0.14; p.atkCd = S.atkCd; p.hitSet = new Set();
-    p.atkDir = (!p.ground && keys.down) ? 2 : 0;
+    p.atkDir = keys.up ? 1 : (!p.ground && keys.down) ? 2 : 0;
+    p.slashSide *= -1;
   }
   if (p.atkT > 0) {
     const box = attackBox();
@@ -220,7 +230,7 @@ function draw(t) {
 
   // secret room tint
   rect('#1a1830', 1740, 250, WORLD_W - 1740, 150);
-  for (const s of solids) { rect('#2a3048', s.x, s.y, s.w, s.h); rect('#3c4566', s.x, s.y, s.w, Math.min(4, s.h)); }
+  for (const s of solids) { rect('#232838', s.x, s.y, s.w, s.h); rect('#3c4566', s.x, s.y, s.w, Math.min(4, s.h)); }
   // wall
   if (wall.alive) {
     const dmg = wall.maxHp - wall.hp;
@@ -249,24 +259,39 @@ function draw(t) {
     g.fillStyle = '#cfd6e6'; g.font = '11px sans-serif'; g.textAlign = 'center';
     g.fillText('Hits: ' + dummy.hits, dummy.x + 20, dummy.y - 32);
   }
-  // player
-  const body = p.atkT > 0 ? '#e8ecff' : '#cfd6e6';
-  rect(body, p.x, p.y + 10, p.w, p.h - 10);
-  rect('#111', p.x + 2, p.y, p.w - 4, 18);
-  rect('#fff', p.face > 0 ? p.x + p.w - 12 : p.x + 4, p.y + 6, 8, 5);
-  rect('#c33', p.x + 4, p.y - 6, 4, 8); rect('#c33', p.x + p.w - 8, p.y - 6, 4, 8);   // horns
-  // attack slash
+  // player: pale horned mask, dark cloak, nail
+  const f = p.face, cx = p.x + p.w / 2, bob = p.ground && Math.abs(p.vx) > 20 ? Math.sin(performance.now() / 50) * 1.5 : 0;
+  rect('#15171f', p.x + 2, p.y + 18, p.w - 4, p.h - 18);                    // cloak
+  rect('#232634', p.x + (f > 0 ? 2 : p.w - 8), p.y + 22, 6, p.h - 26);
+  rect('#15171f', cx - 3 - f * 12, p.y + 22 + bob, 6, 10);                  // cape tail
+  rect('#e9eef8', p.x, p.y + 2, p.w, 20);                                    // mask
+  rect('#e9eef8', p.x + 2, p.y - 12, 6, 16); rect('#e9eef8', p.x + p.w - 8, p.y - 12, 6, 16); // horns
+  rect('#0a0b10', cx + f * 3 - 6, p.y + 9, 5, 9); rect('#0a0b10', cx + f * 3 + 3, p.y + 9, 5, 9); // eyes
+  rect('#bfc6d8', p.x + (f > 0 ? p.w - 2 : -10), p.y + 30, 12, 3);          // resting nail
+  // slash effect
   if (p.atkT > 0) {
     const b = attackBox(), a = p.atkT / 0.14;
-    g.fillStyle = `rgba(255,255,255,${0.35 + a * 0.5})`;
+    g.fillStyle = `rgba(235,245,255,${0.3 + a * 0.6})`;
     g.beginPath();
     if (p.atkDir === 2) { g.moveTo(b.x, b.y); g.lineTo(b.x + b.w, b.y); g.lineTo(b.x + b.w / 2, b.y + b.h); }
-    else if (p.face > 0) { g.moveTo(b.x, b.y); g.quadraticCurveTo(b.x + b.w * 1.1, b.y + b.h / 2, b.x, b.y + b.h); g.lineTo(b.x + 8, b.y + b.h / 2); }
-    else { g.moveTo(b.x + b.w, b.y); g.quadraticCurveTo(b.x - b.w * .1, b.y + b.h / 2, b.x + b.w, b.y + b.h); g.lineTo(b.x + b.w - 8, b.y + b.h / 2); }
+    else if (p.atkDir === 1) { g.moveTo(b.x, b.y + b.h); g.lineTo(b.x + b.w, b.y + b.h); g.lineTo(b.x + b.w / 2, b.y); }
+    else if (f > 0) { g.moveTo(b.x, b.y); g.quadraticCurveTo(b.x + b.w * 1.15, b.y + b.h / 2, b.x, b.y + b.h); g.quadraticCurveTo(b.x + b.w * .6, b.y + b.h / 2, b.x, b.y); }
+    else { g.moveTo(b.x + b.w, b.y); g.quadraticCurveTo(b.x - b.w * .15, b.y + b.h / 2, b.x + b.w, b.y + b.h); g.quadraticCurveTo(b.x + b.w * .4, b.y + b.h / 2, b.x + b.w, b.y); }
     g.fill();
   }
-  // HUD
+  // hit sparks
+  for (const q of parts) { g.globalAlpha = Math.min(1, q.t * 3); rect(q.col, q.x, q.y, 4, 4); }
+  g.globalAlpha = 1;
+  // fog + vignette
   g.setTransform(1, 0, 0, 1, 0, 0);
+  const fg = g.createLinearGradient(0, H - 130, 0, H); fg.addColorStop(0, 'rgba(120,140,190,0)'); fg.addColorStop(1, 'rgba(120,140,190,.10)');
+  g.fillStyle = fg; g.fillRect(0, H - 130, W, 130);
+  const vg = g.createRadialGradient(W / 2, H / 2, H * .35, W / 2, H / 2, W * .65);
+  vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.7)');
+  g.fillStyle = vg; g.fillRect(0, 0, W, H);
+  // health masks (decorative)
+  for (let i = 0; i < 5; i++) { g.fillStyle = '#e9eef8'; g.beginPath(); g.ellipse(70 + i * 24, 70, 8, 10, 0, 0, 7); g.fill(); g.fillStyle = '#0a0b10'; g.fillRect(66 + i * 24, 68, 3, 5); g.fillRect(72 + i * 24, 68, 3, 5); }
+  // HUD
   if (msgT > 0) { g.fillStyle = '#fff'; g.font = '16px sans-serif'; g.textAlign = 'center'; g.globalAlpha = Math.min(1, msgT); g.fillText(msg, W / 2, 60); g.globalAlpha = 1; }
 }
 
