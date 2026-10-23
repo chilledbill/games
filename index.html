@@ -22,6 +22,10 @@
   .item:disabled { opacity:.45; }
   .item small { color:var(--dim); display:block; }
   .cost { color:var(--accent); font-weight:600; white-space:nowrap; }
+  #prestige { margin-top:16px; width:100%; padding:14px; border:0; border-radius:12px; background:#a78bfa; color:#1a1233; font-weight:700; font-size:16px; }
+  #prestige:disabled { opacity:.45; }
+  #prestige small { display:block; font-weight:500; opacity:.8; }
+  .stars { color:#a78bfa; margin-bottom:12px; font-size:14px; }
   footer { margin-top:20px; display:flex; justify-content:space-between; color:var(--dim); font-size:13px; }
   footer button { background:none; border:0; color:var(--dim); text-decoration:underline; font-size:13px; }
 </style>
@@ -31,8 +35,10 @@
   <h1>Incremental</h1>
   <div class="count" id="count">0</div>
   <div class="rate" id="rate">0 / sec</div>
+  <div class="stars" id="stars"></div>
   <button id="click">Tap! (+<span id="power">1</span>)</button>
   <div class="shop" id="shop"></div>
+  <button id="prestige"></button>
   <footer><span>Saves automatically</span><button id="reset">Reset</button></footer>
 </main>
 <script>
@@ -44,7 +50,8 @@ const UPGRADES = [
   { id:'lab',    name:'Lab',           desc:'+100 / sec',      base:12000,growth:1.15, type:'auto',  amount:100 },
 ];
 const KEY = 'incremental-save-v1';
-let state = { count:0, owned:{}, last:Date.now() };
+const fresh = () => ({ count:0, run:0, stars:0, owned:{}, last:Date.now() });
+let state = fresh();
 
 function load() {
   try {
@@ -53,17 +60,20 @@ function load() {
   } catch (e) {}
   // offline progress, capped at 8 hours
   const secs = Math.min((Date.now() - state.last) / 1000, 8 * 3600);
-  state.count += perSec() * secs;
+  earn(perSec() * secs);
   state.last = Date.now();
 }
 function save() {
   state.last = Date.now();
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
 }
+const starMult = () => 1 + 0.1 * state.stars;
+const prestigeGain = () => Math.floor(Math.sqrt(state.run / 5000));
+function earn(n) { state.count += n; state.run += n; }
 const owned = u => state.owned[u.id] || 0;
 const cost = u => Math.ceil(u.base * Math.pow(u.growth, owned(u)));
-const tapPower = () => 1 + UPGRADES.filter(u => u.type==='click').reduce((a,u) => a + u.amount*owned(u), 0);
-function perSec() { return UPGRADES.filter(u => u.type==='auto').reduce((a,u) => a + u.amount*owned(u), 0); }
+const tapPower = () => starMult() * (1 + UPGRADES.filter(u => u.type==='click').reduce((a,u) => a + u.amount*owned(u), 0));
+function perSec() { return starMult() * UPGRADES.filter(u => u.type==='auto').reduce((a,u) => a + u.amount*owned(u), 0); }
 
 function fmt(n) {
   if (n < 1000) return n < 10 ? n.toFixed(1).replace(/\.0$/,'') : Math.floor(n).toString();
@@ -88,6 +98,10 @@ function render() {
   document.getElementById('count').textContent = fmt(state.count);
   document.getElementById('rate').textContent = fmt(perSec()) + ' / sec';
   document.getElementById('power').textContent = fmt(tapPower());
+  document.getElementById('stars').textContent = state.stars ? `★ ${state.stars} (x${starMult().toFixed(1)} production)` : '';
+  const g = prestigeGain(), pb = document.getElementById('prestige');
+  pb.disabled = g < 1;
+  pb.innerHTML = g < 1 ? `Prestige<small>Earn ${fmt(5000)} this run to gain a ★</small>` : `Prestige for +${g} ★<small>Resets progress, each ★ gives +10% production</small>`;
   UPGRADES.forEach((u, i) => {
     const b = buttons[i];
     b.disabled = state.count < cost(u);
@@ -95,9 +109,15 @@ function render() {
   });
 }
 
-document.getElementById('click').onclick = () => { state.count += tapPower(); render(); };
+document.getElementById('click').onclick = () => { earn(tapPower()); render(); };
 document.getElementById('reset').onclick = () => {
-  if (confirm('Reset all progress?')) { state = { count:0, owned:{}, last:Date.now() }; save(); render(); }
+  if (confirm('Reset all progress, including stars?')) { state = fresh(); save(); render(); }
+};
+document.getElementById('prestige').onclick = () => {
+  const g = prestigeGain();
+  if (g < 1 || !confirm(`Prestige for ${g} ★? Your count and upgrades reset.`)) return;
+  state = Object.assign(fresh(), { stars: state.stars + g });
+  save(); render();
 };
 
 load();
@@ -105,7 +125,7 @@ render();
 let prev = performance.now();
 setInterval(() => {
   const now = performance.now();
-  state.count += perSec() * (now - prev) / 1000;
+  earn(perSec() * (now - prev) / 1000);
   prev = now;
   render();
 }, 100);
