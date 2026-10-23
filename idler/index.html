@@ -1,0 +1,775 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#1d1b2f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Pixel Idler</title>
+<style>
+  :root {
+    --bg:#1d1b2f; --panel:#2d2a4a; --panel2:#3a3660; --bd:#51497a; --text:#f4f1ff; --dim:#9a93c4;
+    --wood:#c98b4a; --ore:#9fb4c7; --gold:#ffd34d; --green:#5bd36b; --red:#ff5a5f; --blue:#4aa3ff; --purple:#b57bff;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; -webkit-touch-callout:none; user-select:none; }
+  html, body { height:100%; margin:0; background:#0f0e1a; overscroll-behavior:none; }
+  body { font:700 14px ui-monospace,"Courier New",monospace; color:var(--text); }
+  button { font:inherit; color:inherit; touch-action:manipulation; }
+  img { image-rendering:pixelated; }
+
+  #app { max-width:480px; height:100dvh; margin:0 auto; display:flex; flex-direction:column; background:var(--bg); position:relative; overflow:hidden; }
+
+  /* pixel-cornered boxes */
+  .px { border:3px solid var(--bd); background:var(--panel);
+    box-shadow:inset 0 -4px 0 rgba(0,0,0,.3), inset 0 3px 0 rgba(255,255,255,.08);
+    clip-path:polygon(0 3px,3px 3px,3px 0,calc(100% - 3px) 0,calc(100% - 3px) 3px,100% 3px,100% calc(100% - 3px),calc(100% - 3px) calc(100% - 3px),calc(100% - 3px) 100%,3px 100%,3px calc(100% - 3px),0 calc(100% - 3px)); }
+
+  /* HUD */
+  #hud { padding:calc(6px + env(safe-area-inset-top)) 8px 4px; }
+  .chips { display:flex; gap:6px; }
+  .chip { flex:1; display:flex; align-items:center; gap:6px; padding:3px 6px; min-width:0; }
+  .chip img { width:20px; height:20px; flex:none; }
+  .chip div { min-width:0; line-height:1.1; }
+  .chip b { display:block; font-size:15px; }
+  .chip small { color:var(--dim); font-size:10px; }
+  #lvl { display:flex; align-items:center; gap:8px; margin-top:5px; font-size:11px; }
+  .bar { flex:1; height:8px; background:#14122a; border:2px solid var(--bd); }
+  .bar i { display:block; height:100%; width:0; background:var(--blue); }
+  #sp { color:var(--purple); }
+  #rush { display:none; color:var(--gold); animation:blink .5s steps(2) infinite; }
+  body.rush #rush { display:inline; }
+
+  #scene { width:100%; height:clamp(150px,26dvh,230px); display:block; image-rendering:pixelated; touch-action:manipulation; border-top:3px solid var(--bd); border-bottom:3px solid var(--bd); }
+
+  /* charge + skills */
+  #charge { display:flex; align-items:center; gap:6px; padding:5px 10px 0; font-size:10px; color:var(--dim); }
+  #charge .bar i { background:var(--gold); }
+  #skills { display:flex; gap:8px; padding:6px 8px 8px; justify-content:center; }
+  .sk { width:64px; height:64px; position:relative; padding:0; display:flex; align-items:center; justify-content:center; background:var(--panel2); overflow:hidden; }
+  .sk img { width:32px; height:32px; position:relative; z-index:1; }
+  .sk .cdv { position:absolute; left:0; right:0; bottom:0; height:0; background:rgba(0,0,0,.62); }
+  .sk .cdt { position:absolute; z-index:2; font-size:15px; text-shadow:2px 2px 0 #000; }
+  .sk .au { position:absolute; z-index:2; right:2px; top:1px; font-size:9px; color:var(--green); display:none; text-shadow:1px 1px 0 #000; }
+  .sk.auto .au { display:block; }
+  .sk .nm { position:absolute; z-index:2; bottom:1px; left:0; right:0; text-align:center; font-size:9px; text-shadow:1px 1px 0 #000; }
+  .sk.lock { filter:grayscale(1); opacity:.5; }
+  .sk.ready:not(.lock) { border-color:var(--gold); animation:glow .8s steps(2) infinite; }
+  .sk:active { transform:translateY(2px); }
+  @keyframes glow { 50% { border-color:var(--bd); } }
+  @keyframes blink { 50% { opacity:.3; } }
+
+  /* panel */
+  #panel { flex:1; overflow-y:auto; padding:8px; -webkit-overflow-scrolling:touch; }
+  .tab { display:none; gap:8px; flex-direction:column; }
+  .tab.on { display:flex; }
+  h3 { margin:6px 0 0; font-size:12px; color:var(--dim); letter-spacing:1px; }
+  .hint { color:var(--dim); font-size:11px; line-height:1.4; margin:0; }
+
+  .gather { display:flex; gap:8px; }
+  .big { flex:1; padding:12px 6px; display:flex; flex-direction:column; align-items:center; gap:6px; background:var(--panel2); font-size:13px; }
+  .big img { width:40px; height:40px; }
+  .big small { color:var(--dim); font-size:11px; }
+  .big:active { transform:translateY(3px); filter:brightness(1.2); }
+
+  .item { display:flex; justify-content:space-between; align-items:center; gap:8px; width:100%; padding:8px 10px; text-align:left; }
+  .item .l { min-width:0; }
+  .item small { display:block; color:var(--dim); font-size:11px; font-weight:400; margin-top:2px; }
+  .item .r { display:flex; flex-direction:column; align-items:flex-end; gap:1px; flex:none; font-size:12px; }
+  .item .r span { display:flex; align-items:center; gap:3px; }
+  .item .r img { width:14px; height:14px; }
+  .item .r .no { color:var(--red); }
+  .item.dis { opacity:.55; }
+  .item:not(.dis):active { transform:translateY(2px); }
+  .item.max { border-color:var(--green); }
+
+  .stats { display:grid; grid-template-columns:1fr 1fr; gap:4px 12px; padding:8px 10px; font-size:12px; }
+  .stats span { color:var(--dim); } .stats b { float:right; }
+  .card { padding:8px; display:flex; flex-direction:column; gap:6px; }
+  .card h4 { margin:0; font-size:13px; display:flex; align-items:center; gap:6px; }
+  .card h4 img { width:20px; height:20px; }
+  .card .desc { color:var(--dim); font-size:11px; font-weight:400; margin:0; }
+  .card .item { background:var(--panel2); }
+  .row2 { display:flex; gap:6px; } .row2 > * { flex:1; }
+
+  /* tree */
+  .treehead { display:flex; justify-content:space-between; align-items:center; }
+  .tree { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+  .col { display:flex; flex-direction:column; align-items:stretch; gap:0; }
+  .col h4 { margin:0 0 6px; text-align:center; font-size:12px; }
+  .node { padding:6px 4px; text-align:center; background:var(--panel); min-height:76px; opacity:.5; }
+  .node b { display:block; font-size:11px; }
+  .node small { display:block; font-size:10px; font-weight:400; color:var(--dim); margin-top:3px; line-height:1.2; }
+  .node em { display:block; font-style:normal; font-size:10px; margin-top:3px; color:var(--purple); }
+  .node.can { opacity:1; border-color:var(--purple); }
+  .node.own { opacity:1; border-color:var(--green); background:#26433a; }
+  .node.own em { color:var(--green); }
+  .node.key b::before { content:"★ "; color:var(--gold); }
+  .link { align-self:center; width:4px; height:10px; background:var(--bd); }
+  .link.on { background:var(--green); }
+  .small { padding:6px 10px; background:var(--panel2); font-size:11px; }
+  .small:disabled { opacity:.5; }
+
+  /* nav */
+  #tabs { display:flex; gap:4px; padding:6px 8px calc(6px + env(safe-area-inset-bottom)); background:#14122a; border-top:3px solid var(--bd); }
+  #tabs button { flex:1; padding:10px 0; background:var(--panel); font-size:12px; position:relative; }
+  #tabs button.on { background:var(--panel2); border-color:var(--gold); color:var(--gold); }
+  #tabs button .dot { display:none; position:absolute; top:2px; right:4px; width:8px; height:8px; background:var(--purple); }
+  #tabs button.badge .dot { display:block; }
+
+  #toast { position:absolute; left:8px; right:8px; top:60px; z-index:20; padding:8px 10px; text-align:center; font-size:12px; background:var(--panel2); pointer-events:none; opacity:0; transition:opacity .2s; }
+  #toast.on { opacity:1; }
+  .pop { position:fixed; z-index:30; pointer-events:none; font-weight:700; text-shadow:2px 2px 0 #000; transform:translate(-50%,-50%); animation:pop .7s ease-out forwards; }
+  @keyframes pop { to { transform:translate(-50%,-260%); opacity:0; } }
+</style>
+</head>
+<body>
+<div id="app">
+  <header id="hud">
+    <div class="chips">
+      <div class="chip px"><img id="ic-wood" alt=""><div><b id="v-wood">0</b><small id="r-wood">+0/s</small></div></div>
+      <div class="chip px"><img id="ic-ore" alt=""><div><b id="v-ore">0</b><small id="r-ore">+0/s</small></div></div>
+      <div class="chip px"><img id="ic-gold" alt=""><div><b id="v-gold">0</b><small id="r-gold">+0/s</small></div></div>
+    </div>
+    <div id="lvl"><span id="lv">LV 1</span><div class="bar"><i id="xpbar"></i></div><span id="sp"></span><span id="rush">RUSH x2</span></div>
+  </header>
+  <canvas id="scene"></canvas>
+  <div id="charge"><span>CHARGE</span><div class="bar"><i id="chbar"></i></div><span id="chtxt">+0%</span></div>
+  <div id="skills"></div>
+  <main id="panel">
+    <section class="tab on" id="tab-gather"></section>
+    <section class="tab" id="tab-build"></section>
+    <section class="tab" id="tab-hero"></section>
+    <section class="tab" id="tab-tree"></section>
+  </main>
+  <nav id="tabs">
+    <button class="px on" data-tab="gather">GATHER</button>
+    <button class="px" data-tab="build">BUILD</button>
+    <button class="px" data-tab="hero">HERO</button>
+    <button class="px" data-tab="tree">TREE<i class="dot"></i></button>
+  </nav>
+  <div id="toast" class="px"></div>
+</div>
+
+<script>
+"use strict";
+/* ============================================================
+   TUNING — the numbers you'll most want to tweak
+   ============================================================ */
+const CFG = {
+  enemyHp: 1.18,      // enemy HP growth per stage
+  enemyAtk: 1.12,     // enemy damage growth per stage
+  rewardGrowth: 1.18, // gold / xp growth per stage
+  killsPerStage: 5,
+  bossEvery: 5,
+  bossTime: 30,
+  genCostGrowth: 1.15,
+  autoEff: 0.6,       // auto-cast strength (tree keystone raises it to 1.0)
+  offlineCapH: 8,
+};
+
+/* ============================================================
+   PIXEL ART — sprites are strings, palette letters map to colours
+   ============================================================ */
+const PAL = {
+  k:'#1d1b2f', w:'#f4f1ff', s:'#f4c995', S:'#d99a6c', h:'#8d99ae', H:'#cfd8e3',
+  r:'#e63946', b:'#3a86ff', B:'#1d4ed8', y:'#ffd34d', n:'#8a5a2b', N:'#5a3a1a',
+};
+const TIERS = [ // enemy colour variants: a main, b shade, c light
+  {a:'#5bd36b', b:'#2e8b3e', c:'#a8f0b0'},
+  {a:'#4aa3ff', b:'#1d4ed8', c:'#a8d4ff'},
+  {a:'#ff5a5f', b:'#a8242a', c:'#ffb3b5'},
+  {a:'#b57bff', b:'#6a3db8', c:'#ddc2ff'},
+];
+const SPR = {
+  hero: [
+    "................",".......rr.......","......rrr.......",".....kkkkk......",
+    "....kHHhhhk.....","....khhhhhk.....","....ksssksk.....",".....ksssk......",
+    "....kbbyybk..w..","...kbbbyybbk.w..","...ksbbbbbbkSw..","...kkbbbbbkkyyy.",
+    "....kbbbbbk..n..","....kBBkBBk.....","....knnknnk.....","....kkk.kkk....."],
+  slime: [
+    "................","................","................","................","................","................",
+    "......kkkk......","....kkaaaakk....","...kaaccaaaak...","..kaacaaaaaaak..",
+    "..kaawkaaawkak..","..kaaaaaaaaaak..","..kbaaaaaaaabk..","...kbbbbbbbbk...",
+    "....kkkkkkkk....","................"],
+  goblin: [
+    "................","................","....kkkkkkkk....","..kkkaaaaaakkk..",
+    ".kaaaaaaaaaaaak.","..kkawkaawkakk..","...kaaaaaaaak...","....kakkkkak....",
+    "....kbbbbbbk.n..","...kbbccccbbknn.","...kabbbbbbak.n.","....kbbbbbbk.n..",
+    ".....kb..bk.....",".....kb..bk.....","....kkk..kkk....","................"],
+  skeleton: [
+    "................","....kkkkkkkk....","...kaaaaaaaak...","...kaakaakaak...",
+    "...kaakaakaak...","...kaaaakaaak...","....kakakak.....",".....kkkkk......",
+    "....kaaaaaak....","....kbabbabk....","....kabaabak....","....kbabbabk....",
+    ".....kaaaak.....","......k..k......",".....ka..ak.....","....kkk..kkk...."],
+  bat: [
+    "................","................","................","................",
+    "..k....kk....k..",".kak..kaak..kak.","kaaak.kaak.kaaak","kabak.krrk.kabak",
+    ".kbk..kaak..kbk.","..k...kaak...k..","......kkkk......","................",
+    "................","................","................","................"],
+  dragon: [
+    "................","................","....k......k....","...kak....kak...",
+    "..kaaakkkkaaak..",".kaaaaaaaaaaaak.",".kaarkaaaakraak.",".kaaaaaaaaaaaak.",
+    ".kaakkaaaakkaak.","..kaaaccccaaak..",".kaaaccccccaaak.",".kbaaccccccaabk.",
+    "..kbaaccccaabk..","..kbbaaaaaabbk..","...kkkkkkkkkk...","...kbbk..kbbk..."],
+};
+const ICON = {
+  wood: [".kkkkkk.","kNnnnnNk","knNkkNnk","knkNNknk","knkNNknk","knNkkNnk","kNnnnnNk",".kkkkkk."],
+  ore:  ["........","..kkkk..",".kHhhhk.","kHhhhhhk","khhhbhhk","kbhhhbbk",".kbbbbk.","..kkkk.."],
+  gold: ["..kkkk..",".kyyyyk.","kywyyyyk","kywyyyyk","kyyyyyyk","kyyyyyyk",".kyyyyk.","..kkkk.."],
+  sword:["......ww",".....www","....ww..","...ww...","y.ww....",".yw.....",".ny.....","n......."],
+  heart:["........",".rr..rr.","rrwrrrrr","rrrrrrrr","rrrrrrrr",".rrrrrr.","..rrrr..","...rr..."],
+  shield:["kkkkkkkk","kbbhhbbk","kbbhhbbk","kbbhhbbk",".kbbbbk.","..kbbk..","...kk...","........"],
+  rush: ["...yy...","...yy...","yyyyyyyy",".yyyyyy.","..yyyy..",".yyyyyy.",".yy..yy.","y......y"],
+};
+
+function mkSprite(rows, pal) {
+  const w = rows[0].length, c = document.createElement('canvas');
+  c.width = w; c.height = rows.length;
+  const x = c.getContext('2d');
+  rows.forEach((row, y) => { for (let i = 0; i < w; i++) {
+    const col = pal[row[i]]; if (col && row[i] !== '.') { x.fillStyle = col; x.fillRect(i, y, 1, 1); }
+  }});
+  return c;
+}
+const sprites = { hero: mkSprite(SPR.hero, PAL) };
+for (const kind of ['slime','goblin','skeleton','bat','dragon'])
+  sprites[kind] = TIERS.map(t => mkSprite(SPR[kind], { ...PAL, ...t }));
+const icons = {}; for (const k in ICON) icons[k] = mkSprite(ICON[k], PAL).toDataURL();
+const silCache = new Map();
+function silhouette(spr) { // white flash version
+  if (silCache.has(spr)) return silCache.get(spr);
+  const c = document.createElement('canvas'); c.width = spr.width; c.height = spr.height;
+  const x = c.getContext('2d'); x.drawImage(spr, 0, 0);
+  x.globalCompositeOperation = 'source-atop'; x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height);
+  silCache.set(spr, c); return c;
+}
+for (const k of ['wood','ore','gold']) document.getElementById('ic-' + k).src = icons[k];
+
+/* ============================================================
+   GAME DATA
+   ============================================================ */
+const GENS = [
+  {id:'cutter', name:'Woodcutter', out:'wood', rate:0.5, cost:'wood', base:10},
+  {id:'miner',  name:'Miner',      out:'ore',  rate:0.3, cost:'wood', base:60},
+  {id:'mill',   name:'Lumber Mill',out:'wood', rate:6,   cost:'wood', base:150},
+  {id:'smithy', name:'Smithy',     out:'gold', rate:0.4, cost:'ore',  base:80},
+  {id:'deep',   name:'Deep Mine',  out:'ore',  rate:3,   cost:'ore',  base:150},
+  {id:'forge',  name:'Royal Forge',out:'gold', rate:5,   cost:'ore',  base:900},
+];
+const TOOLS = [
+  {id:'axe',  name:'Sharp Axe',  desc:'+1 wood per tap', res:'wood', base:15, mult:1.6},
+  {id:'pick', name:'Iron Pick',  desc:'+1 ore per tap',  res:'wood', base:40, mult:1.6},
+];
+const GEAR = [
+  {id:'sword', name:'Sword',    desc:l=>`+2 attack  (now +${l*2})`, res:'ore',  base:15, mult:1.3},
+  {id:'armor', name:'Armor',    desc:l=>`+12 max HP  (now +${l*12})`, res:'ore',  base:25, mult:1.3},
+  {id:'train', name:'Training', desc:l=>`+5% attack speed  (now +${l*5}%)`, res:'gold', base:40, mult:1.4},
+];
+const SK = {
+  strike:{name:'Strike', icon:'sword',  cd:4,  unlock:0,    lvl:30,  auto:{gold:60,ore:60},
+          desc:'Heavy blow: attack x3, grows with level.'},
+  heal:  {name:'Heal',   icon:'heart',  cd:12, unlock:100,  lvl:60,  auto:{gold:150,ore:150},
+          desc:'Restore 35% max HP. Auto: when HP < 50%.'},
+  shield:{name:'Shield', icon:'shield', cd:16, unlock:400,  lvl:80,  auto:{gold:400,ore:400},
+          desc:'Absorb 30% max HP of damage for 6s.'},
+  rush:  {name:'Gold Rush', tag:'RUSH', icon:'rush',cd:30, unlock:1500, lvl:150, auto:{gold:1200,ore:1200},
+          desc:'All income x2 for 8s.'},
+};
+const SKORDER = ['strike','heal','shield','rush'];
+const TREE = [
+  {id:'w1',b:0,n:'Sharpen',    d:'+15% attack',            c:1},
+  {id:'w2',b:0,n:'Keen Edge',  d:'+10% crit chance',       c:1, r:'w1'},
+  {id:'w3',b:0,n:'Berserk',    d:'+25% attack',            c:2, r:'w2'},
+  {id:'w4',b:0,n:'Executioner',d:'x2 dmg to foes <25% HP', c:3, r:'w3', key:1},
+  {id:'g1',b:1,n:'Tough',      d:'+20% max HP',            c:1},
+  {id:'g2',b:1,n:'Regen',      d:'Heal 1.5% HP/sec',       c:1, r:'g1'},
+  {id:'g3',b:1,n:'Iron Skin',  d:'-15% damage taken',      c:2, r:'g2'},
+  {id:'g4',b:1,n:'Vampire',    d:'Heal 5% of dmg dealt',   c:3, r:'g3', key:1},
+  {id:'s1',b:2,n:'Prospector', d:'+25% gold from kills',   c:1},
+  {id:'s2',b:2,n:'Foreman',    d:'+25% building output',   c:1, r:'s1'},
+  {id:'s3',b:2,n:'Quick Hands',d:'-15% skill cooldowns',   c:2, r:'s2'},
+  {id:'s4',b:2,n:'Auto Mastery',d:'Auto-cast at 100% power',c:3, r:'s3', key:1},
+];
+const BRANCH = [{n:'WARRIOR',c:'#ff5a5f'},{n:'GUARDIAN',c:'#4aa3ff'},{n:'SCHOLAR',c:'#ffd34d'}];
+const ENV = [
+  {sky:['#6ec6ff','#bfe9ff'], hill:['#4caf6a','#3a8f55'], grass:'#5bd36b', dirt:'#8a5a2b', clouds:1},
+  {sky:['#ff9b5e','#ffe0a8'], hill:['#d9a35b','#c28a45'], grass:'#e8c170', dirt:'#a8742f', clouds:1},
+  {sky:['#12102e','#3a3470'], hill:['#2c2a5a','#221f47'], grass:'#4b4688', dirt:'#2d2a55', clouds:0},
+  {sky:['#3a0f1a','#8a2a1f'], hill:['#5a1a1a','#40121a'], grass:'#d9531e', dirt:'#5a1f14', clouds:0},
+];
+
+/* ============================================================
+   STATE
+   ============================================================ */
+const SAVE_KEY = 'pixel-idler-v1';
+const fresh = () => ({
+  wood:0, ore:0, gold:0, xp:0, level:1, sp:0, stage:1, kills:0, best:1,
+  gens:{}, up:{axe:0,pick:0,sword:0,armor:0,train:0}, tree:{},
+  skills:{strike:{u:1,l:0,auto:0}, heal:{u:0,l:0,auto:0}, shield:{u:0,l:0,auto:0}, rush:{u:0,l:0,auto:0}},
+  t:Date.now(),
+});
+let S = fresh();
+try {
+  const raw = localStorage.getItem(SAVE_KEY);
+  if (raw) { const d = JSON.parse(raw), f = fresh();
+    S = { ...f, ...d, gens:{...f.gens,...d.gens}, up:{...f.up,...d.up}, tree:{...d.tree} };
+    for (const k in f.skills) S.skills[k] = { ...f.skills[k], ...(d.skills||{})[k] };
+  }
+} catch (e) {}
+function save() { S.t = Date.now(); try { localStorage.setItem(SAVE_KEY, JSON.stringify(S)); } catch (e) {} }
+
+const R = { // runtime (not saved)
+  hp:1, lastMax:0, enemy:null, spawnT:.3, atkT:0, dead:0, cd:{}, charge:0, idle:0,
+  shield:0, shieldT:0, rushT:0, fl:[], banner:null, lunge:0, hflash:0, corpse:null, t:0, castFlash:{},
+};
+SKORDER.forEach(k => R.cd[k] = 0);
+let H = {}; // derived hero stats
+
+/* ============================================================
+   MATH HELPERS
+   ============================================================ */
+const T = id => !!S.tree[id];
+function fmt(n) {
+  if (!isFinite(n)) return '∞';
+  if (n < 1000) return n < 10 ? String(+n.toFixed(1)) : String(Math.floor(n));
+  const u = ['K','M','B','T','Qa','Qi']; let i = -1;
+  while (n >= 1000 && i < u.length - 1) { n /= 1000; i++; }
+  return (n < 10 ? n.toFixed(2) : n < 100 ? n.toFixed(1) : Math.floor(n)) + u[i];
+}
+const genCost = (g) => g.base * Math.pow(CFG.genCostGrowth, S.gens[g.id] || 0);
+const upCost = (d) => d.base * Math.pow(d.mult, S.up[d.id]);
+const toolCost = upCost;
+const xpNeed = (l) => 20 * Math.pow(1.35, l - 1);
+const isBoss = (st) => st % CFG.bossEvery === 0;
+const tierOf = (st) => Math.floor((st - 1) / 10) % 4;
+const rushMult = () => R.rushT > 0 ? 2 : 1;
+const autoEff = () => T('s4') ? 1 : CFG.autoEff;
+const cdOf = (id) => Math.max(.5, SK[id].cd * (T('s3') ? .85 : 1) * (1 - .02 * S.skills[id].l));
+
+function recompute() {
+  H.atk = (4 + S.up.sword * 2 + (S.level - 1)) * (1 + (T('w1') ? .15 : 0) + (T('w3') ? .25 : 0));
+  H.hp = (40 + S.up.armor * 12 + (S.level - 1) * 5) * (T('g1') ? 1.2 : 1);
+  H.aspd = 1 + S.up.train * .05;
+  H.crit = .05 + (T('w2') ? .1 : 0);
+  H.regen = T('g2') ? .015 : 0;
+  H.dr = T('g3') ? .15 : 0;
+}
+function rates() {
+  const m = (1 + (T('s2') ? .25 : 0)) * rushMult(), r = {wood:0, ore:0, gold:0};
+  for (const g of GENS) r[g.out] += (S.gens[g.id] || 0) * g.rate * m;
+  return r;
+}
+function tapPower(kind) { return (1 + S.up[kind === 'wood' ? 'axe' : 'pick']) * rushMult(); }
+
+/* ============================================================
+   COMBAT
+   ============================================================ */
+const KINDS = ['slime','bat','goblin','skeleton'];
+function spawn() {
+  const st = S.stage, boss = isBoss(st);
+  const max = 10 * Math.pow(CFG.enemyHp, st - 1) * (boss ? 5 : 1);
+  R.enemy = { boss, max, hp:max, atk:2 * Math.pow(CFG.enemyAtk, st - 1) * (boss ? 1.6 : 1),
+    rate: boss ? 2 : 1.6, t:0, flash:0, timer:CFG.bossTime, tier:tierOf(st),
+    kind: boss ? 'dragon' : KINDS[Math.floor(Math.random() * KINDS.length)] };
+  R.atkT = 0;
+}
+function floatAt(who, txt, col, big) {
+  R.fl.push({ x:(who === 'hero' ? .24 : .74) + (Math.random() - .5) * .08, y:.34, txt, col, big, t:0 });
+}
+function banner(txt, col) { R.banner = { txt, col, t:0 }; }
+
+function gainXp(x) {
+  S.xp += x;
+  while (S.xp >= xpNeed(S.level)) {
+    S.xp -= xpNeed(S.level); S.level++; S.sp++;
+    toast(`LEVEL ${S.level}!  +1 skill point`); floatAt('hero', 'LEVEL UP', '#b57bff', true);
+    recompute(); R.hp = Math.min(H.hp, R.hp + H.hp * .5);
+  }
+}
+function hitEnemy(dmg, crit) {
+  const e = R.enemy; if (!e) return;
+  if (T('w4') && e.hp < e.max * .25) dmg *= 2;
+  e.hp -= dmg; e.flash = .12;
+  floatAt('enemy', fmt(dmg), crit ? '#ffd34d' : '#fff', crit);
+  if (T('g4')) R.hp = Math.min(H.hp, R.hp + dmg * .05);
+  if (e.hp <= 0) kill();
+}
+function kill() {
+  const e = R.enemy, st = S.stage;
+  const gold = 1.5 * Math.pow(CFG.rewardGrowth, st - 1) * (e.boss ? 5 : 1) * (T('s1') ? 1.25 : 1) * rushMult();
+  S.gold += gold; gainXp(5 * Math.pow(CFG.rewardGrowth, st - 1) * (e.boss ? 4 : 1));
+  floatAt('enemy', '+' + fmt(gold), '#ffd34d');
+  R.hp = Math.min(H.hp, R.hp + H.hp * .1);
+  R.corpse = { kind:e.kind, tier:e.tier, boss:e.boss, t:.35 };
+  R.enemy = null; R.spawnT = .5;
+  S.kills++;
+  if (S.kills >= (isBoss(st) ? 1 : CFG.killsPerStage)) {
+    S.kills = 0; S.stage++; S.best = Math.max(S.best, S.stage);
+    if (isBoss(st)) banner('BOSS DOWN!', '#ffd34d');
+  }
+}
+function setback(txt) {
+  banner(txt, '#ff5a5f');
+  S.stage = Math.max(1, S.stage - 1); S.kills = 0;
+  R.enemy = null; R.dead = 2; R.shieldT = 0; R.shield = 0;
+}
+function heroAttack() {
+  const crit = Math.random() < H.crit;
+  R.lunge = .18;
+  hitEnemy(H.atk * (crit ? 2 : 1), crit);
+}
+function enemyAttack() {
+  const e = R.enemy; let dmg = e.atk * (1 - H.dr);
+  R.hflash = .12;
+  if (R.shieldT > 0 && R.shield > 0) { const a = Math.min(R.shield, dmg); R.shield -= a; dmg -= a; floatAt('hero', 'BLOCK', '#4aa3ff'); }
+  if (dmg > 0) { R.hp -= dmg; floatAt('hero', '-' + fmt(dmg), '#ff5a5f'); }
+  if (R.hp <= 0) { R.hp = 0; setback('DEFEATED'); }
+}
+
+const AUTO_COND = {
+  strike: () => !!R.enemy,
+  heal:   () => R.hp < H.hp * .5 && R.hp > 0,
+  shield: () => !!R.enemy,
+  rush:   () => !!R.enemy,
+};
+function cast(id, auto) {
+  const sk = S.skills[id];
+  if (!sk.u || R.cd[id] > 0 || R.dead > 0) return false;
+  if (id === 'strike' && !R.enemy) return false;
+  const p = (auto ? autoEff() : 1) * (1 + R.charge), L = sk.l;
+  if (R.charge > .05) floatAt('hero', 'CHARGED', '#ffd34d');
+  R.charge = 0;
+  if (id === 'strike') { R.lunge = .25; hitEnemy(H.atk * (3 + .5 * L) * p, true); }
+  else if (id === 'heal') { const a = H.hp * (.35 + .03 * L) * p; R.hp = Math.min(H.hp, R.hp + a); floatAt('hero', '+' + fmt(a), '#5bd36b', true); }
+  else if (id === 'shield') { R.shield = H.hp * (.3 + .03 * L) * p; R.shieldT = 6; floatAt('hero', 'SHIELD', '#4aa3ff', true); }
+  else if (id === 'rush') { R.rushT = 8 * (1 + .05 * L) * p; floatAt('hero', 'RUSH!', '#ffd34d', true); }
+  R.cd[id] = cdOf(id); R.castFlash[id] = .3;
+  return true;
+}
+function tapAttack() {
+  R.charge = Math.min(1, R.charge + .1); R.idle = 0;
+  if (R.enemy && R.dead <= 0) { R.lunge = .1; hitEnemy(H.atk * .4, false); }
+}
+
+function combat(dt) {
+  R.shieldT = Math.max(0, R.shieldT - dt); if (R.shieldT <= 0) R.shield = 0;
+  if (R.dead > 0) { R.dead -= dt; if (R.dead <= 0) { R.hp = H.hp; } return; }
+  if (!R.enemy) { R.spawnT -= dt; if (R.spawnT <= 0) spawn(); return; }
+  R.atkT += dt * H.aspd;
+  while (R.atkT >= 1 && R.enemy) { R.atkT -= 1; heroAttack(); }
+  const e = R.enemy; if (!e) return;
+  e.t += dt;
+  if (e.t >= e.rate) { e.t -= e.rate; enemyAttack(); }
+  if (R.dead > 0) return;
+  if (e.boss) { e.timer -= dt; if (e.timer <= 0) setback('TIME UP'); }
+  if (H.regen) R.hp = Math.min(H.hp, R.hp + H.hp * H.regen * dt);
+}
+
+/* ============================================================
+   MAIN STEP / OFFLINE
+   ============================================================ */
+function step(dt) {
+  recompute();
+  if (H.hp > R.lastMax) R.hp += H.hp - R.lastMax;
+  R.lastMax = H.hp; R.hp = Math.min(R.hp, H.hp);
+  R.t += dt;
+  const r = rates(); S.wood += r.wood * dt; S.ore += r.ore * dt; S.gold += r.gold * dt;
+  R.rushT = Math.max(0, R.rushT - dt);
+  document.body.classList.toggle('rush', R.rushT > 0);
+  for (const k of SKORDER) R.cd[k] = Math.max(0, R.cd[k] - dt);
+  for (const k in R.castFlash) R.castFlash[k] = Math.max(0, R.castFlash[k] - dt);
+  R.idle += dt; if (R.idle > 1.5) R.charge = Math.max(0, R.charge - .08 * dt);
+  combat(dt);
+  for (const k of SKORDER) if (S.skills[k].auto && R.cd[k] <= 0 && AUTO_COND[k]()) cast(k, true);
+  R.lunge = Math.max(0, R.lunge - dt); R.hflash = Math.max(0, R.hflash - dt);
+  if (R.enemy) R.enemy.flash = Math.max(0, R.enemy.flash - dt);
+  if (R.corpse) { R.corpse.t -= dt; if (R.corpse.t <= 0) R.corpse = null; }
+  if (R.banner) { R.banner.t += dt; if (R.banner.t > 1.6) R.banner = null; }
+  for (const f of R.fl) f.t += dt; R.fl = R.fl.filter(f => f.t < .9);
+}
+function offline(sec) {
+  sec = Math.min(sec, CFG.offlineCapH * 3600);
+  recompute(); const r = rates(); // idle income only; fights pause while away
+  S.wood += r.wood * sec; S.ore += r.ore * sec; S.gold += r.gold * sec;
+  if (sec > 30) {
+    const m = sec >= 3600 ? (sec / 3600).toFixed(1) + 'h' : Math.floor(sec / 60) + 'm';
+    const parts = [['wood','wood'],['ore','ore'],['gold','gold']].filter(([k]) => r[k] > 0).map(([k,n]) => `+${fmt(r[k] * sec)} ${n}`);
+    if (parts.length) toast(`Away ${m}: ${parts.join('  ')}`, 4000);
+  }
+}
+
+/* ============================================================
+   RENDERING (canvas)
+   ============================================================ */
+const cv = document.getElementById('scene'), ctx = cv.getContext('2d');
+const lerpHex = (a, b, t) => { const p = h => [1,3,5].map(i => parseInt(h.substr(i,2),16));
+  const A = p(a), B = p(b); return '#' + A.map((v,i) => Math.round(v + (B[i]-v)*t).toString(16).padStart(2,'0')).join(''); };
+
+function drawBg(W, H_, ps, gy, env) {
+  const bands = 7, bh = Math.ceil(gy / bands / ps) * ps;
+  for (let i = 0; i < bands; i++) { ctx.fillStyle = lerpHex(env.sky[0], env.sky[1], i / (bands - 1)); ctx.fillRect(0, i * bh, W, bh + 1); }
+  if (env.clouds) {
+    ctx.fillStyle = 'rgba(255,255,255,.85)';
+    for (let i = 0; i < 3; i++) {
+      const x = Math.floor(((R.t * ps * .8 + i * W / 3) % (W + 12 * ps)) / ps) * ps - 8 * ps, y = (3 + i * 3) * ps;
+      ctx.fillRect(x + ps, y, 5 * ps, ps); ctx.fillRect(x, y + ps, 8 * ps, ps); ctx.fillRect(x + 2 * ps, y - ps, 3 * ps, ps);
+    }
+  } else {
+    ctx.fillStyle = 'rgba(255,255,255,.7)';
+    for (let i = 0; i < 14; i++) ctx.fillRect(((i * 37) % 80) * ps, ((i * 11) % 5 + 1) * ps, ps / 2 | 0 || 1, ps / 2 | 0 || 1);
+  }
+  const cols = Math.ceil(W / ps);
+  for (let l = 0; l < 2; l++) {
+    ctx.fillStyle = env.hill[l];
+    for (let i = 0; i < cols; i++) {
+      const h = Math.floor(Math.sin(i * (.17 + l * .09) + l * 2) * 2.2 + Math.sin(i * .06 + l) * 3 + 5 - l * 1.5) * ps;
+      ctx.fillRect(i * ps, gy - Math.max(ps, h), ps + 1, Math.max(ps, h));
+    }
+  }
+  ctx.fillStyle = env.grass; ctx.fillRect(0, gy, W, ps * 2);
+  ctx.fillStyle = env.dirt; ctx.fillRect(0, gy + ps * 2, W, H_ - gy);
+  ctx.fillStyle = 'rgba(0,0,0,.18)';
+  for (let i = 0; i < cols; i += 3) ctx.fillRect(i * ps, gy + ps * 3 + ((i * 7) % 4) * ps, ps, ps);
+}
+function text(str, x, y, size, col, align) {
+  ctx.font = `bold ${size}px ui-monospace,"Courier New",monospace`;
+  ctx.textAlign = align || 'center'; ctx.textBaseline = 'middle';
+  ctx.lineWidth = Math.max(2, size / 5); ctx.strokeStyle = '#1d1b2f'; ctx.lineJoin = 'round';
+  ctx.strokeText(str, x, y); ctx.fillStyle = col; ctx.fillText(str, x, y);
+}
+function hpBar(cx, y, w, h, frac, col) {
+  const b = Math.max(2, h / 4 | 0);
+  ctx.fillStyle = '#1d1b2f'; ctx.fillRect(cx - w / 2 - b, y - b, w + b * 2, h + b * 2);
+  ctx.fillStyle = '#51497a'; ctx.fillRect(cx - w / 2, y, w, h);
+  ctx.fillStyle = col; ctx.fillRect(cx - w / 2, y, Math.max(0, Math.round(w * Math.max(0, Math.min(1, frac)))), h);
+}
+function draw() {
+  const dpr = window.devicePixelRatio || 1, cw = cv.clientWidth, ch = cv.clientHeight;
+  if (cv.width !== Math.round(cw * dpr) || cv.height !== Math.round(ch * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); }
+  const W = cv.width, Hh = cv.height, ps = Math.max(2, Math.floor(W / 80));
+  const gy = Math.floor(Hh * .7 / ps) * ps, env = ENV[tierOf(S.stage)];
+  ctx.imageSmoothingEnabled = false;
+  drawBg(W, Hh, ps, gy, env);
+
+  const hx = W * .24, ex = W * .74, u = ps, bu = Math.round(ps * 1.45);
+  // hero
+  const lunge = R.lunge > 0 ? Math.sin((1 - R.lunge / .25) * Math.PI) * 3 * u : 0;
+  const bob = Math.floor(R.t * 3) % 2 ? u : 0;
+  let hspr = sprites.hero; if (R.hflash > 0) hspr = silhouette(hspr);
+  const dead = R.dead > 0;
+  ctx.save();
+  if (dead) { ctx.globalAlpha = .6; ctx.translate(hx, gy); ctx.rotate(Math.PI / 2 * .9); ctx.translate(-hx, -gy); }
+  ctx.drawImage(hspr, Math.round(hx - 8 * u + lunge), gy - 16 * u + (dead ? 0 : bob), 16 * u, 16 * u);
+  ctx.restore();
+  if (R.shieldT > 0) {
+    ctx.fillStyle = 'rgba(74,163,255,.28)'; ctx.fillRect(hx - 8 * u, gy - 17 * u, 16 * u, 17 * u);
+    ctx.strokeStyle = '#4aa3ff'; ctx.lineWidth = Math.max(2, u / 3); ctx.strokeRect(hx - 8 * u, gy - 17 * u, 16 * u, 17 * u);
+  }
+  if (!dead) hpBar(hx, gy - 19 * u, 12 * u, Math.max(5, u * .8), R.hp / H.hp, '#5bd36b');
+  text(`${fmt(Math.ceil(R.hp))}/${fmt(H.hp)}`, hx, gy + ps * 4.5, ps * 1.7, '#fff');
+
+  // enemy
+  const e = R.enemy, c = R.corpse;
+  if (e || c) {
+    const o = e || c, boss = o.boss, k = boss ? bu : u;
+    let spr = sprites[o.kind][o.tier];
+    if (e && e.flash > 0) spr = silhouette(spr);
+    const fly = o.kind === 'bat' ? 3 * u + (Math.floor(R.t * 6) % 2) * u : 0;
+    const eb = (Math.floor(R.t * 2.5) % 2) * (boss ? 0 : u) * (o.kind === 'bat' ? 0 : 1);
+    const shake = e && e.flash > 0 ? (Math.random() - .5) * u : 0;
+    ctx.save();
+    if (c) ctx.globalAlpha = Math.max(0, c.t / .35);
+    ctx.drawImage(spr, Math.round(ex - 8 * k + shake - (lunge ? 0 : 0)), gy - 16 * k - fly - eb + (c ? (.35 - c.t) * 40 : 0), 16 * k, 16 * k);
+    ctx.restore();
+    if (e) {
+      hpBar(ex, gy - 16 * k - fly - 3 * u, 12 * u, Math.max(5, u * .8), e.hp / e.max, boss ? '#ffd34d' : '#ff5a5f');
+      text(`${fmt(Math.ceil(e.hp))}/${fmt(e.max)}`, ex, gy + ps * 4.5, ps * 1.7, '#fff');
+    }
+  }
+  // stage header
+  const need = isBoss(S.stage) ? 1 : CFG.killsPerStage;
+  text(`STAGE ${S.stage}`, ps, ps * 2.2, ps * 2.4, '#fff', 'left');
+  text(isBoss(S.stage) ? 'BOSS' : `${S.kills}/${need}`, W - ps, ps * 2.2, ps * 2.4, isBoss(S.stage) ? '#ffd34d' : '#cfd8e3', 'right');
+  if (e && e.boss) {
+    const f = Math.max(0, e.timer / CFG.bossTime);
+    hpBar(W / 2, ps * 5, W * .5, ps * .9, f, f < .3 ? '#ff5a5f' : '#4aa3ff');
+    text(Math.ceil(e.timer) + 's', W / 2, ps * 8, ps * 1.8, '#fff');
+  }
+  // floaters
+  for (const f of R.fl) {
+    const a = 1 - f.t / .9;
+    ctx.globalAlpha = Math.min(1, a * 1.6);
+    text(f.txt, f.x * W, (f.y - f.t * .22) * Hh, ps * (f.big ? 2.8 : 2.1), f.col);
+  }
+  ctx.globalAlpha = 1;
+  if (R.banner) {
+    const b = R.banner, a = b.t < 1.2 ? 1 : 1 - (b.t - 1.2) / .4;
+    ctx.globalAlpha = Math.max(0, a); text(b.txt, W / 2, Hh * .36, ps * 4.4, b.col); ctx.globalAlpha = 1;
+  }
+}
+
+/* ============================================================
+   UI
+   ============================================================ */
+const $ = (s, r) => (r || document).querySelector(s);
+function el(tag, cls, html) { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; }
+const imgTag = (k) => `<img src="${icons[k]}" alt="">`;
+let toastTimer;
+function toast(msg, ms) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('on'), ms || 2200); }
+function popAt(x, y, txt, col) { const s = el('span', 'pop'); s.textContent = txt; s.style.left = x + 'px'; s.style.top = y + 'px'; s.style.color = col; document.body.appendChild(s); setTimeout(() => s.remove(), 700); }
+
+// cost-bearing button
+function mkItem(parent, onclick) {
+  const b = el('button', 'item px', '<div class="l"><b></b><small></small></div><div class="r"></div>');
+  const name = $('b', b), info = $('small', b), r = $('.r', b);
+  b.onclick = () => { onclick(); updateUI(); };
+  parent.appendChild(b);
+  return { b, set(n, i, costs, label) {
+    if (name.textContent !== n) name.textContent = n;
+    if (info.textContent !== i) info.textContent = i;
+    if (costs.length === 0) { r.textContent = label || ''; b.classList.add('dis'); b.classList.toggle('max', !!label); return; }
+    if (r.children.length !== costs.length || r.firstChild.nodeType === 3) {
+      r.innerHTML = ''; costs.forEach(c => r.appendChild(el('span', '', `<i></i>${imgTag(c.r)}`)));
+    }
+    let ok = true;
+    costs.forEach((c, n2) => { const sp = r.children[n2], aff = S[c.r] >= c.a; ok = ok && aff;
+      sp.firstChild.textContent = fmt(c.a); sp.className = aff ? '' : 'no'; });
+    b.classList.remove('max'); b.classList.toggle('dis', !ok);
+  }};
+}
+
+const items = []; // per-frame updaters
+function buildUI() {
+  // --- skill bar
+  const bar = $('#skills');
+  SKORDER.forEach(id => {
+    const d = SK[id], b = el('button', 'sk px', `<img src="${icons[d.icon]}" alt=""><div class="cdv"></div><span class="cdt"></span><i class="au">AUTO</i><span class="nm">${(d.tag || d.name).toUpperCase()}</span>`);
+    b.onpointerdown = (ev) => { ev.preventDefault();
+      if (!S.skills[id].u) { toast(`${d.name}: unlock it in HERO tab`); switchTab('hero'); return; }
+      cast(id, false); updateUI(); };
+    bar.appendChild(b); items.push(() => {
+      const sk = S.skills[id], cd = R.cd[id], max = cdOf(id);
+      b.classList.toggle('lock', !sk.u); b.classList.toggle('auto', !!sk.auto);
+      b.classList.toggle('ready', sk.u && cd <= 0);
+      $('.cdv', b).style.height = (sk.u && cd > 0 ? cd / max * 100 : 0) + '%';
+      $('.cdt', b).textContent = sk.u && cd > 0 ? (cd < 10 ? cd.toFixed(1) : Math.ceil(cd)) : '';
+    });
+  });
+
+  // --- gather
+  const g = $('#tab-gather');
+  g.appendChild(el('p', 'hint', 'Tap to gather. Hire helpers in BUILD so they work for you, then send your hero to fight. Tap the battle to charge your next skill!'));
+  const row = el('div', 'gather');
+  [['wood','CHOP WOOD'], ['ore','MINE ORE']].forEach(([k, label]) => {
+    const b = el('button', 'big px', `<img src="${icons[k]}" alt=""><span>${label}</span><small></small>`);
+    b.onpointerdown = (ev) => { ev.preventDefault(); const n = tapPower(k); S[k] += n;
+      popAt(ev.clientX, ev.clientY, '+' + fmt(n), k === 'wood' ? '#c98b4a' : '#9fb4c7'); };
+    row.appendChild(b); items.push(() => { $('small', b).textContent = '+' + fmt(tapPower(k)) + ' per tap'; });
+  });
+  g.appendChild(row);
+  g.appendChild(el('h3', '', 'TOOLS'));
+  TOOLS.forEach(d => { const it = mkItem(g, () => { const c = toolCost(d); if (S[d.res] >= c) { S[d.res] -= c; S.up[d.id]++; } });
+    items.push(() => it.set(`${d.name} Lv${S.up[d.id]}`, d.desc, [{r:d.res, a:toolCost(d)}])); });
+  const reset = el('button', 'small px', 'RESET SAVE'); reset.style.marginTop = '12px';
+  reset.onclick = () => { if (confirm('Delete all progress?')) { try { localStorage.removeItem(SAVE_KEY); } catch (e) {} location.reload(); } };
+  g.appendChild(reset);
+
+  // --- build
+  const bd = $('#tab-build');
+  bd.appendChild(el('p', 'hint', 'Helpers work while you fight - and while you are away (up to 8h).'));
+  GENS.forEach(d => { const it = mkItem(bd, () => { const c = genCost(d); if (S[d.cost] >= c) { S[d.cost] -= c; S.gens[d.id] = (S.gens[d.id] || 0) + 1; } });
+    items.push(() => { const n = S.gens[d.id] || 0, m = 1 + (T('s2') ? .25 : 0);
+      it.set(`${d.name} x${n}`, `+${fmt(d.rate * m)} ${d.out}/s each  (${fmt(n * d.rate * m)}/s total)`, [{r:d.cost, a:genCost(d)}]); }); });
+
+  // --- hero
+  const h = $('#tab-hero');
+  const st = el('div', 'stats px', ''); h.appendChild(st);
+  items.push(() => { const v = [['ATTACK', fmt(H.atk)], ['MAX HP', fmt(H.hp)], ['SPEED', H.aspd.toFixed(2) + '/s'], ['CRIT', Math.round(H.crit * 100) + '%'],
+      ['STAGE', `${S.stage} (best ${S.best})`], ['AUTO POWER', Math.round(autoEff() * 100) + '%']];
+    const s = v.map(([a, b]) => `<div><span>${a}</span><b>${b}</b></div>`).join(''); if (st.dataset.s !== s) { st.innerHTML = s; st.dataset.s = s; } });
+  h.appendChild(el('h3', '', 'GEAR'));
+  GEAR.forEach(d => { const it = mkItem(h, () => { const c = upCost(d); if (S[d.res] >= c) { S[d.res] -= c; S.up[d.id]++; } });
+    items.push(() => it.set(`${d.name} Lv${S.up[d.id]}`, d.desc(S.up[d.id]), [{r:d.res, a:upCost(d)}])); });
+  h.appendChild(el('h3', '', 'SKILLS  (tap to cast, then automate)'));
+  SKORDER.forEach(id => {
+    const d = SK[id], sk = S.skills[id], card = el('div', 'card px', `<h4><img src="${icons[d.icon]}" alt=""><span>${d.name}</span></h4><p class="desc">${d.desc}</p>`);
+    const unlock = mkItem(card, () => { if (S.gold >= d.unlock) { S.gold -= d.unlock; sk.u = 1; } });
+    const row = el('div', 'row2'); card.appendChild(row);
+    const lvl = mkItem(row, () => { const c = d.lvl * Math.pow(1.5, sk.l); if (S.gold >= c) { S.gold -= c; sk.l++; } });
+    const auto = mkItem(row, () => { if (S.gold >= d.auto.gold && S.ore >= d.auto.ore) { S.gold -= d.auto.gold; S.ore -= d.auto.ore; sk.auto = 1; } });
+    h.appendChild(card);
+    items.push(() => {
+      unlock.b.style.display = sk.u ? 'none' : ''; row.style.display = sk.u ? '' : 'none';
+      if (!sk.u) unlock.set('Unlock ' + d.name, 'Learn this skill', [{r:'gold', a:d.unlock}]);
+      else {
+        lvl.set(`Level ${sk.l}`, `cooldown ${cdOf(id).toFixed(1)}s`, [{r:'gold', a:d.lvl * Math.pow(1.5, sk.l)}]);
+        if (sk.auto) auto.set('AUTO ON', `${Math.round(autoEff() * 100)}% power`, [], 'ACTIVE');
+        else auto.set('Automate', 'casts itself', [{r:'gold', a:d.auto.gold}, {r:'ore', a:d.auto.ore}]);
+      }
+    });
+  });
+
+  // --- tree
+  const t = $('#tab-tree');
+  const head = el('div', 'treehead', '<span id="spt"></span>'); const respec = el('button', 'small px', ''); head.appendChild(respec); t.appendChild(head);
+  respec.onclick = () => { const c = 100 * S.level; if (S.gold < c) return toast('Need ' + fmt(c) + ' gold to respec');
+    let back = 0; TREE.forEach(n => { if (S.tree[n.id]) back += n.c; }); if (!back) return;
+    S.gold -= c; S.sp += back; S.tree = {}; toast('Skill points refunded'); updateUI(); };
+  items.push(() => { $('#spt', head).textContent = `SKILL POINTS: ${S.sp}`; respec.textContent = `RESPEC ${fmt(100 * S.level)}g`; });
+  t.appendChild(el('p', 'hint', 'Earn 1 point per level. Pick a path - or mix. Stars are game-changing keystones.'));
+  const grid = el('div', 'tree'); t.appendChild(grid);
+  BRANCH.forEach((br, bi) => {
+    const col = el('div', 'col', `<h4 style="color:${br.c}">${br.n}</h4>`); grid.appendChild(col);
+    TREE.filter(n => n.b === bi).forEach((n, i) => {
+      if (i) { const l = el('div', 'link'); col.appendChild(l); n._link = l; }
+      const nd = el('button', 'node px' + (n.key ? ' key' : ''), `<b>${n.n}</b><small>${n.d}</small><em></em>`);
+      nd.onclick = () => { if (S.tree[n.id]) return; if (n.r && !S.tree[n.r]) return toast('Unlock ' + TREE.find(x => x.id === n.r).n + ' first');
+        if (S.sp < n.c) return toast('Need ' + n.c + ' skill point' + (n.c > 1 ? 's' : '')); S.sp -= n.c; S.tree[n.id] = 1; updateUI(); };
+      col.appendChild(nd);
+      items.push(() => { const own = !!S.tree[n.id], can = !own && (!n.r || S.tree[n.r]) && S.sp >= n.c;
+        nd.className = 'node px' + (n.key ? ' key' : '') + (own ? ' own' : can ? ' can' : '');
+        $('em', nd).textContent = own ? 'OWNED' : n.c + ' pt' + (n.c > 1 ? 's' : ''); if (n._link) n._link.classList.toggle('on', own); });
+    });
+  });
+
+  // --- tabs
+  document.querySelectorAll('#tabs button').forEach(b => b.onclick = () => switchTab(b.dataset.tab));
+  cv.onpointerdown = (ev) => { ev.preventDefault(); tapAttack(); };
+}
+function switchTab(name) {
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('on', t.id === 'tab-' + name));
+  $('#panel').scrollTop = 0; updateUI();
+}
+function updateUI() {
+  const r = rates();
+  for (const k of ['wood','ore','gold']) { $('#v-' + k).textContent = fmt(Math.floor(S[k])); $('#r-' + k).textContent = '+' + fmt(r[k]) + '/s'; }
+  $('#lv').textContent = 'LV ' + S.level;
+  $('#xpbar').style.width = (S.xp / xpNeed(S.level) * 100) + '%';
+  $('#sp').textContent = S.sp ? `${S.sp} SP` : '';
+  $('#chbar').style.width = (R.charge * 100) + '%'; $('#chtxt').textContent = '+' + Math.round(R.charge * 100) + '%';
+  document.querySelector('#tabs [data-tab=tree]').classList.toggle('badge', S.sp > 0);
+  items.forEach(f => f());
+}
+
+/* ============================================================
+   LOOP
+   ============================================================ */
+buildUI(); recompute(); R.hp = H.hp; R.lastMax = H.hp;
+let lastWall = S.t || Date.now(), uiT = 0, saveT = 0;
+function frame() {
+  const now = Date.now(); let real = (now - lastWall) / 1000; lastWall = now;
+  if (real > 2) { offline(real); real = .05; }
+  while (real > 0) { const d = Math.min(.1, real); step(d); uiT += d; saveT += d; real -= d; }
+  draw();
+  if (uiT > .1) { uiT = 0; updateUI(); }
+  if (saveT > 5) { saveT = 0; save(); }
+  requestAnimationFrame(frame);
+}
+document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
+window.addEventListener('pagehide', save);
+window.__idler = { S, R, H, step, cast, spawn }; // handy for debugging in the console
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
