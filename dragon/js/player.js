@@ -10,7 +10,7 @@ DR.Player = (function () {
   let shadow, bubble, flame, bodyMat, wingL, wingR, mouth;
 
   let lane = 1, x = 0, fromX = 0, toX = 0, slideT = 1;
-  let hearts = 3, invuln = 0, shield = false, wingPhase = 0, flameT = 0;
+  let hearts = 3, invuln = 0, shield = false, wingPhase = 0, flameT = 0, fall = 0;
 
   const laneX = (l) => (l - 1) * C.laneWidth;
 
@@ -107,7 +107,7 @@ DR.Player = (function () {
 
   function reset() {
     lane = 1; x = fromX = toX = 0; slideT = 1;
-    hearts = C.player.hearts; invuln = 0; shield = false; flameT = 0;
+    hearts = C.player.hearts; invuln = 0; shield = false; flameT = 0; fall = 0;
     group.visible = true;
   }
 
@@ -150,6 +150,14 @@ DR.Player = (function () {
     // Invulnerability blink
     if (invuln > 0) { invuln -= dt; group.visible = Math.floor(time * 22) % 2 === 0 || invuln <= 0; }
     else group.visible = true;
+
+    // Out of hearts: tumble to the ground
+    if (hearts <= 0) {
+      fall += dt;
+      group.visible = true;
+      group.position.y = Math.max(0.8, C.flyHeight - fall * fall * 7);
+      group.rotation.z = fall * 4; group.rotation.x = 0.4;
+    }
 
     bubble.visible = shield;
     if (shield) bubble.rotation.y += dt;
