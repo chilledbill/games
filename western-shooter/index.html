@@ -800,12 +800,14 @@ const aimDir=V(0,0,-1),fwd=V(),right=V(),camPivot=V(0,1.6,18);
 // dive lock-on: nearest enemy is auto-targeted while rolling in slow-mo (camera is not moved)
 let lockE=null;
 const lockPoint=e=>_t.set(e.pos.x,e.headW.y-.55*e.scale,e.pos.z);
+// an enemy can be locked only if a shot from the camera could reach its body or head
+const lockVisible=e=>!segBlocked(camera.position,lockPoint(e))||!segBlocked(camera.position,e.headW);
 function updateLock(){
   if(!(state==='playing'&&player.alive&&player.dive&&player.dive.phase==='air')){lockE=null;return;}
-  if(lockE&&!lockE.alive)lockE=null;
+  if(lockE&&(!lockE.alive||!lockVisible(lockE)))lockE=null;
   if(lockE)return;
   let bd=1e9;
-  for(const e of enemies){if(!e.alive)continue;const d=e.pos.distanceToSquared(player.pos);if(d<bd){bd=d;lockE=e;}}
+  for(const e of enemies){if(!e.alive)continue;const d=e.pos.distanceToSquared(player.pos);if(d<bd&&lockVisible(e)){bd=d;lockE=e;}}
   if(lockE)SFX.click();
 }
 let lockShown=null;
