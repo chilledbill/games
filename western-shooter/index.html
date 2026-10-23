@@ -173,7 +173,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
   <div class="card">
     <div class="title wfont gold">DRY CREEK<br>REQUIEM</div>
     <div class="sub wfont">A MOONLIGHT GUNFIGHT</div>
-    <div class="row2"><button id="startB" class="wbtn">RIDE OUT</button><button id="titleGear" class="ghost">TUNING</button><button id="ambB" class="ghost"></button></div>
+    <div class="row2"><button id="startB" class="wbtn">RIDE OUT</button><button id="titleGear" class="ghost">TUNING</button><button id="ambB" class="ghost"></button><button id="rangeB" class="ghost">TEST RANGE</button></div>
     <div class="hint"><b>Left thumb</b> move &nbsp;·&nbsp; <b>Right drag</b> aim &nbsp;·&nbsp; <b>FIRE</b> hold to fan &nbsp;·&nbsp; <b>DIVE</b> shoot-dodge &nbsp;·&nbsp; <b>SLOW</b> bullet time<br>
     Keyboard: WASD · drag mouse on right half · F fire · Space dive · E slow · R reload</div>
   </div>
@@ -191,7 +191,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
   <div class="pbox">
     <div class="phead"><span class="wfont gold">TUNING</span><button id="pClose" aria-label="Close">✕</button></div>
     <div id="pBody"></div>
-    <div class="pfoot"><button id="pReset">Reset defaults</button><button id="pDone">Done</button></div>
+    <div class="pfoot"><button id="pExit" class="hidden">Exit range</button><button id="pReset">Reset defaults</button><button id="pDone">Done</button></div>
   </div>
 </div>
 
@@ -579,7 +579,9 @@ function buildWorld(){
   scene.add(new T.Mesh(GL.geo(),matGlow));
   const far=new T.Mesh(FAR.geo(),matFar);far.renderOrder=-1;scene.add(far);
 }
-buildWorld();
+const _w0=scene.children.length;buildWorld();
+const worldBuildings=scene.children.slice(_w0).filter(m=>m.material===matWorld||m.material===matGlow);
+const allColliders=colliders.slice();
 
 // sky, moon, stars (follow camera)
 const skyGroup=new T.Group();scene.add(skyGroup);
@@ -763,6 +765,27 @@ const enemies=[],bullets=[],debris=[];
 let score=0,combo=1,comboT=0,best=0,kills=0,headshots=0;
 try{best=+localStorage.getItem(BEST_KEY)||0;}catch(e){}
 const W={n:0,queue:[],spawnT:0,left:0,interT:0,state:'idle',boss:null};
+// test range: empty flat map, stationary targets that respawn
+let range=false;const rangeSlots=[];
+const RANGE_ROWS=[[8,[-4,0,4]],[16,[-8,-3,3,8]],[26,[-12,-6,0,6,12]],[38,[-16,-8,0,8,16]]],RANGE_TYPES=['gunslinger','rifleman','brawler'];
+function setRange(on){
+  range=on;
+  for(const m of worldBuildings)m.visible=!on;
+  fireLight.visible=campLight.visible=!on;
+  colliders.length=0;if(!on)colliders.push(...allColliders);
+  $('pExit').classList.toggle('hidden',!on);
+}
+function spawnDummy(sl){
+  const e=spawnEnemy(sl.type);
+  e.dummy=true;e.pos.set(sl.x,0,sl.z);e.yaw=Math.atan2(player.pos.x-sl.x,player.pos.z-sl.z);
+  return e;
+}
+function updateRange(dt){
+  for(const sl of rangeSlots){
+    if(sl.e&&sl.e.remove){sl.e=null;sl.t=.6;}
+    if(!sl.e){sl.t-=dt;if(sl.t<=0)sl.e=spawnDummy(sl);}
+  }
+}
 let aimOnEnemy=null,shake=0,overT=0,camDistNow=3;
 const aimDir=V(0,0,-1),fwd=V(),right=V(),camPivot=V(0,1.6,18);
 
@@ -1061,7 +1084,13 @@ function updateEnemy(e,dt){
     m.root.position.set(e.pos.x,f*.15-(e.deathT>9?(e.deathT-9)*.4:0),e.pos.z);
     m.armR.rotation.x=lerp(m.armR.rotation.x,-2.7,u);m.armL.rotation.x=lerp(m.armL.rotation.x,-2.4,u);
     m.shadow.position.set(e.pos.x,.03,e.pos.z);m.shadow.material.opacity=1;
-    if(e.deathT>11)e.remove=true;
+    if(e.deathT>(e.dummy?1.6:11))e.remove=true;
+    return;
+  }
+  if(e.dummy){
+    e.flinch=Math.max(0,e.flinch-dt*4);
+    m.root.position.set(e.pos.x,0,e.pos.z);m.root.rotation.set(0,e.yaw,0);poseMan(m,0,0,0,0,0,0);m.torso.rotation.x-=e.flinch*.45;
+    m.shadow.position.set(e.pos.x,.03,e.pos.z);m.root.updateMatrixWorld(true);m.head.getWorldPosition(e.headW);e.headW.y+=.13*e.scale;
     return;
   }
   e.stateT-=dt;e.fireCd-=dt;e.losT-=dt;e.dodgeCd-=dt;e.flinch=Math.max(0,e.flinch-dt*4);
@@ -1202,7 +1231,7 @@ function updateTitleCam(dtR){
 /* ===================== world fx ===================== */
 let emitAcc=0;
 function updateWorldFx(dt,dtR){
-  for(const f of fireEmitters){
+  for(const f of (range?[]:fireEmitters)){
     let n=f.rate*dt;while(n>0){if(Math.random()<n){const a=Math.random()*6.28,r=Math.random()*f.r;
       fxAdd.emit(f.p.x+Math.cos(a)*r,f.p.y,f.p.z+Math.sin(a)*r,rand(-.3,.3),rand(1.6,2.8)*f.s,rand(-.3,.3),rand(.5,1.0),f.s*rand(.9,1.4),f.s*.25,0xffb048,.8,0x8a2a08,0,1.2,.8,.4);}n-=1;}
     if(Math.random()<f.smoke*dt)fxSmoke.emit(f.p.x+rand(-.3,.3),f.p.y+f.s*1.2,f.p.z+rand(-.3,.3),rand(-.2,.2),rand(1.2,2.0)*Math.sqrt(f.s),rand(-.2,.2),rand(5,8),f.s*1.5,f.s*6+2,0x6e5338,.42,0x41463e,0,.05,.12,1);
@@ -1214,7 +1243,7 @@ function updateWorldFx(dt,dtR){
   matGlow.color.setScalar(.88+Math.sin(t*9.3)*.07+Math.random()*.05);
   for(const w of tumbleweeds){w.m.position.x+=w.sp*dt;w.m.position.z+=w.sp*.3*dt;w.ph+=dt*w.sp*1.4;w.m.position.y=.45+Math.abs(Math.sin(w.ph))*.5;w.m.rotation.z-=w.sp*dt/.45;w.m.rotation.x+=w.sp*.3*dt/.45;
     if(w.m.position.x>60){w.m.position.x=-60;w.m.position.z=rand(-40,25);}}
-  if(AU.ctx){const fd=Math.hypot(camera.position.x+14,camera.position.z+11),g=clamp(1.4/(1+fd*.12),0,.25);
+  if(AU.ctx){const fd=Math.hypot(camera.position.x+14,camera.position.z+11),g=range?0:clamp(1.4/(1+fd*.12),0,.25);
     AU.fire.gain.setTargetAtTime(g*.6,AU.ctx.currentTime,.2);if(AU.ambOn&&Math.random()<dt*18*g*4)SFX.crackle(g);
     AU.drone.gain.setTargetAtTime(btFx*.13,AU.ctx.currentTime,.12);AU.lp.frequency.setTargetAtTime(lerp(18000,1800,btFx*.95),AU.ctx.currentTime,.06);}
   void dtR;void emitAcc;
@@ -1246,7 +1275,7 @@ function updateHUD(dtR){
   if(ammoEls.length!==CONFIG.gun.magazine)buildAmmo();
   setIf('ammo',shown,v=>ammoEls.forEach((el,i)=>el.classList.toggle('spent',i>=v)));
   setIf('rel',gun.ammo===0&&!gun.reloading&&state==='playing',v=>H.reloadTx.classList.toggle('on',v));
-  let wl='';if(state==='playing'||state==='dead'){if(W.n>=4)wl='THE DUEL';else if(W.n>0)wl='WAVE '+W.n+' · '+Math.max(0,W.left)+' LEFT';}
+  let wl='';if(state==='playing'||state==='dead'){if(W.n>=4)wl='THE DUEL';else if(W.n>0)wl='WAVE '+W.n+' · '+Math.max(0,W.left)+' LEFT';if(range)wl='TEST RANGE · '+kills+' DOWN';}
   setIf('wave',wl,v=>H.wave.textContent=v);
   const boss=W.boss&&W.boss.alive?W.boss:null;
   setIf('boss',!!boss,v=>H.bossBox.classList.toggle('hidden',!v));
@@ -1353,8 +1382,8 @@ function clearWorld(){
   for(const b of bullets){b.alive=false;b.mesh.visible=false;}
   for(const d of debris)scene.remove(d.obj);debris.length=0;
 }
-function resetGame(){
-  clearWorld();
+function resetGame(isRange){
+  clearWorld();setRange(!!isRange);rangeSlots.length=0;
   const pl=player;pl.pos.set(0,0,18);pl.vel.set(0,0,0);pl.hp=CONFIG.player.maxHealth;pl.alive=true;pl.dive=null;pl.deathT=0;pl.tilt=0;pl.hurtFx=0;pl.lastHit=-99;
   pl.man.root.rotation.set(0,0,0);pl.man.root.position.copy(pl.pos);
   yaw=0;pitch=-.04;camPivot.set(.7,1.6,18);
@@ -1362,6 +1391,7 @@ function resetGame(){
   BT.meter=1;BT.active=false;btFx=0;timeScale=1;
   score=0;combo=1;comboT=0;kills=0;headshots=0;
   W.n=0;W.queue=[];W.left=0;W.state='clear';W.interT=1.2;W.boss=null;
+  if(isRange){W.state='range';for(const [d,xs] of RANGE_ROWS)xs.forEach((x,i)=>rangeSlots.push({x,z:18-d,type:RANGE_TYPES[(i+d)%3],e:null,t:0}));banner('TEST RANGE','NO ENEMIES · SHOOT THE TARGETS');}
   state='playing';H.hud.classList.remove('off');$('over').classList.add('hidden');$('title').classList.add('hidden');
   hpLag=1;for(const k in last)delete last[k];
 }
@@ -1378,6 +1408,13 @@ function goFull(){
 }
 $('startB').addEventListener('click',()=>{auResume();goFull();resetGame();});
 $('ovB').addEventListener('click',()=>{auResume();resetGame();});
+$('rangeB').addEventListener('click',()=>{auResume();goFull();resetGame(true);});
+$('pExit').addEventListener('click',()=>{
+  closePanel();clearWorld();setRange(false);rangeSlots.length=0;
+  const pl=player;pl.pos.set(0,0,18);pl.vel.set(0,0,0);pl.man.root.rotation.set(0,0,0);
+  for(const p of ptrs.values())if(p.el)p.el.classList.remove('press');ptrs.clear();input.mx=input.my=0;input.firing=false;stick.classList.remove('on');
+  BT.active=false;state='title';H.hud.classList.add('off');$('title').classList.remove('hidden');
+});
 
 /* ===================== resize / render ===================== */
 function resize(){
@@ -1415,7 +1452,7 @@ function step(dtR){
     const dt=dtR*timeScale;clockG+=dt;
     if(state==='title'){updateTitleCam(dtR);}
     else{
-      updatePlayer(dt,dtR);updateGun(dtR);updateEnemies(dt);updateBullets(dt);updateDebris(dt);updateWaves(dt,dtR);updateBT(dtR);
+      updatePlayer(dt,dtR);updateGun(dtR);updateEnemies(dt);updateBullets(dt);updateDebris(dt);updateWaves(dt,dtR);if(range&&state==='playing')updateRange(dt);updateBT(dtR);
       updateCamera(dtR);
       const r=castShot(camera.position,aimDir,camDistNow,CONFIG.gun.range);aimOnEnemy=r.hit&&r.hit.kind==='enemy'?r.hit.e:null;
       if(state==='dead'||state==='won'){overT-=dtR;if(overT<=0&&$('over').classList.contains('hidden'))showOver(state==='won');}
