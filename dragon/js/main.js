@@ -28,6 +28,8 @@
 
   DR.World.init(scene);
   DR.Player.build(scene);
+  DR.Entities.init(scene);
+  DR.Combat.init(scene);
   DR.HUD.init();
   DR.Input.init(document.getElementById('zone'), document.getElementById('rageBtn'));
 
@@ -39,9 +41,15 @@
     speed: 0        // current forward speed
   };
 
+  const params = new URLSearchParams(location.search);
+  const LEVEL_ID = params.get('level') || 'practice';
+
   function startLevel() {
     G.state = 'play'; G.time = 0; G.traveled = 0; G.speed = C.forwardSpeed;
     DR.Player.reset();
+    DR.Entities.clear();
+    DR.Combat.reset();
+    DR.Level.build(LEVEL_ID, false);
     DR.HUD.showPlay();
   }
 
@@ -57,6 +65,9 @@
 
     DR.World.update(dt, G.speed);
     DR.Player.update(dt, G.time, false);
+    DR.Level.update(G.traveled);
+    DR.Entities.update(dt, G.speed, { x: DR.Player.x, y: C.flyHeight }, G.time);
+    DR.Combat.update(dt, G.speed, false);
 
     const levelLength = C.level.duration * C.forwardSpeed;
     DR.HUD.setProgress(G.traveled / levelLength);
