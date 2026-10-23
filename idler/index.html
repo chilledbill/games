@@ -103,6 +103,7 @@
   .node.can { opacity:1; border-color:var(--purple); }
   .node.own { opacity:1; border-color:var(--green); background:#26433a; }
   .node.own em { color:var(--green); }
+  .node.can2 { border-color:var(--purple); }
   .node.key b::before { content:"★ "; color:var(--gold); }
   .link { align-self:center; width:4px; height:10px; background:var(--bd); }
   .link.on { background:var(--green); }
@@ -273,7 +274,7 @@ const SK = {
   shield:{name:'Shield', icon:'shield', cd:16, unlock:400,  lvl:80,  auto:{gold:400,ore:400},
           desc:'Absorb 30% max HP of damage for 6s.'},
   rush:  {name:'Gold Rush', tag:'RUSH', icon:'rush',cd:30, unlock:1500, lvl:150, auto:{gold:1200,ore:1200},
-          desc:'All income x2 for 8s.'},
+          desc:'All income x2 for 8s (x3 with Midas Touch).'},
 };
 const SKORDER = ['strike','heal','shield','rush'];
 const TREE = [
@@ -289,7 +290,25 @@ const TREE = [
   {id:'s2',b:2,n:'Foreman',    d:'+25% building output',   c:1, r:'s1'},
   {id:'s3',b:2,n:'Quick Hands',d:'-15% skill cooldowns',   c:2, r:'s2'},
   {id:'s4',b:2,n:'Auto Mastery',d:'Auto-cast at 100% power',c:3, r:'s3', key:1},
+  // tier 2
+  {id:'w5',b:0,n:'Battle Focus',d:'+20% Strike damage',      c:2, r:'w4'},
+  {id:'w6',b:0,n:'Deadly Aim', d:'+15% crit chance',         c:3, r:'w5'},
+  {id:'w7',b:0,n:'Crit Power', d:'Crits deal x3',            c:4, r:'w6'},
+  {id:'w8',b:0,n:'Overlord',   d:'+50% attack, +20% speed',  c:5, r:'w7', key:1},
+  {id:'wm',b:0,n:'Mastery',    d:'+10% attack per rank',     c:2, r:'w8', rep:1},
+  {id:'g5',b:1,n:'Bulwark',    d:'+30% max HP',              c:2, r:'g4'},
+  {id:'g6',b:1,n:'Resilience', d:'Shield absorbs +50%',      c:3, r:'g5'},
+  {id:'g7',b:1,n:'Lifeblood',  d:'Heal restores +50%',       c:4, r:'g6'},
+  {id:'g8',b:1,n:'Immortal',   d:'Survive a killing blow (60s cooldown)', c:5, r:'g7', key:1},
+  {id:'gm',b:1,n:'Mastery',    d:'+10% max HP per rank',     c:2, r:'g8', rep:1},
+  {id:'s5',b:2,n:'Haggler',    d:'+50% gold from kills',     c:2, r:'s4'},
+  {id:'s6',b:2,n:'Industry',   d:'+50% building output',     c:3, r:'s5'},
+  {id:'s7',b:2,n:'Time Warp',  d:'-15% more cooldowns',      c:4, r:'s6'},
+  {id:'s8',b:2,n:'Midas Touch',d:'Gold Rush x3, +25% XP',    c:5, r:'s7', key:1},
+  {id:'sm',b:2,n:'Mastery',    d:'+10% all income per rank', c:2, r:'s8', rep:1},
 ];
+const rk = id => +S.tree[id] || 0;
+const nodeCost = n => n.rep ? n.c + rk(n.id) : n.c;
 const BRANCH = [{n:'WARRIOR',c:'#ff5a5f'},{n:'GUARDIAN',c:'#4aa3ff'},{n:'SCHOLAR',c:'#ffd34d'}];
 const ENV = [
   {sky:['#6ec6ff','#bfe9ff'], hill:['#4caf6a','#3a8f55'], grass:'#5bd36b', dirt:'#8a5a2b', clouds:1},
@@ -320,7 +339,7 @@ function save() { S.t = Date.now(); try { localStorage.setItem(SAVE_KEY, JSON.st
 
 const R = { // runtime (not saved)
   hp:1, lastMax:0, enemy:null, spawnT:.3, atkT:0, dead:0, cd:{}, charge:0, idle:0,
-  shield:0, shieldT:0, rushT:0, fl:[], banner:null, lunge:0, hflash:0, corpse:null, t:0, castFlash:{},
+  shield:0, shieldT:0, rushT:0, fl:[], banner:null, lunge:0, hflash:0, corpse:null, t:0, castFlash:{}, undying:0,
 };
 SKORDER.forEach(k => R.cd[k] = 0);
 let H = {}; // derived hero stats
@@ -342,20 +361,24 @@ const toolCost = upCost;
 const xpNeed = (l) => 20 * Math.pow(1.35, l - 1);
 const isBoss = (st) => st % CFG.bossEvery === 0;
 const tierOf = (st) => Math.floor((st - 1) / 10) % 4;
-const rushMult = () => R.rushT > 0 ? 2 : 1;
+const rushBase = () => T('s8') ? 3 : 2;
+const rushMult = () => R.rushT > 0 ? rushBase() : 1;
+const incomeMult = () => 1 + .1 * rk('sm');
+const buildMult = () => (1 + (T('s2') ? .25 : 0) + (T('s6') ? .5 : 0)) * incomeMult();
 const autoEff = () => T('s4') ? 1 : CFG.autoEff;
-const cdOf = (id) => Math.max(.5, SK[id].cd * (T('s3') ? .85 : 1) * (1 - .02 * S.skills[id].l));
+const cdOf = (id) => Math.max(.5, SK[id].cd * (T('s3') ? .85 : 1) * (T('s7') ? .85 : 1) * (1 - .02 * S.skills[id].l));
 
 function recompute() {
-  H.atk = (4 + S.up.sword * 2 + (S.level - 1)) * (1 + (T('w1') ? .15 : 0) + (T('w3') ? .25 : 0));
-  H.hp = (40 + S.up.armor * 12 + (S.level - 1) * 5) * (T('g1') ? 1.2 : 1);
-  H.aspd = 1 + S.up.train * .05;
-  H.crit = .05 + (T('w2') ? .1 : 0);
+  H.atk = (4 + S.up.sword * 2 + (S.level - 1)) * (1 + (T('w1') ? .15 : 0) + (T('w3') ? .25 : 0) + (T('w8') ? .5 : 0) + .1 * rk('wm'));
+  H.hp = (40 + S.up.armor * 12 + (S.level - 1) * 5) * (1 + (T('g1') ? .2 : 0) + (T('g5') ? .3 : 0) + .1 * rk('gm'));
+  H.aspd = (1 + S.up.train * .05) * (T('w8') ? 1.2 : 1);
+  H.crit = .05 + (T('w2') ? .1 : 0) + (T('w6') ? .15 : 0);
+  H.critMult = T('w7') ? 3 : 2;
   H.regen = T('g2') ? .015 : 0;
   H.dr = T('g3') ? .15 : 0;
 }
 function rates() {
-  const m = (1 + (T('s2') ? .25 : 0)) * rushMult(), r = {wood:0, ore:0, gold:0};
+  const m = buildMult() * rushMult(), r = {wood:0, ore:0, gold:0};
   for (const g of GENS) r[g.out] += (S.gens[g.id] || 0) * g.rate * m;
   return r;
 }
@@ -396,8 +419,8 @@ function hitEnemy(dmg, crit) {
 }
 function kill() {
   const e = R.enemy, st = S.stage;
-  const gold = 1.5 * Math.pow(CFG.rewardGrowth, st - 1) * (e.boss ? 5 : 1) * (T('s1') ? 1.25 : 1) * rushMult();
-  S.gold += gold; gainXp(5 * Math.pow(CFG.rewardGrowth, st - 1) * (e.boss ? 4 : 1));
+  const gold = 1.5 * Math.pow(CFG.rewardGrowth, st - 1) * (e.boss ? 5 : 1) * (1 + (T('s1') ? .25 : 0) + (T('s5') ? .5 : 0)) * incomeMult() * rushMult();
+  S.gold += gold; gainXp(5 * Math.pow(CFG.rewardGrowth, st - 1) * (e.boss ? 4 : 1) * (T('s8') ? 1.25 : 1));
   floatAt('enemy', '+' + fmt(gold), '#ffd34d');
   R.hp = Math.min(H.hp, R.hp + H.hp * .1);
   R.corpse = { kind:e.kind, tier:e.tier, boss:e.boss, t:.35 };
@@ -416,13 +439,14 @@ function setback(txt) {
 function heroAttack() {
   const crit = Math.random() < H.crit;
   R.lunge = .18;
-  hitEnemy(H.atk * (crit ? 2 : 1), crit);
+  hitEnemy(H.atk * (crit ? H.critMult : 1), crit);
 }
 function enemyAttack() {
   const e = R.enemy; let dmg = e.atk * (1 - H.dr);
   R.hflash = .12;
   if (R.shieldT > 0 && R.shield > 0) { const a = Math.min(R.shield, dmg); R.shield -= a; dmg -= a; floatAt('hero', 'BLOCK', '#4aa3ff'); }
   if (dmg > 0) { R.hp -= dmg; floatAt('hero', '-' + fmt(dmg), '#ff5a5f'); }
+  if (R.hp <= 0 && T('g8') && R.undying <= 0) { R.hp = H.hp * .3; R.undying = 60; floatAt('hero', 'IMMORTAL', '#ffd34d', true); }
   if (R.hp <= 0) { R.hp = 0; setback('DEFEATED'); }
 }
 
@@ -439,9 +463,9 @@ function cast(id, auto) {
   const p = (auto ? autoEff() : 1) * (1 + R.charge), L = sk.l;
   if (R.charge > .05) floatAt('hero', 'CHARGED', '#ffd34d');
   R.charge = 0;
-  if (id === 'strike') { R.lunge = .25; hitEnemy(H.atk * (3 + .5 * L) * p, true); }
-  else if (id === 'heal') { const a = H.hp * (.35 + .03 * L) * p; R.hp = Math.min(H.hp, R.hp + a); floatAt('hero', '+' + fmt(a), '#5bd36b', true); }
-  else if (id === 'shield') { R.shield = H.hp * (.3 + .03 * L) * p; R.shieldT = 6; floatAt('hero', 'SHIELD', '#4aa3ff', true); }
+  if (id === 'strike') { R.lunge = .25; hitEnemy(H.atk * (3 + .5 * L) * p * (T('w5') ? 1.2 : 1), true); }
+  else if (id === 'heal') { const a = H.hp * (.35 + .03 * L) * p * (T('g7') ? 1.5 : 1); R.hp = Math.min(H.hp, R.hp + a); floatAt('hero', '+' + fmt(a), '#5bd36b', true); }
+  else if (id === 'shield') { R.shield = H.hp * (.3 + .03 * L) * p * (T('g6') ? 1.5 : 1); R.shieldT = 6; floatAt('hero', 'SHIELD', '#4aa3ff', true); }
   else if (id === 'rush') { R.rushT = 8 * (1 + .05 * L) * p; floatAt('hero', 'RUSH!', '#ffd34d', true); }
   R.cd[id] = cdOf(id); R.castFlash[id] = .3;
   return true;
@@ -474,7 +498,7 @@ function step(dt) {
   R.lastMax = H.hp; R.hp = Math.min(R.hp, H.hp);
   R.t += dt;
   const r = rates(); S.wood += r.wood * dt; S.ore += r.ore * dt; S.gold += r.gold * dt;
-  R.rushT = Math.max(0, R.rushT - dt);
+  R.rushT = Math.max(0, R.rushT - dt); R.undying = Math.max(0, R.undying - dt);
   document.body.classList.toggle('rush', R.rushT > 0);
   for (const k of SKORDER) R.cd[k] = Math.max(0, R.cd[k] - dt);
   for (const k in R.castFlash) R.castFlash[k] = Math.max(0, R.castFlash[k] - dt);
@@ -678,7 +702,7 @@ function buildUI() {
   const bd = $('#tab-build');
   bd.appendChild(el('p', 'hint', 'Helpers work while you fight - and while you are away (up to 8h).'));
   GENS.forEach(d => { const it = mkItem(bd, () => { const c = genCost(d); if (S[d.cost] >= c) { S[d.cost] -= c; S.gens[d.id] = (S.gens[d.id] || 0) + 1; } });
-    items.push(() => { const n = S.gens[d.id] || 0, m = 1 + (T('s2') ? .25 : 0);
+    items.push(() => { const n = S.gens[d.id] || 0, m = buildMult();
       it.set(`${d.name} x${n}`, `+${fmt(d.rate * m)} ${d.out}/s each  (${fmt(n * d.rate * m)}/s total)`, [{r:d.cost, a:genCost(d)}]); }); });
 
   // --- hero
@@ -713,22 +737,23 @@ function buildUI() {
   const t = $('#tab-tree');
   const head = el('div', 'treehead', '<span id="spt"></span>'); const respec = el('button', 'small px', ''); head.appendChild(respec); t.appendChild(head);
   respec.onclick = () => { const c = 100 * S.level; if (S.gold < c) return toast('Need ' + fmt(c) + ' gold to respec');
-    let back = 0; TREE.forEach(n => { if (S.tree[n.id]) back += n.c; }); if (!back) return;
+    let back = 0; TREE.forEach(n => { const k = rk(n.id); if (n.rep) for (let i = 0; i < k; i++) back += n.c + i; else if (k) back += n.c; }); if (!back) return;
     S.gold -= c; S.sp += back; S.tree = {}; toast('Skill points refunded'); updateUI(); };
   items.push(() => { $('#spt', head).textContent = `SKILL POINTS: ${S.sp}`; respec.textContent = `RESPEC ${fmt(100 * S.level)}g`; });
-  t.appendChild(el('p', 'hint', 'Earn 1 point per level. Pick a path - or mix. Stars are game-changing keystones.'));
+  t.appendChild(el('p', 'hint', 'Earn 1 point per level. Pick a path or mix. Stars are keystones. Mastery has no cap.'));
   const grid = el('div', 'tree'); t.appendChild(grid);
   BRANCH.forEach((br, bi) => {
     const col = el('div', 'col', `<h4 style="color:${br.c}">${br.n}</h4>`); grid.appendChild(col);
     TREE.filter(n => n.b === bi).forEach((n, i) => {
       if (i) { const l = el('div', 'link'); col.appendChild(l); n._link = l; }
       const nd = el('button', 'node px' + (n.key ? ' key' : ''), `<b>${n.n}</b><small>${n.d}</small><em></em>`);
-      nd.onclick = () => { if (S.tree[n.id]) return; if (n.r && !S.tree[n.r]) return toast('Unlock ' + TREE.find(x => x.id === n.r).n + ' first');
-        if (S.sp < n.c) return toast('Need ' + n.c + ' skill point' + (n.c > 1 ? 's' : '')); S.sp -= n.c; S.tree[n.id] = 1; updateUI(); };
+      nd.onclick = () => { if (S.tree[n.id] && !n.rep) return; if (n.r && !S.tree[n.r]) return toast('Unlock ' + TREE.find(x => x.id === n.r).n + ' first');
+        const c = nodeCost(n); if (S.sp < c) return toast('Need ' + c + ' skill point' + (c > 1 ? 's' : ''));
+        S.sp -= c; S.tree[n.id] = rk(n.id) + 1; updateUI(); };
       col.appendChild(nd);
-      items.push(() => { const own = !!S.tree[n.id], can = !own && (!n.r || S.tree[n.r]) && S.sp >= n.c;
-        nd.className = 'node px' + (n.key ? ' key' : '') + (own ? ' own' : can ? ' can' : '');
-        $('em', nd).textContent = own ? 'OWNED' : n.c + ' pt' + (n.c > 1 ? 's' : ''); if (n._link) n._link.classList.toggle('on', own); });
+      items.push(() => { const own = !!S.tree[n.id], c = nodeCost(n), can = (!own || n.rep) && (!n.r || S.tree[n.r]) && S.sp >= c;
+        nd.className = 'node px' + (n.key ? ' key' : '') + (own ? ' own' : can ? ' can' : '') + (n.rep && own && can ? ' can2' : '');
+        $('em', nd).textContent = n.rep ? `RANK ${rk(n.id)} · next ${c} pts` : own ? 'OWNED' : c + ' pt' + (c > 1 ? 's' : ''); if (n._link) n._link.classList.toggle('on', own); });
     });
   });
 
@@ -744,7 +769,7 @@ function switchTab(name) {
 function updateUI() {
   const r = rates();
   for (const k of ['wood','ore','gold']) { $('#v-' + k).textContent = fmt(Math.floor(S[k])); $('#r-' + k).textContent = '+' + fmt(r[k]) + '/s'; }
-  $('#lv').textContent = 'LV ' + S.level;
+  $('#lv').textContent = 'LV ' + S.level; $('#rush').textContent = 'RUSH x' + rushBase();
   $('#xpbar').style.width = (S.xp / xpNeed(S.level) * 100) + '%';
   $('#sp').textContent = S.sp ? `${S.sp} SP` : '';
   $('#chbar').style.width = (R.charge * 100) + '%'; $('#chtxt').textContent = '+' + Math.round(R.charge * 100) + '%';
