@@ -71,7 +71,7 @@ DR.CONFIG = {
   // ---------- Enemies & obstacles ----------
   // hp = fireballs to kill, coins = coins dropped, rage = % of meter per kill
   enemies: {
-    archer:    { hp: 3, coins: 3, rage: 14, fireEvery: 1.6, arrowSpeed: 28, fireRangeMax: 62, fireRangeMin: 20 },
+    archer:    { hp: 3, coins: 3, rage: 14, fireEvery: 1.8, arrowSpeed: 18, fireRangeMax: 64, fireRangeMin: 32, windup: 0.4 },
     flyer:     { hp: 1, coins: 1, rage: 8, approachSpeed: 7 },
     barricade: { hp: 2, coins: 2, rage: 9 },
     cannonball:{ extraSpeed: 16 },          // dodge-only, flies at you faster than the world

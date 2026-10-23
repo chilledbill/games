@@ -64,7 +64,9 @@ DR.Entities = (function () {
       g.add(part(GEO.cyl, M.wood, 0.95, 4.6, 0.95, 0, 2.3, 0));
       g.add(part(GEO.box, M.woodDark, 2.2, 0.4, 2.2, 0, 4.7, 0));
       g.add(part(GEO.cone, M.roof, 1.5, 1.6, 1.5, 0, 6.5, 0));
-      g.add(part(GEO.box, M.enemy, 0.45, 0.6, 0.45, 0, 5.2, 0.4)); // the archer
+      const archer = part(GEO.box, M.enemy, 0.45, 0.6, 0.45, 0, 5.2, 0.4); // the archer
+      g.add(archer);
+      g.userData.archer = archer;
       return { mesh: g, props: { hp: E.archer.hp, destroyable: true, y: 0, halfW: 1.0, halfD: 1.0, aimY: 4.2, fireT: 0.4 } };
     },
     // Stone pillar: dodge-only
@@ -108,8 +110,8 @@ DR.Entities = (function () {
         g.add(part(GEO.cone, M.roof, 2.8, 3.5, 2.8, s * 8.5, 15.7, 0));
       }
       for (let i = -3; i <= 3; i++) g.add(part(GEO.box, M.stoneDark, 1.2, 1.2, 2.6, i * 2.2, 10.5, 0));
-      g.add(part(GEO.box, M.wood, 7.5, 8, 0.6, 0, 4, -1.3));        // the big wooden door
-      for (let i = 0; i < 4; i++) g.add(part(GEO.box, M.iron, 7.8, 0.3, 0.7, 0, 1.2 + i * 2, -1.35));
+      g.add(part(GEO.box, M.wood, 7.5, 8, 0.6, 0, 4, 1.4));         // the big wooden door (camera side)
+      for (let i = 0; i < 4; i++) g.add(part(GEO.box, M.iron, 7.8, 0.3, 0.3, 0, 1.2 + i * 2, 1.75));
       return { mesh: g, props: { hp: E.gate.hp, destroyable: true, gate: true, y: 0, halfW: 9, halfD: 1.5, aimY: 4.5, anyLane: true } };
     }
   };
@@ -181,8 +183,12 @@ DR.Entities = (function () {
         e.y = C.flyHeight + Math.sin(time * 3 + e.spin) * 0.3;
       } else if (e.type === 'archer') {
         const dist = -e.z;
+        const archer = e.mesh.userData.archer;
         if (dist < E.archer.fireRangeMax && dist > E.archer.fireRangeMin) {
           e.fireT -= dt;
+          // Telegraph: the archer stretches up just before shooting, so you can react
+          const w = e.fireT < E.archer.windup ? 1 - e.fireT / E.archer.windup : 0;
+          archer.scale.set(0.45 + w * 0.25, 0.6 + w * 0.7, 0.45 + w * 0.25);
           if (e.fireT <= 0) {
             e.fireT = E.archer.fireEvery;
             // Aim where the player is now (so changing lanes dodges it)

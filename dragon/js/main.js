@@ -45,7 +45,10 @@
     rage: 0,        // meter 0..100
     rageT: 0,       // seconds of rage left (>0 = active)
     win: false,
-    endTimer: 0     // counts down during the outro before results show
+    endTimer: 0,    // counts down during the outro before results show
+    timeScale: 1,   // < 1 = slow motion (used for the gate explosion)
+    gate: null,     // the castle gate entity once it has spawned
+    hitLog: []
   };
   let levelInfo = null;
 
@@ -53,12 +56,13 @@
   const LEVEL_ID = params.get('level') || 'outerWall';
 
   function startLevel() {
-    Object.assign(G, { state: 'play', time: 0, traveled: 0, speed: C.forwardSpeed, coins: 0, kills: 0, rage: 0, rageT: 0, rageCount: 0, win: false, endTimer: 0, resultsShown: false });
+    Object.assign(G, { state: 'play', time: 0, traveled: 0, speed: C.forwardSpeed, coins: 0, kills: 0, rage: 0, rageT: 0, rageCount: 0, win: false, endTimer: 0, resultsShown: false, hitLog: [] });
     DR.Player.reset();
     DR.Feel.reset();
     DR.Entities.clear();
     DR.Combat.reset();
-    levelInfo = DR.Level.build(LEVEL_ID, false);
+    levelInfo = DR.Level.build(LEVEL_ID, true);
+    G.timeScale = 1; G.gate = null;
     DR.HUD.showPlay();
     DR.HUD.showRage(true);
   }
@@ -67,7 +71,7 @@
     if (G.state !== 'play') return;
     G.state = 'end'; G.win = win; G.rageT = 0;
     DR.HUD.showRage(false);
-    G.endTimer = win ? 1.2 : 1.4;
+    G.endTimer = win ? 1.8 : 1.4;
   }
 
   // ---------- Input ----------
@@ -105,6 +109,7 @@
     // Fill the rage meter (not while it's running)
     const def = C.enemies[e.type];
     if (!rageOn() && def && def.rage) G.rage = Math.min(100, G.rage + def.rage);
+    if (e.gate) gateDestroyed(e);
     // Drop coins that pop out and get pulled in
     const n = (C.enemies[e.type] && C.enemies[e.type].coins) || 0;
     for (let i = 0; i < n; i++) {
@@ -116,9 +121,31 @@
     }
   };
 
+  // ---------- Finale ----------
+  function gateDestroyed(e) {
+    const F = C.feel;
+    // Big explosion: several layered bursts across the wall
+    for (let i = -2; i <= 2; i++) {
+      const pos = { x: i * 3.2, y: 4 + Math.random() * 3, z: e.z };
+      DR.Feel.burst(pos, 0x6c6f76, 26, 18, 1.0, 16, 2.2);
+      DR.Feel.burst(pos, 0x9a6234, 18, 16, 0.9, 16, 1.8);
+      DR.Feel.burst(pos, 0xffb030, 22, 14, 0.7, -3, 1.5);
+    }
+    DR.Feel.shake(F.shakeMax);
+    DR.Feel.haptic([60, 40, 120]);
+    DR.HUD.flash('rgba(255,210,120,.95)', 1);
+    G.timeScale = 0.25; // slow-mo, eases back to normal
+    endLevel(true);
+  }
+
   // A fireball hit something that survived: small spark
   DR.Entities.hooks.hitFlash = (e) => {
     DR.Feel.burst({ x: e.x, y: e.y + (e.aimY || 0), z: e.z }, 0xffc04a, 5, 7, 0.25, 0, 0.8);
+    if (e.gate) {
+      // chunks of the gate break off with every hit
+      DR.Feel.burst({ x: (Math.random() - 0.5) * 8, y: 2 + Math.random() * 6, z: e.z + 1.5 }, Math.random() < 0.5 ? 0x9a6234 : 0x6c6f76, 4, 9, 0.6, 18, 1.2);
+      DR.Feel.shake(0.12);
+    }
   };
 
   // ---------- Collisions ----------
@@ -170,6 +197,7 @@
       // You ram burnable things (they break, you still take the hit);
       // projectiles vanish; stone stays put while you're invulnerable.
       if (P.invulnerable) continue;
+      G.hitLog.push(e.type + '@' + G.time.toFixed(1)); // what hit you (inspect DR.Game.hitLog)
       if (e.destroyable) DR.Entities.kill(e, 'ram');
       else if (e.projectile || e.type === 'cannonball') DR.Entities.remove(e);
       playerHit();
@@ -205,7 +233,10 @@
       if (G.rageT <= 0) { G.rageT = 0; G.rage = 0; }
     }
     if (G.state === 'play') {
-      const target = C.forwardSpeed * (rageOn() ? C.rage.speedMult : 1);
+      let target = C.forwardSpeed * (rageOn() ? C.rage.speedMult : 1);
+      // Ease to a hover in front of the castle gate
+      const remaining = levelInfo.gateDistance - C.level.gateStopDistance - G.traveled;
+      target *= Math.max(0, Math.min(1, remaining / 14));
       G.speed += (target - G.speed) * Math.min(1, dt * 4);
     }
 
@@ -215,6 +246,9 @@
       G.endTimer -= dt;
       if (G.endTimer <= 0 && !G.resultsShown) {
         G.resultsShown = true;
+        // Count coins still flying toward you
+        G.coins += DR.Entities.list.filter(c => c.pickup === 'coin' && c.magnet).length;
+        DR.HUD.setCoins(G.coins);
         const stars = G.win ? DR.Player.hearts : 0;
         DR.HUD.showResults({ win: G.win, coins: G.coins, stars });
       }
@@ -228,12 +262,13 @@
     DR.Entities.update(dt, G.speed, { x: DR.Player.x, y: C.flyHeight }, G.time);
     if (G.state === 'play') {
       DR.Combat.update(dt, G.speed, rageOn());
-      checkCollisions();
-      // Step 3: reaching the end of the track wins (the castle gate comes in step 5)
-      if (G.traveled >= levelInfo.gateDistance) endLevel(true);
     }
+    checkCollisions(); // also during the outro so the gate's coins still get collected
 
-    DR.HUD.setProgress(G.traveled / levelInfo.gateDistance);
+    // Progress bar turns into the gate's health bar once the gate is in range
+    if (!G.gate) G.gate = DR.Entities.list.find(x => x.gate) || null;
+    if (G.gate && G.gate.z > -C.fire.range) DR.HUD.setBoss(G.gate.alive ? G.gate.hp / G.gate.maxHp : 0);
+    else DR.HUD.setProgress(G.traveled / (levelInfo.gateDistance - C.level.gateStopDistance));
     DR.HUD.setHearts(DR.Player.hearts, C.player.hearts, DR.Player.shield);
     DR.HUD.setCoins(G.coins);
     DR.HUD.setRage(G.rage, G.rage >= 100, rageOn());
@@ -279,7 +314,8 @@
 
     // Hit pause: skip the simulation for a few frames, but keep rendering (and shaking)
     const frozen = DR.Feel.frozen(realDt);
-    if (G.state === 'play' || G.state === 'end') { if (!frozen) step(realDt); }
+    G.timeScale += (1 - G.timeScale) * Math.min(1, realDt * 1.2); // slow-mo recovers
+    if (G.state === 'play' || G.state === 'end') { if (!frozen) step(realDt * G.timeScale); }
     else idle(realDt);
 
     updateCamera(realDt);

@@ -33,7 +33,15 @@ DR.HUD = (function () {
     el.coins.textContent = '🪙 ' + n;
   }
 
-  function setProgress(p) { el.progress.style.width = (Math.max(0, Math.min(1, p)) * 100).toFixed(1) + '%'; }
+  function setProgress(p) {
+    el.progress.parentElement.classList.remove('boss');
+    el.progress.style.width = (Math.max(0, Math.min(1, p)) * 100).toFixed(1) + '%';
+  }
+  // Gate health (0..1), shown in the same bar
+  function setBoss(p) {
+    el.progress.parentElement.classList.add('boss');
+    el.progress.style.width = (Math.max(0, Math.min(1, p)) * 100).toFixed(1) + '%';
+  }
 
   // pct 0..100, ready = can be triggered, active = rage running
   function setRage(pct, ready, active) {
@@ -73,5 +81,5 @@ DR.HUD = (function () {
     el.hud.classList.add('hidden');
   }
 
-  return { init, setHearts, setCoins, setProgress, setRage, showRage, flash, showStart, showPlay, showResults };
+  return { init, setHearts, setCoins, setProgress, setBoss, setRage, showRage, flash, showStart, showPlay, showResults };
 })();
