@@ -1,0 +1,484 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Mirror Duel</title>
+<style>
+  :root { --bg:#12141c; --panel:#1c2030; --text:#e8ebf5; --dim:#8a92aa; --accent:#6ee7b7; --you:#5eead4; --ai:#f472b6; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px system-ui,sans-serif; padding:12px;
+         display:flex; flex-direction:column; align-items:center; overscroll-behavior:none; user-select:none; -webkit-user-select:none; }
+  main { width:100%; max-width:720px; }
+  .bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  h1 { font-size:20px; margin:0; }
+  .bar a { color:var(--dim); font-size:13px; }
+  .wrap { position:relative; }
+  canvas { width:100%; aspect-ratio:800/380; display:block; background:var(--panel); border-radius:12px; touch-action:none; }
+  #msg { position:fixed; inset:0; z-index:5; display:flex; flex-direction:column; align-items:center; justify-content:center;
+         gap:10px; padding:16px; background:rgba(18,20,28,.92); text-align:center; }
+  #msg[hidden] { display:none; }
+  #msg h2 { margin:0; font-size:26px; color:var(--accent); }
+  #msg p { margin:0; color:var(--dim); font-size:14px; line-height:1.45; max-width:460px; white-space:pre-line; }
+  #msg p b { color:var(--text); }
+  #msg button { padding:12px 28px; font-size:18px; font-weight:700; border:0; border-radius:12px; background:var(--accent); color:#0b1a14; }
+  .timer { height:6px; background:var(--panel); border-radius:3px; margin:8px 0; overflow:hidden; }
+  .timer i { display:block; height:100%; width:0; background:var(--accent); }
+  .read { background:var(--panel); border-radius:12px; padding:10px 12px; margin-bottom:10px; }
+  .read-h { display:flex; justify-content:space-between; font-size:13px; color:var(--dim); margin-bottom:6px; }
+  .read-h b { color:var(--ai); }
+  .belief { display:grid; grid-template-columns:repeat(6,1fr); gap:6px; height:58px; align-items:end; }
+  .belief div { display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%; font-size:10px; color:var(--dim); }
+  .belief i { display:block; width:100%; background:#3a4060; border-radius:3px 3px 0 0; min-height:2px; transition:height .25s; }
+  .belief div.top i { background:var(--ai); }
+  .belief div.top { color:var(--ai); }
+  .pad { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+  .pad button { padding:16px 0; font-size:16px; font-weight:600; border:0; border-radius:12px; background:var(--panel); color:var(--text); }
+  .pad button small { display:block; font-weight:400; font-size:11px; color:var(--dim); margin-top:2px; }
+  .pad button:active { background:#2a3050; }
+  .pad button.sel { background:var(--you); color:#06201c; }
+  .pad button.sel small { color:#0d4a42; }
+  .pad button.tired { opacity:.45; }
+  .hint { color:var(--dim); font-size:12px; margin:10px 0; text-align:center; line-height:1.5; }
+  details { background:var(--panel); border-radius:12px; padding:10px 12px; font-size:14px; }
+  summary { cursor:pointer; color:var(--dim); }
+  label { display:flex; align-items:center; gap:10px; margin-top:10px; }
+  label span { flex:0 0 120px; }
+  label output { flex:0 0 44px; text-align:right; color:var(--dim); }
+  label input[type=range] { flex:1; min-width:0; }
+  label.chk { gap:8px; } label.chk span { flex:none; }
+</style>
+</head>
+<body>
+<main>
+  <div class="bar"><h1>Mirror Duel</h1><a href="../">&larr; Games</a></div>
+  <div class="wrap">
+    <canvas id="c" width="800" height="380"></canvas>
+    <div id="msg">
+      <h2 id="mt">Mirror Duel</h2>
+      <p id="mp"></p>
+      <button id="go">Fight</button>
+    </div>
+  </div>
+  <div class="timer"><i id="tbar"></i></div>
+  <div class="read" id="readbox">
+    <div class="read-h"><span>The Mirror expects you to&hellip;</span><span>Read accuracy <b id="acc">&ndash;</b></span></div>
+    <div class="belief" id="belief"></div>
+  </div>
+  <div class="pad" id="pad"></div>
+  <div class="hint">Pick a move before the bar fills &mdash; both fighters reveal at once.<br>
+    <b>Strike</b> beats <b>Heavy</b> &middot; <b>Heavy</b> breaks <b>Guard</b> &middot; <b>Guard</b> blocks <b>Strike</b> and ripostes &middot; a 3rd Guard in a row fails<br>
+    Keys: A/D move &middot; J strike &middot; K heavy &middot; L guard &middot; S wait</div>
+  <details>
+    <summary>Tuning</summary>
+    <label><span>Tempo (s/beat)</span><input id="s-tempo" type="range" min="0.6" max="1.8" step="0.05" value="1.1"><output></output></label>
+    <label><span>AI memory (moves)</span><input id="s-mem" type="range" min="3" max="20" step="1" value="10"><output></output></label>
+    <label><span>AI sharpness</span><input id="s-sharp" type="range" min="0" max="1" step="0.05" value="0.5"><output></output></label>
+    <label><span>AI aggression</span><input id="s-aggr" type="range" min="0" max="1" step="0.05" value="0.6"><output></output></label>
+    <label class="chk"><input id="s-show" type="checkbox" checked><span>Show what the Mirror expects</span></label>
+    <label class="chk"><input id="s-snd" type="checkbox" checked><span>Sound</span></label>
+  </details>
+</main>
+<script>
+// ---------- constants ----------
+const ADV = 0, RET = 1, STR = 2, HVY = 3, GRD = 4, WAT = 5;
+const NAMES = ['Advance', 'Back', 'Strike', 'Heavy', 'Guard', 'Wait'];
+const SHORT = ['ADV', 'BACK', 'STRIKE', 'HEAVY', 'GUARD', 'WAIT'];
+const DMG_S = 8, DMG_H = 16, DMG_COUNTER = 14, DMG_BREAK = 11, DMG_RIPOSTE = 6;
+const MAX_HP = 100, MAX_BEATS = 40, WALL = 6, WIN_ROUNDS = 2;
+const W = 800, H = 380, GY = 300;
+const SLOT = s => 110 + s * (580 / WALL);
+
+// ---------- settings ----------
+const S = { tempo: 1.1, mem: 10, sharp: 0.5, aggr: 0.6, show: true, sound: true };
+const sliders = { tempo: 's-tempo', mem: 's-mem', sharp: 's-sharp', aggr: 's-aggr' };
+for (const k in sliders) {
+  const el = document.getElementById(sliders[k]), out = el.parentNode.querySelector('output');
+  const sync = () => { S[k] = +el.value; out.textContent = el.value; };
+  el.addEventListener('input', sync); sync();
+}
+document.getElementById('s-show').addEventListener('change', e => {
+  S.show = e.target.checked; document.getElementById('readbox').style.display = S.show ? '' : 'none';
+});
+document.getElementById('s-snd').addEventListener('change', e => { S.sound = e.target.checked; });
+
+// ---------- sound ----------
+let ac = null;
+function beep(f, d = 0.08, type = 'square', v = 0.04) {
+  if (!S.sound) return;
+  try {
+    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+    const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+    o.type = type; o.frequency.value = f;
+    g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+    o.connect(g); g.connect(ac.destination); o.start(t); o.stop(t + d);
+  } catch (e) {}
+}
+
+// ---------- rules (shared by the real match and the AI's what-if search) ----------
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const ramp = (p, a, b) => p <= a ? 0 : p >= b ? 1 : (p - a) / (b - a);
+
+// a guard held for a third beat in a row gives out
+const effective = (act, guardStreak) => act === GRD && guardStreak >= 2 ? WAT : act;
+
+// p = player slot, q = AI slot; a = player action, b = AI action. Both move at once.
+function simMove(p, q, a, b) {
+  const mp = a === ADV ? 1 : a === RET ? -1 : 0, mq = b === ADV ? -1 : b === RET ? 1 : 0;
+  let np = clamp(p + mp, 0, WALL), nq = clamp(q + mq, 0, WALL);
+  const e = 1 - (nq - np);
+  if (e > 0) {                       // moved into each other: whoever advanced gives ground back
+    const pa = mp > 0, qa = mq < 0;
+    if (pa && !qa) np -= e; else if (qa && !pa) nq += e; else { np -= e / 2; nq += e / 2; }
+  }
+  return [np, nq];
+}
+
+// returns damage dealt to each side plus a label describing what happened
+function outcome(a, b, d) {
+  const reach = x => x === STR ? d <= 1 : x === HVY ? d <= 2 : false;
+  const aL = reach(a), bL = reach(b);
+  const base = x => x === STR ? DMG_S : DMG_H;
+  const r = { toP: 0, toA: 0, tag: '', by: '', whiffP: (a === STR || a === HVY) && !aL, whiffA: (b === STR || b === HVY) && !bL };
+  const hit = (att, def) => {       // damage to the defender, and to the attacker if it runs into a block
+    if (def === GRD) return att === STR ? { dmg: 0, back: DMG_RIPOSTE, tag: 'BLOCKED' } : { dmg: DMG_BREAK, back: 0, tag: 'GUARD BREAK' };
+    return { dmg: base(att), back: 0, tag: '' };
+  };
+  if (aL && bL) {
+    if (a === STR && b === HVY) { r.toA = DMG_COUNTER; r.tag = 'COUNTER'; r.by = 'p'; }
+    else if (a === HVY && b === STR) { r.toP = DMG_COUNTER; r.tag = 'COUNTER'; r.by = 'a'; }
+    else { r.toA = base(a); r.toP = base(b); r.tag = 'TRADE'; }
+  } else if (aL) {
+    const h = hit(a, b); r.toA = h.dmg; r.toP = h.back; r.tag = h.tag; r.by = h.back ? 'a' : 'p';
+  } else if (bL) {
+    const h = hit(b, a); r.toP = h.dmg; r.toA = h.back; r.tag = h.tag; r.by = h.back ? 'p' : 'a';
+  }
+  return r;
+}
+
+// ---------- the Mirror's brain ----------
+let hist = [];          // everything the player has committed, newest last
+function predict() {
+  const h = hist.slice(-S.mem), n = h.length;
+  const P = [0.2, 0.2, 0.2, 0.2, 0.2, 0.2];
+  for (const x of h) P[x] += 0.5;                                              // what you do in general
+  if (n >= 1) for (let i = 0; i < n - 1; i++) if (h[i] === h[n - 1]) P[h[i + 1]] += 1.5;  // what follows your last move
+  if (n >= 2) for (let i = 0; i < n - 2; i++) if (h[i] === h[n - 2] && h[i + 1] === h[n - 1]) P[h[i + 2]] += 3; // ...your last two
+  const sum = P.reduce((x, y) => x + y, 0);
+  return P.map(x => x / sum);
+}
+const argmax = arr => arr.indexOf(Math.max(...arr));
+
+function aiDecide(belief) {
+  const scores = [];
+  for (let a = 0; a < 6; a++) {
+    const ea = effective(a, aiG);
+    let s = 0;
+    for (let b = 0; b < 6; b++) {
+      if (belief[b] < 0.001) continue;
+      const eb = effective(b, plG);
+      const [np, nq] = simMove(pPos, qPos, eb, ea), d = nq - np;
+      const o = outcome(eb, ea, d);
+      s += belief[b] * (o.toP - o.toA - S.aggr * 1.6 * Math.max(0, d - 2));
+    }
+    scores.push(s);
+  }
+  const tau = lerp(6, 0.25, S.sharp), mx = Math.max(...scores);
+  const w = scores.map(s => Math.exp((s - mx) / tau)), sum = w.reduce((x, y) => x + y, 0);
+  let r = Math.random() * sum;
+  for (let a = 0; a < 6; a++) { r -= w[a]; if (r <= 0) return a; }
+  return WAT;
+}
+
+// ---------- match state ----------
+let mode = 'title';     // title | banner | fight | ko | over
+let php, ahp, pPos, qPos, plG, aiG, beatT, beatNo, anim, pending, koT, bannerT, bannerText;
+let wins, round, belief, ring, stats, lastChips, flashP = 0, flashA = 0, shake = 0, time = 0;
+let fx = [], texts = [];
+
+function resetMatch() {
+  wins = [0, 0]; round = 1; hist = []; ring = [];
+  stats = { tot: [0, 0, 0, 0, 0, 0], hit: [0, 0, 0, 0, 0, 0] };
+  belief = predict();
+  startRound('ROUND 1');
+}
+function startRound(text) {
+  php = ahp = MAX_HP; pPos = 1.5; qPos = 4.5; plG = aiG = 0;
+  beatT = 0; beatNo = 0; anim = null; pending = null; lastChips = null;
+  fx = []; texts = []; mode = 'banner'; bannerT = 1.6; bannerText = text;
+  refreshUI();
+}
+
+function boundary() {
+  if (beatNo >= MAX_BEATS) return endRound();
+  const pAct = pending === null ? WAT : pending; pending = null;
+  const aAct = aiDecide(belief);
+  // score the Mirror's read of this beat, then let it learn the move
+  const hitRead = argmax(belief) === pAct;
+  ring.push(hitRead); if (ring.length > 10) ring.shift();
+  stats.tot[pAct]++; if (hitRead) stats.hit[pAct]++;
+  hist.push(pAct);
+  const ep = effective(pAct, plG), ea = effective(aAct, aiG);
+  const [np, nq] = simMove(pPos, qPos, ep, ea);
+  const res = outcome(ep, ea, nq - np);
+  anim = { ep, ea, pFrom: pPos, pTo: np, qFrom: qPos, qTo: nq, res, applied: false, tiredP: pAct === GRD && ep !== GRD, tiredA: aAct === GRD && ea !== GRD };
+  lastChips = { p: pAct, a: aAct, tiredP: anim.tiredP, tiredA: anim.tiredA, label: '', fade: 0 };
+  plG = pAct === GRD ? plG + 1 : 0; aiG = aAct === GRD ? aiG + 1 : 0;
+  pPos = np; qPos = nq; beatNo++;
+  belief = predict();      // what it will use next beat — this is what the bars show
+  refreshUI();
+  beep(ep === HVY || ea === HVY ? 150 : 300, 0.05, 'triangle', 0.03);
+}
+
+function applyImpact() {
+  const r = anim.res; anim.applied = true;
+  const xp = SLOT(anim.pTo), xq = SLOT(anim.qTo), mid = (xp + xq) / 2;
+  php = Math.max(0, php - r.toP); ahp = Math.max(0, ahp - r.toA);
+  if (r.toP > 0) { flashP = 0.25; addHit(xp, r.toP, '#f472b6', r.toP); }
+  if (r.toA > 0) { flashA = 0.25; addHit(xq, r.toA, '#5eead4', r.toA); }
+  if (r.tag === 'BLOCKED') { spark(r.by === 'p' ? xp + 30 : xq - 30, GY - 60, '#bff', 10); beep(520, 0.07, 'square', 0.04); }
+  if (r.toP + r.toA > 0) { shake = Math.min(14, 3 + (r.toP + r.toA) / 3); beep(90 + (r.toP + r.toA) * 3, 0.14, 'sawtooth', 0.07); }
+  if (r.whiffP) texts.push({ x: xp, y: GY - 130, t: 'whiff', life: 0.9, col: '#8a92aa' });
+  if (r.whiffA) texts.push({ x: xq, y: GY - 130, t: 'whiff', life: 0.9, col: '#8a92aa' });
+  if (r.tag) {
+    const col = r.by === 'a' ? '#f472b6' : r.by === 'p' ? '#5eead4' : '#e8ebf5';
+    texts.push({ x: mid, y: 118, t: r.tag, life: 1.1, col, big: true });
+  }
+  if (php <= 0 || ahp <= 0) { mode = 'ko'; koT = 1.4; }
+}
+function addHit(x, n, col) { spark(x, GY - 70, col, 8 + n); texts.push({ x, y: GY - 150, t: '-' + n, life: 0.9, col }); }
+function spark(x, y, col, n) {
+  for (let i = 0; i < n; i++) { const a = Math.random() * 6.28, v = 80 + Math.random() * 220;
+    fx.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, life: 0.4 + Math.random() * 0.3, col }); }
+}
+
+function endRound() {
+  let res;
+  if (php > ahp) res = 'p'; else if (ahp > php) res = 'a'; else res = 'd';
+  let text;
+  if (res === 'p') { wins[0]++; text = 'YOU TAKE THE ROUND'; }
+  else if (res === 'a') { wins[1]++; text = 'THE MIRROR TAKES IT'; }
+  else text = 'DRAW — REPLAY';
+  if (wins[0] >= WIN_ROUNDS || wins[1] >= WIN_ROUNDS) return endMatch();
+  if (res !== 'd') round++;
+  startRound(text + '\nROUND ' + round);
+}
+
+function endMatch() {
+  mode = 'over';
+  const won = wins[0] > wins[1];
+  const total = stats.tot.reduce((x, y) => x + y, 0), hits = stats.hit.reduce((x, y) => x + y, 0);
+  let worst = -1, wr = 0;
+  for (let i = 0; i < 6; i++) if (stats.tot[i] >= 3 && stats.hit[i] / stats.tot[i] > wr) { wr = stats.hit[i] / stats.tot[i]; worst = i; }
+  const pct = total ? Math.round(100 * hits / total) : 0;
+  let body = `Rounds ${wins[0]} – ${wins[1]}\nThe Mirror read ${pct}% of your moves.`;
+  if (worst >= 0) body += `\nMost predictable: ${NAMES[worst]} (${Math.round(wr * 100)}%).`;
+  body += pct > 45 ? '\nYou have habits. Vary the order.' : '\nHard to read. Nicely mixed up.';
+  showMsg(won ? 'You win!' : 'The Mirror wins', body, 'Rematch');
+}
+
+// ---------- input ----------
+const padEl = document.getElementById('pad');
+const PAD_ORDER = [RET, ADV, WAT, STR, HVY, GRD];
+const PAD_HINT = { [RET]: 'A', [ADV]: 'D', [WAT]: 'S', [STR]: 'J', [HVY]: 'K', [GRD]: 'L' };
+const padBtns = {};
+for (const a of PAD_ORDER) {
+  const b = document.createElement('button');
+  b.innerHTML = `${a === RET ? '◀ ' : ''}${NAMES[a]}${a === ADV ? ' ▶' : ''}<small>${PAD_HINT[a]}</small>`;
+  b.addEventListener('pointerdown', e => { e.preventDefault(); choose(a); });
+  padEl.appendChild(b); padBtns[a] = b;
+}
+function choose(a) {
+  if (mode !== 'fight') return;
+  pending = a; refreshPad();
+}
+const KEYS = { a: RET, arrowleft: RET, d: ADV, arrowright: ADV, j: STR, k: HVY, l: GRD, ' ': GRD, s: WAT, arrowdown: WAT, w: WAT };
+addEventListener('keydown', e => {
+  const a = KEYS[e.key.toLowerCase()];
+  if (a !== undefined) { e.preventDefault(); choose(a); }
+});
+function refreshPad() {
+  for (const a of PAD_ORDER) {
+    padBtns[a].classList.toggle('sel', mode === 'fight' && pending === a);
+    padBtns[a].classList.toggle('tired', a === GRD && plG >= 2);
+  }
+}
+
+// ---------- DOM readout ----------
+const beliefEl = document.getElementById('belief');
+for (let i = 0; i < 6; i++) beliefEl.insertAdjacentHTML('beforeend', `<div><i></i>${SHORT[i]}</div>`);
+function refreshUI() {
+  if (!belief) return;
+  const top = argmax(belief);
+  [...beliefEl.children].forEach((d, i) => {
+    d.firstChild.style.height = Math.round(belief[i] * 100 * 1.6) + '%';
+    d.classList.toggle('top', i === top);
+  });
+  const n = ring.length, h = ring.filter(Boolean).length;
+  document.getElementById('acc').textContent = n ? `${h}/${n}` : '–';
+  refreshPad();
+}
+
+// ---------- messages ----------
+const msg = document.getElementById('msg'), go = document.getElementById('go');
+function showMsg(t, body, btn) {
+  document.getElementById('mt').textContent = t;
+  document.getElementById('mp').textContent = body;
+  go.textContent = btn; msg.hidden = false;
+}
+go.addEventListener('click', () => { msg.hidden = true; beep(440, 0.08); resetMatch(); });
+showMsg('Mirror Duel',
+  'Your reflection fights back — and it studies you.\n\n' +
+  'Each beat, pick one move. Both fighters reveal at once.\n' +
+  'Strike beats Heavy · Heavy breaks Guard · Guard blocks Strike.\n' +
+  'The Mirror watches your last moves and counters what it expects. Break your patterns.\n\nFirst to 2 rounds.', 'Fight');
+
+// ---------- drawing ----------
+function pose(kind, p) {
+  let h = [16, -46], shield = 0, slash = 0;
+  if (kind === STR) { const e = ramp(p, 0.28, 0.4) * (1 - ramp(p, 0.55, 0.8)); h = [lerp(16, 68, e), -50]; }
+  else if (kind === HVY) {
+    const w = ramp(p, 0.04, 0.38), s = ramp(p, 0.4, 0.5), r = ramp(p, 0.62, 0.92);
+    if (p < 0.4) h = [lerp(16, 6, w), lerp(-46, -122, w)];
+    else { const x = lerp(6, 94, s), y = lerp(-122, -26, s); h = [lerp(x, 16, r), lerp(y, -46, r)]; }
+    slash = ramp(p, 0.4, 0.5) * (1 - ramp(p, 0.5, 0.68));
+  } else if (kind === GRD) shield = ramp(p, 0, 0.12) * (1 - ramp(p, 0.92, 1));
+  return { h, shield, slash };
+}
+
+function drawFighter(x, dir, col, kind, p, flash, knock, tired) {
+  const { h, shield, slash } = pose(kind, p);
+  const bob = kind === WAT || kind === GRD ? Math.sin(time * 3 + (dir > 0 ? 0 : 1.5)) * 1.5 : 0;
+  const walk = kind === ADV || kind === RET ? Math.sin(p * Math.PI * 4) * 10 : 0;
+  const c = flash > 0 ? '#ffffff' : col;
+  ctx.save(); ctx.translate(x - dir * knock, GY); ctx.scale(dir, 1);
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+  ctx.strokeStyle = c; ctx.lineWidth = 8;
+  ctx.beginPath(); ctx.moveTo(-5, -38); ctx.lineTo(-10 - walk, 0); ctx.moveTo(5, -38); ctx.lineTo(12 + walk, 0); ctx.stroke();
+  ctx.fillStyle = c; ctx.beginPath(); ctx.roundRect(-14, -98 + bob, 28, 62, 10); ctx.fill();
+  ctx.beginPath(); ctx.arc(2, -114 + bob, 14, 0, 6.28); ctx.fill();
+  ctx.fillStyle = flash > 0 ? '#555' : '#0b1220'; ctx.fillRect(7, -118 + bob, 9, 4);
+  ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(-6, -90 + bob); ctx.lineTo(-16, -58 + bob); ctx.stroke();      // rear arm
+  ctx.beginPath(); ctx.moveTo(8, -90 + bob); ctx.lineTo(h[0], h[1] + bob); ctx.stroke();                         // lead arm
+  ctx.beginPath(); ctx.arc(h[0], h[1] + bob, kind === HVY ? 9 : 7, 0, 6.28); ctx.fill();
+  if (slash > 0.02) {
+    ctx.globalAlpha = slash * 0.9; ctx.strokeStyle = '#fff'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.arc(8, -90, 112, -1.6, 0.2); ctx.stroke(); ctx.globalAlpha = 1;
+  }
+  if (shield > 0.02) {
+    ctx.globalAlpha = shield * (tired ? 0.35 : 1);
+    ctx.strokeStyle = '#bfeaff'; ctx.lineWidth = 7; ctx.fillStyle = 'rgba(160,220,255,.18)';
+    ctx.beginPath(); ctx.arc(14, -62, 44, -1.0, 1.0); ctx.stroke();
+    ctx.beginPath(); ctx.arc(14, -62, 44, -1.0, 1.0); ctx.lineTo(14, -62); ctx.fill(); ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
+function drawScene(reflect) {
+  const p = anim ? clamp(beatT / (S.tempo), 0, 1) : 0;
+  const mv = ramp(p, 0, 0.4), e = mv * mv * (3 - 2 * mv);
+  const xp = anim ? lerp(SLOT(anim.pFrom), SLOT(anim.pTo), e) : SLOT(pPos);
+  const xq = anim ? lerp(SLOT(anim.qFrom), SLOT(anim.qTo), e) : SLOT(qPos);
+  const kp = flashP > 0 ? 10 * (flashP / 0.25) : 0, ka = flashA > 0 ? 10 * (flashA / 0.25) : 0;
+  drawFighter(xp, 1, '#5eead4', anim ? anim.ep : WAT, p, flashP, kp, anim && anim.tiredP);
+  drawFighter(xq, -1, '#f472b6', anim ? anim.ea : WAT, p, flashA, ka, anim && anim.tiredA);
+  return [xp, xq];
+}
+
+const cv = document.getElementById('c'), ctx = cv.getContext('2d');
+function draw() {
+  ctx.save();
+  if (shake > 0) ctx.translate((Math.random() - 0.5) * shake, (Math.random() - 0.5) * shake);
+  const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#1b2036'); g.addColorStop(1, '#10131f');
+  ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
+  // floor
+  ctx.fillStyle = '#242a44'; ctx.fillRect(0, GY, W, H - GY);
+  ctx.strokeStyle = '#3a4268'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, GY); ctx.lineTo(W, GY); ctx.stroke();
+  for (let s = 0; s <= WALL; s++) { ctx.fillStyle = '#3a4268'; ctx.fillRect(SLOT(s) - 1, GY + 2, 2, 8); }
+  // reach markers under the player: strike = 1 slot, heavy = 2
+  const px = SLOT(pPos || 1), unit = 580 / WALL;
+  ctx.fillStyle = 'rgba(94,234,212,.22)'; ctx.fillRect(px, GY + 14, unit, 5);
+  ctx.fillStyle = 'rgba(94,234,212,.10)'; ctx.fillRect(px + unit, GY + 14, unit, 5);
+
+  // reflection pass
+  ctx.save(); ctx.beginPath(); ctx.rect(0, GY, W, H - GY); ctx.clip();
+  ctx.translate(0, 2 * GY); ctx.scale(1, -1); ctx.globalAlpha = 0.14; drawScene(); ctx.restore();
+
+  const [xp, xq] = drawScene();
+  // mirror axis sits between the fighters
+  const mx = (xp + xq) / 2;
+  ctx.strokeStyle = 'rgba(190,220,255,.18)'; ctx.lineWidth = 2; ctx.setLineDash([6, 10]);
+  ctx.beginPath(); ctx.moveTo(mx, 70); ctx.lineTo(mx, GY); ctx.stroke(); ctx.setLineDash([]);
+
+  // particles + floating text
+  for (const f of fx) { ctx.globalAlpha = clamp(f.life * 2.5, 0, 1); ctx.fillStyle = f.col; ctx.fillRect(f.x - 2, f.y - 2, 4, 4); }
+  ctx.globalAlpha = 1; ctx.textAlign = 'center';
+  for (const t of texts) {
+    ctx.globalAlpha = clamp(t.life * 2, 0, 1); ctx.fillStyle = t.col;
+    ctx.font = t.big ? 'bold 26px system-ui' : 'bold 18px system-ui'; ctx.fillText(t.t, t.x, t.y);
+  }
+  ctx.globalAlpha = 1;
+  ctx.restore();
+
+  drawHUD();
+}
+
+function drawHUD() {
+  const bw = 330;
+  ctx.fillStyle = '#10131f'; ctx.fillRect(20, 16, bw, 14); ctx.fillRect(W - 20 - bw, 16, bw, 14);
+  ctx.fillStyle = '#5eead4'; ctx.fillRect(20, 16, bw * php / MAX_HP, 14);
+  ctx.fillStyle = '#f472b6'; ctx.fillRect(W - 20 - bw * ahp / MAX_HP, 16, bw * ahp / MAX_HP, 14);
+  ctx.font = 'bold 13px system-ui'; ctx.fillStyle = '#e8ebf5';
+  ctx.textAlign = 'left'; ctx.fillText('YOU', 20, 48); ctx.textAlign = 'right'; ctx.fillText('MIRROR', W - 20, 48);
+  for (let i = 0; i < WIN_ROUNDS; i++) {
+    ctx.fillStyle = i < wins[0] ? '#5eead4' : '#2a3050'; ctx.beginPath(); ctx.arc(70 + i * 18, 44, 5, 0, 6.28); ctx.fill();
+    ctx.fillStyle = i < wins[1] ? '#f472b6' : '#2a3050'; ctx.beginPath(); ctx.arc(W - 78 - i * 18, 44, 5, 0, 6.28); ctx.fill();
+  }
+  ctx.textAlign = 'center'; ctx.fillStyle = '#8a92aa'; ctx.font = '13px system-ui';
+  ctx.fillText(`Round ${round}  ·  Beat ${Math.min(beatNo, MAX_BEATS)}/${MAX_BEATS}`, W / 2, 48);
+  if (lastChips && mode !== 'banner') {
+    ctx.font = 'bold 15px system-ui';
+    const tp = lastChips.tiredP ? ' (tired)' : '', ta = lastChips.tiredA ? ' (tired)' : '';
+    ctx.fillStyle = '#5eead4'; ctx.fillText(NAMES[lastChips.p].toUpperCase() + tp, W / 2 - 90, 72);
+    ctx.fillStyle = '#f472b6'; ctx.fillText(NAMES[lastChips.a].toUpperCase() + ta, W / 2 + 90, 72);
+    ctx.fillStyle = '#3a4268'; ctx.fillText('vs', W / 2, 72);
+  }
+  if (mode === 'banner') {
+    ctx.fillStyle = 'rgba(18,20,28,.55)'; ctx.fillRect(0, 120, W, 120);
+    ctx.fillStyle = '#e8ebf5'; ctx.font = 'bold 34px system-ui';
+    const lines = bannerText.split('\n');
+    lines.forEach((l, i) => ctx.fillText(l, W / 2, 168 + i * 44 - (lines.length - 1) * 10));
+  }
+  if (mode === 'ko') { ctx.fillStyle = '#e8ebf5'; ctx.font = 'bold 54px system-ui'; ctx.fillText('K.O.', W / 2, 190); }
+}
+
+// ---------- loop ----------
+const tbar = document.getElementById('tbar');
+let last = performance.now();
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); last = now; time += dt;
+  flashP = Math.max(0, flashP - dt); flashA = Math.max(0, flashA - dt); shake = Math.max(0, shake - dt * 40);
+  for (const f of fx) { f.x += f.vx * dt; f.y += f.vy * dt; f.vy += 600 * dt; f.life -= dt; }
+  fx = fx.filter(f => f.life > 0);
+  for (const t of texts) { t.life -= dt; t.y -= 18 * dt; }
+  texts = texts.filter(t => t.life > 0);
+
+  if (mode === 'banner') { bannerT -= dt; if (bannerT <= 0) { mode = 'fight'; beatT = 0; refreshPad(); } }
+  else if (mode === 'fight' || mode === 'ko') {
+    const dtt = mode === 'ko' ? dt * 0.4 : dt;
+    beatT += dtt;
+    if (anim && !anim.applied && beatT >= S.tempo * 0.5) applyImpact();
+    if (mode === 'ko') { koT -= dt; if (koT <= 0) endRound(); }
+    else if (beatT >= S.tempo) { beatT -= S.tempo; boundary(); }
+  }
+  tbar.style.width = (mode === 'fight' ? clamp(beatT / S.tempo, 0, 1) * 100 : 0) + '%';
+  if (php !== undefined) draw();
+  else { ctx.fillStyle = '#1b2036'; ctx.fillRect(0, 0, W, H); }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
