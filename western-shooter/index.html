@@ -104,6 +104,7 @@ canvas#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-actio
 #bFire{width:28vh;height:28vh;right:calc(4vh + var(--sr));bottom:calc(5vh + var(--sb));font-size:max(11px,3.2vh)}
 #bDive{width:18vh;height:18vh;right:calc(34vh + var(--sr));bottom:calc(3vh + var(--sb))}
 #bBT{width:18vh;height:18vh;right:calc(5vh + var(--sr));bottom:calc(36vh + var(--sb))}
+#bWall{width:15vh;height:15vh;right:calc(25vh + var(--sr));bottom:calc(42vh + var(--sb))}
 #bReload{width:15vh;height:15vh;right:calc(26vh + var(--sr));bottom:calc(25vh + var(--sb))}
 
 .screen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(10,12,14,.25),rgba(5,6,8,.85));touch-action:none}
@@ -171,6 +172,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
   <div id="stick"><div id="knob"></div></div>
   <div class="btn" id="bReload"><svg viewBox="0 0 24 24"><path d="M12 4a8 8 0 1 0 8 8h-2.6A5.4 5.4 0 1 1 12 6.6V10l5-4.6L12 1z"/></svg>RELOAD</div>
   <div class="btn" id="bDive"><svg viewBox="0 0 24 24"><path d="M2 18c5-1 8-4 10-9H9l5-6 4 7-3-.3C13 16 9 19 3 20z"/></svg>DIVE</div>
+  <div class="btn" id="bWall"><svg viewBox="0 0 24 24"><path d="M3 3h4v18H3zm6 14 3-1 2 3 3-8-3-1 1-4 4 2-2 8 2 1-2 5-3-1-2-3-3 1z"/></svg>WALL</div>
   <div class="btn" id="bBT"><svg viewBox="0 0 24 24"><path d="M6 2h12v2c0 4-4 6-4 8s4 4 4 8v2H6v-2c0-4 4-6 4-8S6 8 6 4zm2.3 18h7.4c-.4-2.6-3.7-4.3-3.7-6-0 1.7-3.3 3.4-3.7 6z"/></svg>SLOW</div>
   <div class="btn" id="bFire"><svg viewBox="0 0 24 24"><path d="M1 8h14l1-1.6h6V9h-2.2l-.8 1.6h-3.4L13.6 16H9.2l1-4.2H6.6L5.6 10H1z"/></svg>FIRE</div>
   <div id="gear"><svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="9" fill="none" stroke="#d9a441" stroke-width="5" stroke-dasharray="3.6 3.47"/><circle cx="16" cy="16" r="7.2" fill="none" stroke="#d9a441" stroke-width="2.4"/><circle cx="16" cy="16" r="2.6" fill="#d9a441"/></svg></div>
@@ -182,7 +184,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
     <div class="sub wfont">A MOONLIGHT GUNFIGHT</div>
     <div class="row2"><button id="startB" class="wbtn">RIDE OUT</button><button id="titleGear" class="ghost">TUNING</button><button id="ambB" class="ghost"></button><button id="rangeB" class="ghost">TEST RANGE</button></div>
     <div class="hint"><b>Left thumb</b> move &nbsp;·&nbsp; <b>Right drag</b> aim &nbsp;·&nbsp; <b>FIRE</b> hold to fan &nbsp;·&nbsp; <b>DIVE</b> shoot-dodge &nbsp;·&nbsp; <b>SLOW</b> bullet time<br>
-    Keyboard: WASD · drag mouse on right half · F fire · Space dive · E slow · R reload</div>
+    Keyboard: WASD · drag mouse on right half · F fire · Space dive · V/Shift wall-run · E slow · R reload</div>
   </div>
 </div>
 
@@ -216,7 +218,7 @@ const T=THREE;
    CONFIG — every tunable lives here
    ===================================================================== */
 const CONFIG={
-  player:{moveSpeed:5.2,aimSensitivity:1.0,maxHealth:100,healthRegen:14,regenDelay:3,diveSpeed:9,diveDuration:0.8,diveRecover:0.3,radius:0.4},
+  player:{moveSpeed:5.2,aimSensitivity:1.0,maxHealth:100,healthRegen:14,regenDelay:3,diveSpeed:9,diveDuration:0.8,diveRecover:0.3,radius:0.4,wallReach:2.4,wallSpeed:1.4,wallTime:3.5,wallHeight:1.3},
   gun:{damage:40,fireRate:4,reloadTime:1.5,magazine:6,recoil:1,aimAssist:0.5,headshotMult:2.5,bulletSpeed:220,range:140},
   bulletTime:{slowSpeed:20,meterLength:6,refillPerHit:12,cameraZoom:25},
   enemies:{countPerWave:5,health:80,accuracy:0.45,fireRate:0.7,speed:3.2,aggression:0.5,damage:14,bulletSpeed:70,maxAlive:6},
@@ -237,7 +239,9 @@ const TUNING=[
     ['player','maxHealth','Max health',50,300,5,''],
     ['player','healthRegen','Health regen',0,50,1,'/s'],
     ['player','diveSpeed','Dive speed',4,16,0.5,' m/s'],
-    ['player','diveDuration','Dive duration',0.3,1.6,0.05,' s']]],
+    ['player','diveDuration','Dive duration',0.3,1.6,0.05,' s'],
+    ['player','wallTime','Wall-run time',1,8,0.5,' s'],
+    ['player','wallSpeed','Wall-run speed',1,2.5,0.05,'×']]],
   ['Gun',[
     ['gun','damage','Damage',10,150,1,''],
     ['gun','fireRate','Fire rate',1,10,0.5,'/s'],
@@ -589,6 +593,17 @@ function buildWorld(){
 const _w0=scene.children.length;buildWorld();
 const worldBuildings=scene.children.slice(_w0).filter(m=>m.material===matWorld||m.material===matGlow);
 const allColliders=colliders.slice();
+// test-range walls: tall boxes (also colliders) you can run along
+const rangeWalls=new T.Group();rangeWalls.visible=false;scene.add(rangeWalls);
+const rangeColliders=[];
+{
+  const mat=new T.MeshLambertMaterial({color:0x6e5b45}),matLine=new T.MeshLambertMaterial({color:0xc9a45a,emissive:0x2a2008});
+  for(const [cx,cz,w,d,h] of [[-24,-6,1,44,6],[24,-6,1,44,6],[-9,-3,8,1,5],[10,-14,8,1,5]]){
+    const m=new T.Mesh(new T.BoxGeometry(w,h,d),mat);m.position.set(cx,h/2,cz);rangeWalls.add(m);
+    const l=new T.Mesh(new T.BoxGeometry(w>d?w:w+.08,.14,w>d?d+.08:d),matLine);l.position.set(cx,CONFIG.player.wallHeight,cz);rangeWalls.add(l);
+    rangeColliders.push({min:V(cx-w/2,0,cz-d/2),max:V(cx+w/2,h,cz+d/2),h,cover:true});
+  }
+}
 
 // sky, moon, stars (follow camera)
 const skyGroup=new T.Group();scene.add(skyGroup);
@@ -751,6 +766,7 @@ const SFX={
     if(head){tone(t,.4,{type:'triangle',f0:1560,f1:1480,g:.12,send:.4});tone(t,.3,{type:'sine',f0:2340,g:.05});}},
   impact(){if(!AU.ctx)return;const t=AU.ctx.currentTime;nz(t,.09,{type:'bandpass',f0:2200,f1:900,q:1.5,g:.12});},
   dive(){if(!AU.ctx)return;const t=AU.ctx.currentTime;nz(t,.7,{type:'bandpass',f0:300,f1:1400,q:1.2,g:.35,att:.15});tone(t,.9,{f0:220,f1:70,g:.18,att:.05});},
+  wall(){if(!AU.ctx)return;const t=AU.ctx.currentTime;nz(t,.25,{type:'bandpass',f0:600,f1:1800,q:2,g:.3,att:.05});tone(t,.2,{f0:140,f1:90,g:.2});},
   land(){if(!AU.ctx)return;const t=AU.ctx.currentTime;nz(t,.25,{f0:500,f1:80,g:.5});tone(t,.2,{f0:80,f1:35,g:.4});},
   btOn(){if(!AU.ctx)return;const t=AU.ctx.currentTime;nz(t,.8,{f0:4000,f1:150,g:.4,att:.02});tone(t,1.0,{f0:320,f1:55,g:.25,att:.02});},
   btOff(){if(!AU.ctx)return;const t=AU.ctx.currentTime;nz(t,.45,{f0:150,f1:4000,g:.25,att:.3});tone(t,.5,{f0:60,f1:260,g:.15,att:.2});},
@@ -765,7 +781,7 @@ function vibrate(ms){try{const ua=navigator.userActivation;if(navigator.vibrate&
 /* ===================== game state ===================== */
 let state='title',paused=false,timeScale=1,btFx=0,clockR=0,clockG=0;
 let yaw=0,pitch=-.04;
-const player={man:makeMan('player','revolver'),pos:V(0,0,18),vel:V(),hp:CONFIG.player.maxHealth,lastHit:-99,dive:null,alive:true,walk:0,deathT:0,tilt:0,hurtFx:0,heartT:0};
+const player={man:makeMan('player','revolver'),pos:V(0,0,18),vel:V(),hp:CONFIG.player.maxHealth,lastHit:-99,dive:null,wall:null,fall:null,lean:0,leanN:null,alive:true,walk:0,deathT:0,tilt:0,hurtFx:0,heartT:0};
 const gun={ammo:CONFIG.gun.magazine,cd:0,reloading:false,rp:0,kick:0,recP:0,recY:0,autoT:0,flashT:0};
 const BT={meter:1,active:false};
 const enemies=[],bullets=[],debris=[];
@@ -779,7 +795,7 @@ function setRange(on){
   range=on;
   for(const m of worldBuildings)m.visible=!on;
   fireLight.visible=campLight.visible=!on;
-  colliders.length=0;if(!on)colliders.push(...allColliders);
+  colliders.length=0;colliders.push(...(on?rangeColliders:allColliders));rangeWalls.visible=on;
   $('pExit').classList.toggle('hidden',!on);
 }
 function spawnDummy(sl){
@@ -962,8 +978,41 @@ function moveInput(){
   const fx=-Math.sin(yaw),fz=-Math.cos(yaw),rx=Math.cos(yaw),rz=-Math.sin(yaw);
   return {x:rx*mx-fx*my,z:rz*mx-fz*my,mag:Math.min(1,l),rx,rz};
 }
-function startDive(){
+const _wq=new T.Quaternion(),_wa=V();
+// nearest tall flat wall face within reach of p (walls are axis-aligned boxes)
+function findWall(p,reach){
+  let best=null,bd=reach;
+  for(const c of colliders){
+    if(c.h<2.5)continue;
+    const qx=clamp(p.x,c.min.x,c.max.x),qz=clamp(p.z,c.min.z,c.max.z),dx=p.x-qx,dz=p.z-qz,d=Math.hypot(dx,dz);
+    if(d>=bd||d<1e-4)continue;
+    const nx=Math.abs(dx)>=Math.abs(dz);
+    if((nx?Math.abs(dz):Math.abs(dx))>.6)continue;// at a corner, not facing a face
+    bd=d;
+    best=nx?{axis:'z',nx:Math.sign(dx),nz:0,face:dx>0?c.max.x:c.min.x,tx:0,tz:1,lo:c.min.z,hi:c.max.z}
+           :{axis:'x',nx:0,nz:Math.sign(dz),face:dz>0?c.max.z:c.min.z,tx:1,tz:0,lo:c.min.x,hi:c.max.x};
+  }
+  return best;
+}
+function releaseWall(jump){
+  const w=player.wall;if(!w)return;
+  const k=jump?7:2.5;
+  player.fall={y:player.pos.y,vy:jump?5.2:0,vx:w.nx*k,vz:w.nz*k};
+  player.wall=null;
+  if(jump)SFX.dive();
+}
+function toggleWall(){
   if(state!=='playing'||!player.alive||player.dive)return;
+  if(player.wall){releaseWall(true);return;}
+  const w=findWall(player.pos,CONFIG.player.wallReach);
+  if(!w){SFX.click();return;}
+  w.t=0;w.s=0;w.dir=(-Math.sin(yaw)*w.tx-Math.cos(yaw)*w.tz)>=0?1:-1;
+  w.s=w.dir*CONFIG.player.moveSpeed*CONFIG.player.wallSpeed*.6;
+  player.wall=w;player.fall=null;player.vel.set(0,0,0);player.leanN={x:w.nx,z:w.nz};SFX.wall();
+}
+function startDive(){
+  if(state!=='playing'||!player.alive||player.dive||player.wall)return;
+  player.fall=null;player.lean=0;
   const mi=moveInput();let dx=mi.x,dz=mi.z;
   if(mi.mag<.2){dx=-mi.rx;dz=-mi.rz;}
   const l=Math.hypot(dx,dz)||1;player.dive={phase:'air',t:0,dx:dx/l,dz:dz/l};player.vel.set(0,0,0);SFX.dive();
@@ -991,6 +1040,28 @@ function updatePlayer(dt,dtR){
       const v=Math.min(1,d.t/CONFIG.player.diveRecover);tilt=1.35*(1-smooth(0,1,v));y=.15*(1-v);
       if(v>=1)pl.dive=null;
     }
+  }else if(pl.wall){
+    // running along a wall: input along the wall picks the direction, no input keeps running
+    const w=pl.wall,sp=CONFIG.player.moveSpeed*CONFIG.player.wallSpeed;w.t+=dt;
+    const along=mi.x*w.tx+mi.z*w.tz;
+    if(Math.abs(along)>.2)w.dir=along>0?1:-1;
+    w.s=damp(w.s,w.dir*sp*(Math.abs(along)>.2?Math.min(1,Math.abs(along)*1.4):.7),9,dt);
+    pl.vel.set(0,0,0);
+    let tc=(w.axis==='z'?pl.pos.z:pl.pos.x)+w.s*dt,ended=false;
+    const lo=w.lo+.35,hi=w.hi-.35;
+    if(tc<lo||tc>hi){tc=clamp(tc,lo,hi);ended=w.t>.3;}
+    const nc=w.face+(w.nx+w.nz)*(CONFIG.player.radius+.12);
+    if(w.axis==='z'){pl.pos.z=tc;pl.pos.x=damp(pl.pos.x,nc,16,dt);}else{pl.pos.x=tc;pl.pos.z=damp(pl.pos.z,nc,16,dt);}
+    y=damp(pl.pos.y,CONFIG.player.wallHeight,10,dt);pl.lean=damp(pl.lean,1,10,dt);
+    if(ended||w.t>CONFIG.player.wallTime)releaseWall(false);
+  }else if(pl.fall){
+    const f=pl.fall,sp=CONFIG.player.moveSpeed;
+    f.vy-=26*dt;f.y+=f.vy*dt;
+    f.vx=damp(f.vx,mi.x*sp,2.2,dt);f.vz=damp(f.vz,mi.z*sp,2.2,dt);
+    pl.pos.x+=f.vx*dt;pl.pos.z+=f.vz*dt;pl.lean=damp(pl.lean,0,9,dt);
+    y=Math.max(0,f.y);
+    if(f.y<=0){pl.fall=null;pl.lean=0;SFX.land();shake=Math.max(shake,.1);
+      for(let i=0;i<6;i++)fxSmoke.emit(pl.pos.x+rand(-.5,.5),.1,pl.pos.z+rand(-.5,.5),rand(-1,1),rand(.2,.8),rand(-1,1),rand(.8,1.4),.35,1.2,0x67675a,.45,0x55574c,0,-1,1.2,.5);}
   }else{
     const sp=CONFIG.player.moveSpeed;
     pl.vel.x=damp(pl.vel.x,mi.x*sp,12,dt);pl.vel.z=damp(pl.vel.z,mi.z*sp,12,dt);
@@ -998,12 +1069,19 @@ function updatePlayer(dt,dtR){
   }
   collideCircle(pl.pos,CONFIG.player.radius);clampArena(pl.pos,46);
   pl.pos.y=y;pl.tilt=tilt;
-  const speed=pl.dive?0:Math.hypot(pl.vel.x,pl.vel.z);pl.walk+=dt*speed*2.3;
+  const speed=pl.dive?0:pl.wall?Math.abs(pl.wall.s):Math.hypot(pl.vel.x,pl.vel.z);pl.walk+=dt*speed*2.3;
   m.root.position.copy(pl.pos);
-  const face=yaw+Math.PI;m.root.rotation.y=face;
+  let face=yaw+Math.PI;
+  if(pl.wall){const w=pl.wall;face=Math.atan2(-w.tx*w.dir,-w.tz*w.dir)+Math.PI;}// face the way you run
+  m.root.rotation.y=face;
   if(pl.dive){const d=pl.dive,c=Math.cos(face),s=Math.sin(face),lx=c*d.dx-s*d.dz,lz=s*d.dx+c*d.dz;m.root.rotation.x=tilt*lz;m.root.rotation.z=-tilt*lx;}
   else{m.root.rotation.x=0;m.root.rotation.z=0;}
-  poseMan(m,pl.walk,Math.min(1,speed/3),0,1,pitch+gun.recP*.5-(pl.dive?m.root.rotation.x:0),gun.kick);
+  if(pl.lean>.01&&pl.leanN){
+    // feet on the wall, body leaning out from it
+    _wa.set(pl.leanN.z,0,-pl.leanN.x);_wq.setFromAxisAngle(_wa,pl.lean*1.3);m.root.quaternion.premultiply(_wq);
+    m.root.position.x-=pl.leanN.x*.3*pl.lean;m.root.position.z-=pl.leanN.z*.3*pl.lean;
+  }
+  poseMan(m,pl.walk,Math.min(1,speed/3),0,pl.lean>.3?0:1,pitch+gun.recP*.5-(pl.dive?m.root.rotation.x:0),gun.kick);
   m.shadow.position.set(pl.pos.x,.03,pl.pos.z);
   m.root.updateMatrixWorld(true);
   // low-health heartbeat
@@ -1012,7 +1090,7 @@ function updatePlayer(dt,dtR){
 function hurtPlayer(dmg){
   if(!player.alive||state!=='playing')return;
   player.hp-=dmg;player.lastHit=clockG;player.hurtFx=Math.min(1.2,player.hurtFx+.55);shake=Math.max(shake,.1);SFX.hurt();vibrate(45);
-  if(player.hp<=0){player.hp=0;player.alive=false;player.deathT=0;state='dead';BT.active=false;overT=2.4;player.man.root.rotation.z=0;}
+  if(player.hp<=0){player.hp=0;player.alive=false;player.wall=player.fall=null;player.lean=0;player.deathT=0;state='dead';BT.active=false;overT=2.4;player.man.root.rotation.z=0;}
 }
 
 /* ===================== enemies ===================== */
@@ -1313,6 +1391,7 @@ function updateHUD(dtR){
   const boss=W.boss&&W.boss.alive?W.boss:null;
   setIf('boss',!!boss,v=>H.bossBox.classList.toggle('hidden',!v));
   if(boss)setIf('bossHp',Math.round(boss.hp/boss.maxHp*300),()=>H.bossFill.style.transform='scaleX('+clamp(boss.hp/boss.maxHp,0,1)+')');
+  setIf('wall',!!player.wall,v=>$('bWall').classList.toggle('on',v));
   setIf('xen',!!aimOnEnemy,v=>H.cross.classList.toggle('en',v));
   setIf('xvis',state==='playing',v=>H.cross.style.display=v?'':'none');
   if(hitT>0){hitT-=dtR;if(hitT<=0)H.hitm.className='';}
@@ -1349,7 +1428,7 @@ function endPtr(e){const p=ptrs.get(e.pointerId);if(!p)return;ptrs.delete(e.poin
 window.addEventListener('pointerup',endPtr);window.addEventListener('pointercancel',endPtr);
 function bindBtn(id,fn,role){const el=$(id);el.addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();auResume();ptrs.set(e.pointerId,{role:role||'btn',x:e.clientX,y:e.clientY,el});el.classList.add('press');fn();},{passive:false});}
 bindBtn('bFire',()=>{input.firing=true;fire();},'fire');
-bindBtn('bDive',startDive);bindBtn('bBT',toggleBT);bindBtn('bReload',startReload);
+bindBtn('bDive',startDive);bindBtn('bBT',toggleBT);bindBtn('bReload',startReload);bindBtn('bWall',toggleWall);
 bindBtn('gear',openPanel);
 window.addEventListener('keydown',e=>{
   if(e.target&&e.target.tagName==='INPUT')return;
@@ -1357,6 +1436,7 @@ window.addEventListener('keydown',e=>{
   if(e.code==='Space'){e.preventDefault();startDive();}
   if(e.code==='KeyE'||e.code==='KeyQ')toggleBT();
   if(e.code==='KeyR')startReload();
+  if(e.code==='KeyV'||e.code==='ShiftLeft')toggleWall();
   if(e.code==='KeyF'||e.code==='KeyJ')fire();
   if(e.code==='Escape'){if(paused)closePanel();else openPanel();}
   if((e.ctrlKey||e.metaKey)&&['Equal','Minus','NumpadAdd','NumpadSubtract','Digit0'].includes(e.code))e.preventDefault();
@@ -1417,7 +1497,7 @@ function clearWorld(){
 }
 function resetGame(isRange){
   clearWorld();setRange(!!isRange);rangeSlots.length=0;
-  const pl=player;pl.pos.set(0,0,18);pl.vel.set(0,0,0);pl.hp=CONFIG.player.maxHealth;pl.alive=true;pl.dive=null;pl.deathT=0;pl.tilt=0;pl.hurtFx=0;pl.lastHit=-99;
+  const pl=player;pl.pos.set(0,0,18);pl.vel.set(0,0,0);pl.hp=CONFIG.player.maxHealth;pl.alive=true;pl.dive=null;pl.wall=pl.fall=null;pl.lean=0;pl.deathT=0;pl.tilt=0;pl.hurtFx=0;pl.lastHit=-99;
   pl.man.root.rotation.set(0,0,0);pl.man.root.position.copy(pl.pos);
   yaw=0;pitch=-.04;camPivot.set(.7,1.6,18);
   Object.assign(gun,{ammo:CONFIG.gun.magazine,cd:0,reloading:false,rp:0,kick:0,recP:0,recY:0,autoT:0});
@@ -1444,7 +1524,7 @@ $('ovB').addEventListener('click',()=>{auResume();resetGame();});
 $('rangeB').addEventListener('click',()=>{auResume();goFull();resetGame(true);});
 $('pExit').addEventListener('click',()=>{
   closePanel();clearWorld();setRange(false);rangeSlots.length=0;
-  const pl=player;pl.pos.set(0,0,18);pl.vel.set(0,0,0);pl.man.root.rotation.set(0,0,0);
+  const pl=player;pl.pos.set(0,0,18);pl.vel.set(0,0,0);pl.man.root.rotation.set(0,0,0);pl.wall=pl.fall=null;pl.lean=0;
   for(const p of ptrs.values())if(p.el)p.el.classList.remove('press');ptrs.clear();input.mx=input.my=0;input.firing=false;stick.classList.remove('on');
   BT.active=false;state='title';H.hud.classList.add('off');$('title').classList.remove('hidden');
 });
