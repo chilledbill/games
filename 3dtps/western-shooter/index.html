@@ -173,7 +173,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
   <div class="card">
     <div class="title wfont gold">DRY CREEK<br>REQUIEM</div>
     <div class="sub wfont">A MOONLIGHT GUNFIGHT</div>
-    <div class="row2"><button id="startB" class="wbtn">RIDE OUT</button><button id="titleGear" class="ghost">TUNING</button></div>
+    <div class="row2"><button id="startB" class="wbtn">RIDE OUT</button><button id="titleGear" class="ghost">TUNING</button><button id="ambB" class="ghost"></button></div>
     <div class="hint"><b>Left thumb</b> move &nbsp;·&nbsp; <b>Right drag</b> aim &nbsp;·&nbsp; <b>FIRE</b> hold to fan &nbsp;·&nbsp; <b>DIVE</b> shoot-dodge &nbsp;·&nbsp; <b>SLOW</b> bullet time<br>
     Keyboard: WASD · drag mouse on right half · F fire · Space dive · E slow · R reload</div>
   </div>
@@ -688,23 +688,26 @@ function collideCircle(p,r){
 function clampArena(p,R){const dx=p.x-AC.x,dz=p.z-AC.z,d=Math.hypot(dx,dz);if(d>R){p.x=AC.x+dx/d*R;p.z=AC.z+dz/d*R;return true;}return false;}
 
 /* ===================== audio (WebAudio synth) ===================== */
-const AU={ctx:null};
+const AMB_KEY='dry-creek-ambient-v1';
+const AU={ctx:null,ambOn:false};
+try{AU.ambOn=localStorage.getItem(AMB_KEY)==='1';}catch(e){}
 function auInit(){
   if(AU.ctx)return;
   try{
     const C=window.AudioContext||window.webkitAudioContext;if(!C)return;const ctx=new C();AU.ctx=ctx;
     AU.master=ctx.createGain();AU.master.gain.value=.8;
+    AU.amb=ctx.createGain();AU.amb.gain.value=AU.ambOn?1:0;AU.amb.connect(AU.master);
     AU.lp=ctx.createBiquadFilter();AU.lp.type='lowpass';AU.lp.frequency.value=18000;
     const comp=ctx.createDynamicsCompressor();comp.threshold.value=-14;comp.ratio.value=4;
     AU.master.connect(AU.lp);AU.lp.connect(comp);comp.connect(ctx.destination);
     const len=ctx.sampleRate*2,buf=ctx.createBuffer(1,len,ctx.sampleRate),d=buf.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;AU.noise=buf;
     const il=ctx.sampleRate*1.8|0,ir=ctx.createBuffer(2,il,ctx.sampleRate);for(let ch=0;ch<2;ch++){const x=ir.getChannelData(ch);for(let i=0;i<il;i++)x[i]=(Math.random()*2-1)*Math.pow(1-i/il,3.2);}
     AU.verb=ctx.createConvolver();AU.verb.buffer=ir;const vg=ctx.createGain();vg.gain.value=.5;AU.verb.connect(vg);vg.connect(AU.lp);
-    const loop=(f,type,q,g)=>{const s=ctx.createBufferSource();s.buffer=buf;s.loop=true;const fl=ctx.createBiquadFilter();fl.type=type;fl.frequency.value=f;fl.Q.value=q;const gn=ctx.createGain();gn.gain.value=g;s.connect(fl);fl.connect(gn);gn.connect(AU.master);s.start();return gn;};
+    const loop=(f,type,q,g)=>{const s=ctx.createBufferSource();s.buffer=buf;s.loop=true;const fl=ctx.createBiquadFilter();fl.type=type;fl.frequency.value=f;fl.Q.value=q;const gn=ctx.createGain();gn.gain.value=g;s.connect(fl);fl.connect(gn);gn.connect(AU.amb);s.start();return gn;};
     AU.wind=loop(380,'lowpass',.5,.05);
     const lfo=ctx.createOscillator(),lg=ctx.createGain();lfo.frequency.value=.11;lg.gain.value=.035;lfo.connect(lg);lg.connect(AU.wind.gain);lfo.start();
     AU.fire=loop(900,'bandpass',.6,0);
-    AU.drone=ctx.createGain();AU.drone.gain.value=0;AU.drone.connect(AU.master);
+    AU.drone=ctx.createGain();AU.drone.gain.value=0;AU.drone.connect(AU.amb);
     for(const [f,t,g] of [[55,'sine',.7],[82.4,'triangle',.25],[110.6,'sine',.15]]){const o=ctx.createOscillator();o.type=t;o.frequency.value=f;const og=ctx.createGain();og.gain.value=g;o.connect(og);og.connect(AU.drone);o.start();}
   }catch(e){AU.ctx=null;}
 }
@@ -1212,7 +1215,7 @@ function updateWorldFx(dt,dtR){
   for(const w of tumbleweeds){w.m.position.x+=w.sp*dt;w.m.position.z+=w.sp*.3*dt;w.ph+=dt*w.sp*1.4;w.m.position.y=.45+Math.abs(Math.sin(w.ph))*.5;w.m.rotation.z-=w.sp*dt/.45;w.m.rotation.x+=w.sp*.3*dt/.45;
     if(w.m.position.x>60){w.m.position.x=-60;w.m.position.z=rand(-40,25);}}
   if(AU.ctx){const fd=Math.hypot(camera.position.x+14,camera.position.z+11),g=clamp(1.4/(1+fd*.12),0,.25);
-    AU.fire.gain.setTargetAtTime(g*.6,AU.ctx.currentTime,.2);if(Math.random()<dt*18*g*4)SFX.crackle(g);
+    AU.fire.gain.setTargetAtTime(g*.6,AU.ctx.currentTime,.2);if(AU.ambOn&&Math.random()<dt*18*g*4)SFX.crackle(g);
     AU.drone.gain.setTargetAtTime(btFx*.13,AU.ctx.currentTime,.12);AU.lp.frequency.setTargetAtTime(lerp(18000,1800,btFx*.95),AU.ctx.currentTime,.06);}
   void dtR;void emitAcc;
 }
@@ -1333,6 +1336,15 @@ $('pReset').addEventListener('click',()=>{for(const g in DEFAULTS)Object.assign(
   for(const s of sliderEls){s.inp.value=CONFIG[s.g][s.k];s.upd();}applyConfig('gun','magazine');applyConfig('player','maxHealth');
   try{localStorage.removeItem(STORE_KEY);}catch(e){}});
 $('titleGear').addEventListener('click',openPanel);
+const ambB=$('ambB');
+function ambLabel(){ambB.textContent='AMBIENT: '+(AU.ambOn?'ON':'OFF');}
+ambB.addEventListener('click',()=>{
+  AU.ambOn=!AU.ambOn;auResume();
+  if(AU.amb)AU.amb.gain.setTargetAtTime(AU.ambOn?1:0,AU.ctx.currentTime,.1);
+  try{localStorage.setItem(AMB_KEY,AU.ambOn?'1':'0');}catch(e){}
+  ambLabel();
+});
+ambLabel();
 buildPanel();
 
 /* ===================== flow ===================== */
