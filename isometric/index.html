@@ -179,7 +179,7 @@ function resolve(p,r,skip){
 }
 
 // ---------- player ----------
-const P={x:0,z:6,vx:0,vz:0,face:Math.PI,state:'free',t:0,step:0,comboT:0,hitDone:false,dashT:0,dashCd:0,dx:0,dz:0,ph:0,lunged:0};
+const P={x:0,z:6,vx:0,vz:0,face:Math.PI,state:'free',t:0,step:0,comboT:0,hitDone:false,hitT:0,dashT:0,dashCd:0,dx:0,dz:0,ph:0,lunged:0};
 const player=new THREE.Group();world.add(player);
 const model=new THREE.Group();player.add(model);
 const body=cyl(.38,.46,.8,0xc0283c,null,16);body.position.y=.75;model.add(body);
@@ -250,12 +250,13 @@ function dmgText(x,y,z,txt,big){
 let hitStop=0,shake=0;
 
 // ---------- input ----------
-const inp={x:0,y:0,atk:0,dash:false};
+const inp={x:0,y:0,atk:0,t:0,dash:false};
+let clk=0;
 const keys={};
 addEventListener('keydown',e=>{
   if(e.repeat)return;
   const k=e.key.toLowerCase();keys[k]=true;
-  if(k==='j'||k==='z'||k==='enter')inp.atk=.2;
+  if(k==='j'||k==='z'||k==='enter'){inp.atk=.2;inp.t=clk;}
   if(k===' '||k==='k'||k==='shift'){inp.dash=true;e.preventDefault();}
 });
 addEventListener('keyup',e=>{keys[e.key.toLowerCase()]=false;});
@@ -283,7 +284,7 @@ function bindBtn(el,fn){
   const up=()=>el.classList.remove('down');
   el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);el.addEventListener('pointerleave',up);
 }
-bindBtn($('bAtk'),()=>{inp.atk=.2;});
+bindBtn($('bAtk'),()=>{inp.atk=.2;inp.t=clk;});
 bindBtn($('bDash'),()=>{inp.dash=true;});
 addEventListener('contextmenu',e=>e.preventDefault());
 
@@ -378,9 +379,13 @@ function doHit(st,stepIdx){
     shake=Math.max(shake,S.shake*(big?.7:.3));
   }
 }
+// a press chains only if it lands between the previous hit and hit + comboWindow
+function chainStep(){
+  return P.lastStep!==undefined&&inp.t>=P.hitT&&inp.t-P.hitT<=S.comboWindow?P.lastStep+1:0;
+}
 function updatePlayer(dt){
   const mv=readMove();
-  inp.atk=Math.max(0,inp.atk-dt);
+  clk+=dt;inp.atk=Math.max(0,inp.atk-dt);
   P.dashCd=Math.max(0,P.dashCd-dt);
   const canDash=P.dashCd<=0&&inp.dash&&(P.state==='free'||(P.state==='attack'&&P.t/STEPS[P.step].dur>STEPS[P.step].hitAt));
   if(canDash){
@@ -396,10 +401,9 @@ function updatePlayer(dt){
     const dvx=tx-P.vx,dvz=tz-P.vz,dl=Math.hypot(dvx,dvz),mx=S.accel*dt;
     if(dl<=mx){P.vx=tx;P.vz=tz;}else{P.vx+=dvx/dl*mx;P.vz+=dvz/dl*mx;}
     if(mv.m>.1)P.face+=angDiff(P.face,Math.atan2(mv.wx,mv.wz))*Math.min(1,dt*18);
-    if(P.comboT>0){P.comboT-=dt;if(P.comboT<=0)P.step=0;}
+    if(P.lastStep!==undefined){P.comboT=P.hitT+S.comboWindow-clk;if(P.comboT<=0){P.lastStep=undefined;P.step=0;}}
     if(inp.atk>0){
-      const next=P.comboT>0&&P.step<2&&P.lastStep!==undefined?P.lastStep+1:0;
-      inp.atk=0;startAttack(next,mv);
+      inp.atk=0;startAttack(chainStep(),mv);
     }
   }else if(P.state==='attack'){
     const st=STEPS[P.step];P.t+=dt;const p=P.t/st.dur;
@@ -408,14 +412,13 @@ function updatePlayer(dt){
     const ds=want-P.lunged;
     if(ds>0){P.x+=Math.sin(P.face)*ds;P.z+=Math.cos(P.face)*ds;P.lunged=want;}
     P.vx=P.vz=0;
-    if(!P.hitDone&&p>=st.hitAt){P.hitDone=true;doHit(st,P.step);}
+    if(!P.hitDone&&p>=st.hitAt){P.hitDone=true;P.hitT=clk;inp.atk=0;doHit(st,P.step);}
     if(P.t>=st.dur){
       P.lastStep=P.step;P.state='free';
       if(P.step>=2){P.comboT=0;P.step=0;P.lastStep=undefined;}
-      else P.comboT=S.comboWindow;
+      else P.comboT=P.hitT+S.comboWindow-clk;
       if(inp.atk>0){
-        const next=P.lastStep!==undefined?P.lastStep+1:0;
-        inp.atk=0;startAttack(next,mv);
+        inp.atk=0;startAttack(chainStep(),mv);
       }
     }
   }else if(P.state==='dash'){
