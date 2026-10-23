@@ -59,6 +59,12 @@ canvas#c{position:fixed;inset:0;width:100%;height:100%;display:block;touch-actio
 #cross .l{left:-15px}#cross .r{left:6px}#cross .t{top:-15px}#cross .b{top:6px}
 #cross .d{width:3px;height:3px;left:-1.5px;top:-1.5px;border-radius:50%}
 #cross.en i{background:#ff6a4a}
+#lock{position:absolute;left:0;top:0;width:0;height:0;display:none}
+#lock i{position:absolute;left:-24px;top:-24px;width:48px;height:48px;border:2px solid #ff4a2a;border-radius:50%;box-shadow:0 0 6px #000,0 0 12px rgba(255,74,42,.55);animation:lockpulse .5s ease-in-out infinite alternate}
+#lock i::before{content:"";position:absolute;inset:9px;border:2px solid #ff4a2a;transform:rotate(45deg);box-shadow:0 0 4px #000}
+#lock i::after{content:"";position:absolute;left:21px;top:21px;width:4px;height:4px;border-radius:50%;background:#ffd0b8}
+#lock.edge i{opacity:.65;border-style:dashed}
+@keyframes lockpulse{from{transform:scale(1.15)}to{transform:scale(.92)}}
 #hitm{position:absolute;left:50%;top:50%;width:26px;height:26px;margin:-13px 0 0 -13px;opacity:0;transform:rotate(45deg)}
 #hitm::before,#hitm::after{content:"";position:absolute;background:#fff;left:12px;top:0;width:2px;height:26px;box-shadow:0 0 3px #000}
 #hitm::after{transform:rotate(90deg)}
@@ -155,6 +161,7 @@ input[type=range]::-moz-range-thumb{width:26px;height:26px;border-radius:50%;bac
     <div id="comboRow"><div id="comboBar"><i id="comboFill"></i></div><div id="combo" class="wfont gold">x1</div></div>
   </div>
   <div id="cross"><i class="h l"></i><i class="h r"></i><i class="v t"></i><i class="v b"></i><i class="d"></i></div>
+  <div id="lock"><i></i></div>
   <div id="hitm"></div>
   <div id="pops"></div>
   <div id="banner"><div id="banT" class="wfont gold"></div><div id="banS" class="wfont"></div></div>
@@ -790,6 +797,28 @@ let aimOnEnemy=null,shake=0,overT=0,camDistNow=3;
 const aimDir=V(0,0,-1),fwd=V(),right=V(),camPivot=V(0,1.6,18);
 
 // muzzle flash sprite
+// dive lock-on: nearest enemy is auto-targeted while rolling in slow-mo (camera is not moved)
+let lockE=null;
+const lockPoint=e=>_t.set(e.pos.x,e.headW.y-.55*e.scale,e.pos.z);
+function updateLock(){
+  if(!(state==='playing'&&player.alive&&player.dive&&player.dive.phase==='air')){lockE=null;return;}
+  if(lockE&&!lockE.alive)lockE=null;
+  if(lockE)return;
+  let bd=1e9;
+  for(const e of enemies){if(!e.alive)continue;const d=e.pos.distanceToSquared(player.pos);if(d<bd){bd=d;lockE=e;}}
+  if(lockE)SFX.click();
+}
+let lockShown=null;
+function updateLockMarker(){
+  const el=H.lock;
+  if(!lockE){if(lockShown!==false){lockShown=false;el.style.display='none';}return;}
+  const v=lockPoint(lockE).project(camera);
+  let x=v.x,y=v.y;const behind=v.z>1;if(behind){x=-x;y=-y;}
+  const edge=behind||Math.abs(x)>.94||Math.abs(y)>.9;
+  x=clamp(x,-.94,.94);y=clamp(y,-.9,.9);
+  lockShown=true;el.style.display='block';el.classList.toggle('edge',edge);
+  el.style.transform='translate('+((x*.5+.5)*innerWidth)+'px,'+((.5-y*.5)*innerHeight)+'px)';
+}
 const flash=new T.Sprite(new T.SpriteMaterial({map:texFlash,color:0xffe0a0,blending:T.AdditiveBlending,depthWrite:false,transparent:true,fog:false}));flash.visible=false;flash.renderOrder=4;scene.add(flash);
 
 /* ===================== tracers / bullets ===================== */
@@ -888,8 +917,10 @@ function fire(){
   if(gun.ammo<=0){SFX.click();gun.cd=.25;startReload();return;}
   gun.ammo--;gun.cd=1/CONFIG.gun.fireRate;
   const o=camOrigin();let d=aimDir.clone();
+  const locked=lockE&&lockE.alive;
+  if(locked)d.copy(lockPoint(lockE)).sub(o).normalize();
   let r=castShot(o,d,camDistNow,CONFIG.gun.range);
-  if(!(r.hit&&r.hit.kind==='enemy')){const ad=assistDir(o,d,camDistNow);if(ad){d=ad;r=castShot(o,d,camDistNow,CONFIG.gun.range);}}
+  if(!locked&&!(r.hit&&r.hit.kind==='enemy')){const ad=assistDir(o,d,camDistNow);if(ad){d=ad;r=castShot(o,d,camDistNow,CONFIG.gun.range);}}
   const point=o.clone().addScaledVector(d,r.t);
   const m=player.man;m.root.updateMatrixWorld(true);m.armR.localToWorld(_mz.copy(m.muzzle));
   const bd=point.clone().sub(_mz);const dist=Math.max(.1,bd.length());bd.multiplyScalar(1/dist);
@@ -1252,7 +1283,7 @@ function updateWorldFx(dt,dtR){
 /* ===================== HUD ===================== */
 const H={hpFill:$('hpFill'),hpLag:$('hpLag'),btFill:$('btFill'),btBar:$('btBar'),wave:$('waveLbl'),score:$('score'),combo:$('combo'),comboFill:$('comboFill'),
   ammo:$('ammo'),reloadTx:$('reloadTx'),cross:$('cross'),hitm:$('hitm'),pops:$('pops'),banT:$('banT'),banS:$('banS'),banner:$('banner'),
-  bossBox:$('bossBox'),bossFill:$('bossFill'),bBT:$('bBT'),hud:$('hud')};
+  bossBox:$('bossBox'),lock:$('lock'),bossFill:$('bossFill'),bBT:$('bBT'),hud:$('hud')};
 const last={};
 function setIf(k,v,fn){if(last[k]!==v){last[k]=v;fn(v);}}
 let ammoEls=[],hpLag=1,hitT=0;
@@ -1450,10 +1481,10 @@ function step(dtR){
     else if(state==='dead')target=.3;else if(state==='won')target=.25;
     timeScale=damp(timeScale,target,9,dtR);
     const dt=dtR*timeScale;clockG+=dt;
-    if(state==='title'){updateTitleCam(dtR);}
+    if(state==='title'){updateTitleCam(dtR);lockE=null;updateLockMarker();}
     else{
-      updatePlayer(dt,dtR);updateGun(dtR);updateEnemies(dt);updateBullets(dt);updateDebris(dt);updateWaves(dt,dtR);if(range&&state==='playing')updateRange(dt);updateBT(dtR);
-      updateCamera(dtR);
+      updatePlayer(dt,dtR);updateLock();updateGun(dtR);updateEnemies(dt);updateBullets(dt);updateDebris(dt);updateWaves(dt,dtR);if(range&&state==='playing')updateRange(dt);updateBT(dtR);
+      updateCamera(dtR);updateLockMarker();
       const r=castShot(camera.position,aimDir,camDistNow,CONFIG.gun.range);aimOnEnemy=r.hit&&r.hit.kind==='enemy'?r.hit.e:null;
       if(state==='dead'||state==='won'){overT-=dtR;if(overT<=0&&$('over').classList.contains('hidden'))showOver(state==='won');}
     }
