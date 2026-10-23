@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Incremental</title>
+<style>
+  :root { --bg:#12141c; --panel:#1c2030; --text:#e8ebf5; --dim:#8a92aa; --accent:#6ee7b7; --btn:#2a3050; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body { margin:0; background:var(--bg); color:var(--text); font:16px system-ui,sans-serif;
+         display:flex; flex-direction:column; align-items:center; padding:16px; min-height:100vh; }
+  main { width:100%; max-width:480px; }
+  h1 { font-size:20px; margin:0 0 4px; }
+  .count { font-size:40px; font-weight:700; color:var(--accent); }
+  .rate { color:var(--dim); margin-bottom:16px; }
+  #click { width:100%; padding:28px; font-size:22px; border:0; border-radius:16px;
+           background:var(--accent); color:#0b1a14; font-weight:700; user-select:none; }
+  #click:active { transform:scale(.98); }
+  .shop { margin-top:16px; display:grid; gap:8px; }
+  .item { display:flex; justify-content:space-between; align-items:center; gap:12px; width:100%;
+          padding:12px 14px; border:0; border-radius:12px; background:var(--panel); color:var(--text); text-align:left; }
+  .item:disabled { opacity:.45; }
+  .item small { color:var(--dim); display:block; }
+  .cost { color:var(--accent); font-weight:600; white-space:nowrap; }
+  footer { margin-top:20px; display:flex; justify-content:space-between; color:var(--dim); font-size:13px; }
+  footer button { background:none; border:0; color:var(--dim); text-decoration:underline; font-size:13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Incremental</h1>
+  <div class="count" id="count">0</div>
+  <div class="rate" id="rate">0 / sec</div>
+  <button id="click">Tap! (+<span id="power">1</span>)</button>
+  <div class="shop" id="shop"></div>
+  <footer><span>Saves automatically</span><button id="reset">Reset</button></footer>
+</main>
+<script>
+const UPGRADES = [
+  { id:'power',  name:'Stronger Tap',  desc:'+1 per tap',      base:15,   growth:1.5,  type:'click', amount:1 },
+  { id:'cursor', name:'Auto Tapper',   desc:'+0.2 / sec',      base:25,   growth:1.15, type:'auto',  amount:0.2 },
+  { id:'farm',   name:'Farm',          desc:'+2 / sec',        base:200,  growth:1.15, type:'auto',  amount:2 },
+  { id:'mine',   name:'Mine',          desc:'+15 / sec',       base:1500, growth:1.15, type:'auto',  amount:15 },
+  { id:'lab',    name:'Lab',           desc:'+100 / sec',      base:12000,growth:1.15, type:'auto',  amount:100 },
+];
+const KEY = 'incremental-save-v1';
+let state = { count:0, owned:{}, last:Date.now() };
+
+function load() {
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY));
+    if (s) state = Object.assign(state, s);
+  } catch (e) {}
+  // offline progress, capped at 8 hours
+  const secs = Math.min((Date.now() - state.last) / 1000, 8 * 3600);
+  state.count += perSec() * secs;
+  state.last = Date.now();
+}
+function save() {
+  state.last = Date.now();
+  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+}
+const owned = u => state.owned[u.id] || 0;
+const cost = u => Math.ceil(u.base * Math.pow(u.growth, owned(u)));
+const tapPower = () => 1 + UPGRADES.filter(u => u.type==='click').reduce((a,u) => a + u.amount*owned(u), 0);
+function perSec() { return UPGRADES.filter(u => u.type==='auto').reduce((a,u) => a + u.amount*owned(u), 0); }
+
+function fmt(n) {
+  if (n < 1000) return n < 10 ? n.toFixed(1).replace(/\.0$/,'') : Math.floor(n).toString();
+  const units = ['K','M','B','T','Qa','Qi'];
+  let i = -1;
+  while (n >= 1000 && i < units.length-1) { n /= 1000; i++; }
+  return n.toFixed(2) + units[i];
+}
+
+const shopEl = document.getElementById('shop');
+const buttons = UPGRADES.map(u => {
+  const b = document.createElement('button');
+  b.className = 'item';
+  b.onclick = () => {
+    if (state.count >= cost(u)) { state.count -= cost(u); state.owned[u.id] = owned(u) + 1; render(); save(); }
+  };
+  shopEl.appendChild(b);
+  return b;
+});
+
+function render() {
+  document.getElementById('count').textContent = fmt(state.count);
+  document.getElementById('rate').textContent = fmt(perSec()) + ' / sec';
+  document.getElementById('power').textContent = fmt(tapPower());
+  UPGRADES.forEach((u, i) => {
+    const b = buttons[i];
+    b.disabled = state.count < cost(u);
+    b.innerHTML = `<span>${u.name} <em>x${owned(u)}</em><small>${u.desc}</small></span><span class="cost">${fmt(cost(u))}</span>`;
+  });
+}
+
+document.getElementById('click').onclick = () => { state.count += tapPower(); render(); };
+document.getElementById('reset').onclick = () => {
+  if (confirm('Reset all progress?')) { state = { count:0, owned:{}, last:Date.now() }; save(); render(); }
+};
+
+load();
+render();
+let prev = performance.now();
+setInterval(() => {
+  const now = performance.now();
+  state.count += perSec() * (now - prev) / 1000;
+  prev = now;
+  render();
+}, 100);
+setInterval(save, 5000);
+addEventListener('beforeunload', save);
+</script>
+</body>
+</html>
