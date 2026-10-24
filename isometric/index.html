@@ -31,6 +31,10 @@
   .dmg{position:fixed;z-index:3;pointer-events:none;font-weight:900;font-size:22px;color:#fff;text-shadow:0 2px 0 #b01030,0 0 6px #000;animation:fl .7s ease-out forwards;transform:translate(-50%,-50%)}
   .dmg.big{font-size:32px;color:#ffcf6b}
   @keyframes fl{to{transform:translate(-50%,-150%) scale(1.2);opacity:0}}
+  #cnt{position:fixed;top:44px;left:50%;transform:translateX(-50%);z-index:4;pointer-events:none;font-weight:900;font-size:20px;color:#ffcf6b;text-shadow:0 2px 0 #b01030,0 0 6px #000;opacity:0;transition:opacity .25s}
+  #cnt.on{opacity:1}
+  #cnt.bump{animation:bp .12s ease-out}
+  @keyframes bp{from{transform:translateX(-50%) scale(1.5)}to{transform:translateX(-50%) scale(1)}}
   #hint{position:fixed;bottom:6px;left:0;right:0;text-align:center;font-size:12px;opacity:.5;pointer-events:none;z-index:3}
   @media (pointer:coarse){#hint{display:none}}
 </style>
@@ -41,6 +45,7 @@
 <button id="gear" aria-label="Settings">&#9881;</button>
 <div id="panel"></div>
 <div id="hud"><i></i><i></i><i></i></div>
+<div id="cnt"></div>
 <div id="zone"></div>
 <div class="joy" id="joy"><i id="knob"></i></div>
 <div class="btn" id="bDash">DASH</div>
@@ -57,11 +62,12 @@ const lerp=(a,b,t)=>a+(b-a)*t;
 const angDiff=(a,b)=>Math.atan2(Math.sin(b-a),Math.cos(b-a));
 
 // ---------- tunables ----------
-const DEF={moveSpeed:7,accel:60,dashDist:5,dashCd:.6,comboWindow:.45,lunge:1,damage:20,hitStop:70,shake:1,knock:8,zoom:7,angle:50,follow:.5,outline:.04,light:1};
+const DEF={moveSpeed:7,accel:60,dashDist:5,dashCd:.6,comboWindow:.45,lunge:1,damage:20,hitStop:70,shake:1,killSlow:1,haptics:1,sound:.6,knock:8,zoom:7,angle:50,follow:.5,outline:.04,light:1};
 const CFG=[
  ['Movement',[['moveSpeed','Move speed',3,14,.1],['accel','Acceleration',10,150,1],['dashDist','Dash distance',2,12,.1],['dashCd','Dash cooldown (s)',0,2,.05]]],
  ['Combat',[['comboWindow','Combo window (s)',.1,1.2,.01],['lunge','Attack lunge',0,3,.05],['damage','Attack damage',5,60,1],['knock','Knockback force',0,20,.5]]],
- ['Impact',[['hitStop','Hit-stop (ms)',0,200,5],['shake','Screen shake',0,3,.05]]],
+ ['Impact',[['hitStop','Hit-stop (ms)',0,200,5],['shake','Screen shake',0,3,.05],['killSlow','Kill slow-mo',0,2,.05]]],
+ ['Feedback',[['haptics','Vibration (0 = off)',0,1,1],['sound','Sound volume',0,1,.05]]],
  ['Camera',[['zoom','Zoom (lower = closer)',5,16,.1],['angle','Camera angle',20,80,1],['follow','Follow smoothness',0,1,.01]]],
  ['Look',[['outline','Outline thickness',0,.1,.002],['light','Light intensity',.3,2,.05]]]
 ];
@@ -247,7 +253,41 @@ function dmgText(x,y,z,txt,big){
   e.style.left=((tmpV.x+1)/2*innerWidth)+'px';e.style.top=((1-tmpV.y)/2*innerHeight)+'px';
   document.body.appendChild(e);setTimeout(()=>e.remove(),700);
 }
-let hitStop=0,shake=0;
+let hitStop=0,shake=0,slowT=0;
+// vibration (Android/Chrome; iOS Safari ignores it) and synthesized sound, so no assets are needed
+const buzz=ms=>{if(S.haptics>0&&navigator.vibrate)try{navigator.vibrate(ms);}catch(e){}};
+let ac=null;
+function audio(){
+  if(!ac){try{ac=new(window.AudioContext||window.webkitAudioContext)();}catch(e){}}
+  if(ac&&ac.state==='suspended')ac.resume();
+  return ac;
+}
+function tone(f0,f1,dur,type,vol){
+  if(S.sound<=0||!audio())return;
+  const t=ac.currentTime,o=ac.createOscillator(),g=ac.createGain();
+  o.type=type;o.frequency.setValueAtTime(f0,t);o.frequency.exponentialRampToValueAtTime(f1,t+dur);
+  g.gain.setValueAtTime(vol*S.sound,t);g.gain.exponentialRampToValueAtTime(.001,t+dur);
+  o.connect(g);g.connect(ac.destination);o.start(t);o.stop(t+dur);
+}
+function noise(dur,vol){
+  if(S.sound<=0||!audio())return;
+  const n=Math.floor(ac.sampleRate*dur),b=ac.createBuffer(1,n,ac.sampleRate),d=b.getChannelData(0);
+  for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*(1-i/n);
+  const src=ac.createBufferSource(),g=ac.createGain();g.gain.value=vol*S.sound;
+  src.buffer=b;src.connect(g);g.connect(ac.destination);src.start();
+}
+const sfx={
+  hit:big=>{tone(big?140:220,60,.12,'square',.25);noise(.06,big?.3:.18);},
+  kill:()=>{tone(300,40,.3,'sawtooth',.25);noise(.2,.3);},
+  dash:()=>noise(.12,.12),
+  whiff:()=>tone(500,250,.06,'triangle',.06)
+};
+// hit counter: resets after 2s without a hit
+let hits=0,hitsT=0;
+function countHit(){
+  hits++;hitsT=2;const e=$('cnt');
+  if(hits>=2){e.textContent=hits+' HITS';e.classList.add('on');e.classList.remove('bump');void e.offsetWidth;e.classList.add('bump');}
+}
 
 // ---------- input ----------
 const inp={x:0,y:0,atk:0,t:0,dash:false};
@@ -287,6 +327,7 @@ function bindBtn(el,fn){
 bindBtn($('bAtk'),()=>{inp.atk=.2;inp.t=clk;});
 bindBtn($('bDash'),()=>{inp.dash=true;});
 addEventListener('contextmenu',e=>e.preventDefault());
+addEventListener('pointerdown',audio);addEventListener('keydown',audio);
 
 // ---------- settings UI ----------
 const panel=$('panel');
@@ -356,7 +397,7 @@ function startAttack(step,mv){
   }
 }
 function doHit(st,stepIdx){
-  const fx=Math.sin(P.face),fz=Math.cos(P.face);let hit=false;
+  const fx=Math.sin(P.face),fz=Math.cos(P.face);let hit=false,killed=false;
   for(const d of dummies){
     if(d.dead)continue;
     const dx=d.x-P.x,dz=d.z-P.z,l=Math.hypot(dx,dz);
@@ -371,13 +412,17 @@ function doHit(st,stepIdx){
     d.rxv+=nz*(big?14:8);d.rzv+=-nx*(big?14:8);
     burst(d.x,1.5,d.z,big?0xffcf6b:0xffffff,big?14:7,big?6:4);
     dmgText(d.x,2.8,d.z,dmg,big);
-    if(d.hp<=0){d.dead=true;d.t=0;burst(d.x,1.2,d.z,0xd8b878,18,6);}
+    countHit();
+    if(d.hp<=0){d.dead=true;d.t=0;burst(d.x,1.2,d.z,0xd8b878,18,6);killed=true;}
   }
   if(hit){
     const big=stepIdx===2;
+    sfx.hit(big);buzz(big?[30]:[15]);
+    if(killed){sfx.kill();buzz([40]);slowT=.25*S.killSlow;}
     hitStop=Math.max(hitStop,S.hitStop/1000*(big?1.6:1));
     shake=Math.max(shake,S.shake*(big?.7:.3));
   }
+  else sfx.whiff();
 }
 // a press chains only if it lands between the previous hit and hit + comboWindow
 function chainStep(){
@@ -392,7 +437,7 @@ function updatePlayer(dt){
     P.state='dash';P.dashT=0;P.step=0;P.comboT=0;P.dashCd=S.dashCd;
     let dx=mv.wx,dz=mv.wz;if(mv.m<.2){dx=Math.sin(P.face);dz=Math.cos(P.face);}
     const l=Math.hypot(dx,dz)||1;P.dx=dx/l;P.dz=dz/l;P.face=Math.atan2(P.dx,P.dz);
-    P.vx=P.vz=0;burst(P.x,.3,P.z,0xbfe6ff,8,3);
+    P.vx=P.vz=0;burst(P.x,.3,P.z,0xbfe6ff,8,3);sfx.dash();buzz([8]);
   }
   inp.dash=false;
 
@@ -510,6 +555,8 @@ function frame(now){
   requestAnimationFrame(frame);
   let dt=Math.min((now-last)/1000,.05);last=now;const rdt=Math.max(dt,.001);
   if(hitStop>0){hitStop-=dt;dt=0;}
+  else if(slowT>0){slowT-=dt;dt*=.35;}
+  if(hits>0){hitsT-=rdt;if(hitsT<=0){hits=0;$('cnt').classList.remove('on');}}
   if(dt>0){
     updatePlayer(dt);updateDummies(dt);updateParts(dt);
     for(const r of rocks)r.position.y=r.userData.y0+Math.sin(now/1000+r.userData.ph)*.5;
