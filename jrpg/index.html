@@ -1,0 +1,431 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>JRPG Battle Prototype</title>
+<style>
+  :root { --bg:#12141c; --panel:#1c2030; --panel2:#262b40; --text:#e8ebf5; --dim:#8a92aa; --accent:#6ee7b7; --enemy:#f87171; --gold:#fbbf24; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font:14px system-ui,sans-serif; overflow:hidden; user-select:none; }
+  #app { display:flex; flex-direction:column; height:100%; max-width:560px; margin:0 auto; padding:8px; gap:6px; }
+  #top { display:flex; align-items:center; gap:6px; }
+  #wave { color:var(--dim); font-size:12px; white-space:nowrap; }
+  #order { display:flex; gap:4px; overflow:hidden; flex:1; }
+  .chip { flex:0 0 auto; width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; background:var(--panel); border:2px solid #3a4160; position:relative; }
+  .chip.enemy { border-color:#7f3a3a; }
+  .chip.now { border-color:var(--gold); transform:scale(1.08); }
+  .chip small { position:absolute; bottom:-2px; right:1px; font-size:9px; color:var(--dim); }
+  #gear { width:36px; height:36px; border-radius:8px; border:1px solid #445; background:var(--panel); color:var(--text); font-size:18px; }
+  .row { display:grid; gap:6px; }
+  #enemies { grid-template-columns:repeat(3, 1fr); }
+  #party { grid-template-columns:repeat(4, 1fr); }
+  .card { background:var(--panel); border-radius:10px; padding:6px; border:2px solid transparent; position:relative; min-height:96px; transition:opacity .3s, transform .15s; }
+  .card .face { font-size:30px; text-align:center; line-height:1.1; }
+  .card .nm { font-size:12px; font-weight:600; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bar { height:6px; background:#0b0d14; border-radius:3px; overflow:hidden; margin-top:3px; }
+  .bar i { display:block; height:100%; background:var(--accent); transition:width .25s; }
+  .enemy .bar i { background:var(--enemy); }
+  .hpn { font-size:10px; color:var(--dim); text-align:center; }
+  .tags { display:flex; flex-wrap:wrap; gap:2px; justify-content:center; margin-top:2px; min-height:16px; }
+  .tag { font-size:10px; padding:1px 4px; border-radius:4px; background:var(--panel2); }
+  .tag.warn { background:#5b1d1d; color:#fecaca; }
+  .card.active { border-color:var(--gold); transform:translateY(-3px); }
+  .card.target { border-color:var(--accent); box-shadow:0 0 0 2px rgba(110,231,183,.35); cursor:pointer; }
+  .card.dead { opacity:.3; }
+  .card.hit { animation:shake .25s; }
+  @keyframes shake { 25% { transform:translateX(-4px); } 75% { transform:translateX(4px); } }
+  .pop { position:absolute; left:50%; top:20px; transform:translateX(-50%); font-weight:800; font-size:18px; pointer-events:none; animation:pop .9s forwards; text-shadow:0 2px 3px #000; white-space:nowrap; z-index:5; }
+  .pop.heal { color:#86efac; } .pop.dmg { color:#fff; } .pop.info { color:var(--gold); font-size:13px; }
+  @keyframes pop { from { opacity:1; margin-top:0; } to { opacity:0; margin-top:-34px; } }
+  #stage { flex:1; display:flex; flex-direction:column; justify-content:space-between; padding:10px 6px; border-radius:12px; background:linear-gradient(#1d2540, #2a3350 55%, #34402e 56%, #222a1e); }
+  #stage .card { background:rgba(20,24,36,.82); }
+  #log { height:62px; background:var(--panel); border-radius:10px; padding:6px 8px; font-size:12px; color:var(--dim); overflow:hidden; display:flex; flex-direction:column; justify-content:flex-end; }
+  #log div:last-child { color:var(--text); }
+  #menu { background:var(--panel); border-radius:10px; padding:8px; min-height:150px; }
+  #who { font-weight:700; margin-bottom:6px; display:flex; justify-content:space-between; }
+  #who span { color:var(--dim); font-weight:400; font-size:12px; }
+  #acts { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  #acts button { padding:12px 6px; font-size:15px; border-radius:8px; border:1px solid #3a4160; background:var(--panel2); color:var(--text); }
+  #acts button:disabled { opacity:.35; }
+  #acts button.sel { border-color:var(--accent); }
+  #desc { font-size:12px; color:var(--dim); margin-top:6px; min-height:16px; }
+  #panel { position:fixed; top:52px; right:8px; width:min(280px,80vw); max-height:calc(100% - 64px); overflow:auto; display:none; background:rgba(20,24,36,.97); border:1px solid #445; border-radius:10px; padding:10px; font-size:12px; z-index:20; }
+  #panel.show { display:block; }
+  #panel label { display:block; margin:8px 0 2px; } #panel label b { float:right; color:#8fd; font-weight:500; }
+  #panel input { width:100%; margin:0; }
+  #panel button { margin-top:10px; width:100%; padding:8px; background:#223; color:#cfd6e6; border:1px solid #556; border-radius:6px; }
+  #over { position:fixed; inset:0; background:rgba(0,0,0,.7); display:none; align-items:center; justify-content:center; z-index:30; }
+  #over.show { display:flex; }
+  #over div { background:var(--panel); padding:20px; border-radius:14px; text-align:center; width:min(320px,90vw); }
+  #over h2 { margin:0 0 8px; } #over p { color:var(--dim); }
+  #over button { padding:12px 20px; font-size:16px; border-radius:8px; border:none; background:var(--accent); color:#0b1d15; font-weight:700; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top"><span id="wave"></span><div id="order"></div><button id="gear">⚙</button></div>
+  <div id="stage"><div id="enemies" class="row"></div><div id="party" class="row"></div></div>
+  <div id="log"></div>
+  <div id="menu"><div id="who"></div><div id="acts"></div><div id="desc"></div></div>
+</div>
+<div id="panel"></div>
+<div id="over"><div><h2 id="ovT"></h2><p id="ovP"></p><button id="ovB"></button></div></div>
+<script>
+// ---------- Tunable settings (sliders) ----------
+const DEFAULTS = {
+  partyDmg:   [1, 0.5, 2, 0.05, 'Party damage x'],
+  enemyDmg:   [1, 0.5, 2, 0.05, 'Enemy damage x'],
+  enemyHp:    [1, 0.5, 2, 0.05, 'Enemy HP x (next battle)'],
+  blockCut:   [0.4, 0, 0.9, 0.05, 'Knight Shield damage cut'],
+  blockHeal:  [4, 0, 30, 1, 'Knight heal per block'],
+  taunt:      [0.6, 0, 1, 0.05, 'Shield taunt chance'],
+  bladeBonus: [1.5, 1, 2.5, 0.05, 'Blade stance damage x'],
+  comboDmg:   [1.6, 1, 3, 0.1, 'Combo damage x'],
+  steamHeal:  [18, 0, 50, 1, 'Steam party heal'],
+  stunDelay:  [12, 0, 30, 1, 'Stun delay'],
+  burnDmg:    [8, 0, 25, 1, 'Burn per turn'],
+  stealPct:   [0.6, 0, 1.5, 0.05, 'Steal: HP given per dmg'],
+  delayAmt:   [8, 0, 25, 1, 'Thief Trip delay'],
+  hpCost:     [0.12, 0.02, 0.3, 0.01, 'Berserker HP cost (of max)'],
+  rage:       [1.2, 0, 3, 0.1, 'Berserker rage scaling'],
+  restHeal:   [0.35, 0, 1, 0.05, 'Rest heal between fights'],
+  speed:      [1, 0.3, 2, 0.1, 'Animation time x'],
+};
+const S = {};
+for (const k in DEFAULTS) S[k] = DEFAULTS[k][0];
+try { Object.assign(S, JSON.parse(localStorage.jrpgS || '{}')); } catch (e) {}
+
+const panel = document.getElementById('panel');
+function buildPanel() {
+  panel.innerHTML = '';
+  for (const k in DEFAULTS) {
+    const [, min, max, step, name] = DEFAULTS[k];
+    const l = document.createElement('label');
+    const b = document.createElement('b'); b.textContent = S[k];
+    l.append(name, b);
+    const i = document.createElement('input');
+    i.type = 'range'; i.min = min; i.max = max; i.step = step; i.value = S[k];
+    i.oninput = () => { S[k] = +i.value; b.textContent = S[k]; try { localStorage.jrpgS = JSON.stringify(S); } catch (e) {} };
+    panel.append(l, i);
+  }
+  const r = document.createElement('button'); r.textContent = 'Reset to defaults';
+  r.onclick = () => { for (const k in DEFAULTS) S[k] = DEFAULTS[k][0]; try { delete localStorage.jrpgS; } catch (e) {} buildPanel(); };
+  const rs = document.createElement('button'); rs.textContent = 'Restart from battle 1';
+  rs.onclick = () => { panel.classList.remove('show'); startGame(); };
+  panel.append(r, rs);
+}
+buildPanel();
+document.getElementById('gear').onclick = () => panel.classList.toggle('show');
+
+// ---------- Data ----------
+const MARK = { wet: '💧Wet', burn: '🔥Burn', charged: '⚡Charged' };
+const PARTY = [
+  { cls: 'knight', name: 'Knight', face: '🛡️', max: 150, atk: 14, def: 7, spd: 9 },
+  { cls: 'mage', name: 'Mage', face: '🧙', max: 85, atk: 18, def: 4, spd: 10 },
+  { cls: 'thief', name: 'Thief', face: '🗡️', max: 100, atk: 12, def: 6, spd: 15 },
+  { cls: 'berserker', name: 'Berserker', face: '🪓', max: 135, atk: 17, def: 5, spd: 11 },
+];
+const ENEMIES = {
+  goblin: { name: 'Goblin', face: '👺', max: 120, atk: 25, def: 4, spd: 11, moves: [['Stab', 1]] },
+  slime: { name: 'Slime', face: '🟢', max: 150, atk: 19, def: 2, spd: 7, startMark: 'wet', weak: { lightning: 1.5, water: 0.5 }, moves: [['Splash', 0.6, 'aoe'], ['Ooze', 1]] },
+  ogre: { name: 'Ogre', face: '👹', max: 480, atk: 40, def: 8, spd: 6, cycle: [['Smash', 1], ['Wind up', 0, 'windup'], ['CRUSH', 2.4]] },
+  imp: { name: 'Imp', face: '😈', max: 100, atk: 21, def: 3, spd: 16, weak: { water: 1.6, fire: 0.4 }, cycle: [['Claw', 1], ['Fire Rain', 0.55, 'aoe']] },
+};
+const WAVES = [['goblin', 'slime', 'goblin'], ['imp', 'ogre', 'imp']];
+
+// actions: target 'enemy' | 'ally' | 'self' | 'allEnemies'; w = turn weight (lower = acts again sooner)
+const ACTIONS = {
+  knight: [
+    { id: 'strike', n: 'Strike', t: 'enemy', d: 'Basic hit. Stronger in Blade stance.' },
+    { id: 'stance', n: 'Swap Stance', t: 'self', w: 0.5, d: 'Shield: taunt, cut damage, heal when hit. Blade: hit harder, take more damage. Quick action.' },
+    { id: 'bash', n: 'Shield Bash', t: 'enemy', stance: 'shield', d: 'Light hit that pushes the target back in turn order.' },
+    { id: 'cleave', n: 'Cleave', t: 'allEnemies', stance: 'blade', d: 'Hit all enemies.' },
+  ],
+  mage: [
+    { id: 'water', n: '💧 Water', t: 'enemy', d: 'Marks Wet. On Burning: Steam, heals the whole party.' },
+    { id: 'fire', n: '🔥 Fire', t: 'enemy', d: 'Marks Burning (damage each turn). On Charged: Overload, hits all enemies.' },
+    { id: 'lightning', n: '⚡ Lightning', t: 'enemy', d: 'Marks Charged. On Wet: Stun, big delay and cancels wind-ups.' },
+    { id: 'focus', n: 'Focus', t: 'self', w: 0.6, d: 'Next spell deals double damage. Quick action.' },
+  ],
+  thief: [
+    { id: 'steal', n: 'Steal HP', t: 'enemy', d: 'Hit and give the stolen HP to the most hurt ally.' },
+    { id: 'trip', n: 'Trip', t: 'enemy', w: 0.8, d: 'Small hit that delays the enemy\'s next turn.' },
+    { id: 'haste', n: 'Haste', t: 'ally', w: 0.7, d: 'Chosen ally acts next.' },
+    { id: 'stab', n: 'Backstab', t: 'enemy', d: 'Strong hit, double on stunned or delayed enemies.' },
+  ],
+  berserker: [
+    { id: 'attack', n: 'Attack', t: 'enemy', d: 'Free hit. All Berserker damage grows as HP drops.' },
+    { id: 'reckless', n: 'Reckless', t: 'enemy', cost: 1, d: 'Costs HP. Huge single hit.' },
+    { id: 'rampage', n: 'Rampage', t: 'allEnemies', cost: 1.3, d: 'Costs more HP. Hits all enemies.' },
+    { id: 'roar', n: 'Bloodlust', t: 'self', cost: 0.7, w: 0.6, d: 'Costs HP. Next hit is a critical. Quick action.' },
+  ],
+};
+
+// ---------- State ----------
+let units = [], now = 0, wave = 0, logLines = [], waveStart = null, pending = null, sel = null;
+const $ = id => document.getElementById(id);
+const wait = ms => new Promise(r => setTimeout(r, ms * S.speed));
+const alive = side => units.filter(u => u.side === side && u.hp > 0);
+const delay = u => 100 / u.spd;
+
+function makeParty() {
+  return PARTY.map((p, i) => ({ ...p, id: 'p' + i, side: 'party', hp: p.max, stance: p.cls === 'knight' ? 'shield' : null, buff: null }));
+}
+function startGame() { wave = 0; waveStart = makeParty().map(p => ({ ...p })); startWave(); }
+function startWave() {
+  const party = waveStart.map(p => ({ ...p, buff: null }));
+  const foes = WAVES[wave].map((k, i) => {
+    const e = ENEMIES[k], max = Math.round(e.max * S.enemyHp);
+    const dup = WAVES[wave].filter(x => x === k).length > 1, tag = dup ? 'AB'[WAVES[wave].slice(0, i).filter(x => x === k).length] : '';
+    return { ...e, name: e.name + (tag ? ' ' + tag : ''), tag, id: 'e' + i, side: 'enemy', hp: max, max, mark: e.startMark || null, burnT: 0, step: 0, intent: null, delayed: false };
+  });
+  units = [...party, ...foes];
+  units.forEach((u, i) => { u.ct = delay(u) * (0.3 + 0.1 * i % 3); u.idx = i; });
+  foes.forEach(pickIntent);
+  now = 0; logLines = []; pending = null; sel = null;
+  $('over').classList.remove('show');
+  log(`Battle ${wave + 1}: ${foes.map(f => f.name).join(', ')}`);
+  render(); loop();
+}
+
+// ---------- Turn order ----------
+function nextActor() {
+  return units.filter(u => u.hp > 0).sort((a, b) => a.ct - b.ct || a.idx - b.idx)[0];
+}
+function forecast(n) {
+  const sim = units.filter(u => u.hp > 0).map(u => ({ u, ct: u.ct }));
+  const out = [];
+  for (let i = 0; i < n && sim.length; i++) {
+    sim.sort((a, b) => a.ct - b.ct || a.u.idx - b.u.idx);
+    out.push(sim[0].u); sim[0].ct += delay(sim[0].u);
+  }
+  return out;
+}
+
+// ---------- Rendering ----------
+function log(t) { logLines.push(t); if (logLines.length > 4) logLines.shift(); $('log').innerHTML = logLines.map(l => `<div>${l}</div>`).join(''); }
+function card(u) {
+  const el = document.createElement('div');
+  el.className = `card ${u.side}` + (u.hp <= 0 ? ' dead' : '');
+  el.id = 'c' + u.id;
+  const tags = [];
+  if (u.stance) tags.push(u.stance === 'shield' ? '<span class="tag">🛡Shield</span>' : '<span class="tag">⚔Blade</span>');
+  if (u.mark) tags.push(`<span class="tag">${MARK[u.mark]}${u.mark === 'burn' ? ' ' + u.burnT : ''}</span>`);
+  if (u.buff === 'focus') tags.push('<span class="tag">✨Focus</span>');
+  if (u.buff === 'crit') tags.push('<span class="tag">🩸Crit</span>');
+  if (u.delayed) tags.push('<span class="tag">⏳</span>');
+  if (u.side === 'enemy' && u.intent && u.hp > 0) {
+    const m = u.intent, big = m[2] === 'windup' || m[1] >= 2;
+    tags.push(`<span class="tag ${big ? 'warn' : ''}">${m[2] === 'windup' ? '⚠ ' : ''}${m[0]}${m[2] === 'aoe' ? ' (all)' : ''}</span>`);
+  }
+  el.innerHTML = `<div class="face">${u.face}</div><div class="nm">${u.name}</div>
+    <div class="bar"><i style="width:${Math.max(0, u.hp / u.max * 100)}%"></i></div>
+    <div class="hpn">${Math.max(0, u.hp)}/${u.max}</div><div class="tags">${tags.join('')}</div>`;
+  el.onclick = () => pickTarget(u);
+  return el;
+}
+function render() {
+  $('wave').textContent = `B${wave + 1}/${WAVES.length}`;
+  $('enemies').replaceChildren(...units.filter(u => u.side === 'enemy').map(card));
+  $('party').replaceChildren(...units.filter(u => u.side === 'party').map(card));
+  const act = units.find(u => u.acting);
+  if (act) $('c' + act.id)?.classList.add('active');
+  if (sel) validTargets(sel.a).forEach(t => $('c' + t.id)?.classList.add('target'));
+  $('order').replaceChildren(...forecast(10).map((u, i) => {
+    const c = document.createElement('div');
+    c.className = 'chip ' + u.side + (i === 0 && act === u ? ' now' : '');
+    c.innerHTML = `${u.face}<small>${u.tag || ''}</small>`;
+    return c;
+  }));
+}
+function pop(u, text, kind) {
+  const el = $('c' + u.id); if (!el) return;
+  const p = document.createElement('div'); p.className = 'pop ' + kind; p.textContent = text;
+  el.append(p);
+  if (kind === 'dmg') { el.classList.remove('hit'); void el.offsetWidth; el.classList.add('hit'); }
+  setTimeout(() => p.remove(), 900);
+}
+
+// ---------- Combat math ----------
+function rage(u) { return u.cls === 'berserker' ? 1 + S.rage * (1 - u.hp / u.max) : 1; }
+function damage(src, tgt, power, opts = {}) {
+  let d = src.atk * power * (0.9 + Math.random() * 0.2);
+  if (src.side === 'party') d *= S.partyDmg * rage(src);
+  else d *= S.enemyDmg;
+  if (src.stance === 'blade') d *= S.bladeBonus;
+  if (opts.el && tgt.weak && tgt.weak[opts.el]) d *= tgt.weak[opts.el];
+  if (opts.mult) d *= opts.mult;
+  if (tgt.stance === 'shield') d *= 1 - S.blockCut;
+  if (tgt.stance === 'blade') d *= 1.2;
+  d = Math.max(1, Math.round(d - tgt.def * 0.5));
+  tgt.hp = Math.max(0, tgt.hp - d);
+  pop(tgt, d, 'dmg');
+  if (tgt.stance === 'shield' && tgt.hp > 0 && S.blockHeal > 0) heal(tgt, S.blockHeal, true);
+  if (tgt.hp <= 0) { log(`${tgt.name} falls!`); tgt.mark = null; }
+  return d;
+}
+function heal(u, n, quiet) {
+  if (u.hp <= 0) return 0;
+  const h = Math.min(u.max - u.hp, Math.round(n));
+  u.hp += h;
+  setTimeout(() => pop(u, '+' + h, 'heal'), quiet ? 250 : 0);
+  return h;
+}
+function mostHurt() { return alive('party').sort((a, b) => a.hp / a.max - b.hp / b.max)[0]; }
+function pushBack(u, amt) { u.ct += amt; u.delayed = true; }
+
+// Mage elements: casting onto an existing mark can set off a combo
+function cast(src, tgt, el, mult) {
+  const m = tgt.mark;
+  if (el === 'lightning' && m === 'wet') {
+    damage(src, tgt, 0.9, { el, mult: mult * S.comboDmg });
+    if (tgt.hp > 0) {
+      pushBack(tgt, S.stunDelay); pop(tgt, 'STUN', 'info');
+      if (tgt.intent && tgt.intent[2] === 'windup' || tgt.charged) { tgt.charged = false; tgt.step = 0; pickIntent(tgt); log(`${tgt.name}'s wind-up is broken!`); }
+    }
+    tgt.mark = null; log('Combo: Wet + Lightning = Stun!'); return;
+  }
+  if (el === 'water' && m === 'burn') {
+    damage(src, tgt, 0.8, { el, mult });
+    tgt.mark = null; tgt.burnT = 0;
+    alive('party').forEach(p => heal(p, S.steamHeal * mult));
+    log('Combo: Water + Burn = Steam, party healed!'); return;
+  }
+  if (el === 'fire' && m === 'charged') {
+    tgt.mark = null;
+    alive('enemy').forEach(e => damage(src, e, 0.8, { el, mult: mult * S.comboDmg }));
+    log('Combo: Charged + Fire = Overload!'); return;
+  }
+  damage(src, tgt, 0.8, { el, mult });
+  if (tgt.hp > 0) { tgt.mark = el === 'water' ? 'wet' : el === 'fire' ? 'burn' : 'charged'; if (el === 'fire') tgt.burnT = 3; }
+}
+
+function hpCostOf(u, a) { return Math.round(u.max * S.hpCost * (a.cost || 0)); }
+function canUse(u, a) {
+  if (a.stance && u.stance !== a.stance) return false;
+  if (a.cost && u.hp - hpCostOf(u, a) < 1) return false;
+  return true;
+}
+function validTargets(a) {
+  if (a.t === 'enemy') return alive('enemy');
+  if (a.t === 'ally') return alive('party').filter(p => !p.acting);
+  return [];
+}
+
+async function doAction(u, a, tgt) {
+  let w = a.w || 1;
+  const crit = u.buff === 'crit' ? 2 : 1, focus = u.buff === 'focus' ? 2 : 1;
+  if (a.cost) { const c = hpCostOf(u, a); u.hp -= c; pop(u, '-' + c, 'info'); }
+  switch (a.id) {
+    case 'strike': damage(u, tgt, 1); break;
+    case 'stance': u.stance = u.stance === 'shield' ? 'blade' : 'shield'; log(`Knight takes ${u.stance} stance.`); break;
+    case 'bash': damage(u, tgt, 0.7); if (tgt.hp > 0) pushBack(tgt, S.delayAmt * 0.6); break;
+    case 'cleave': alive('enemy').forEach(e => damage(u, e, 0.7)); break;
+    case 'water': case 'fire': case 'lightning': cast(u, tgt, a.id, focus); if (focus > 1) u.buff = null; break;
+    case 'focus': u.buff = 'focus'; break;
+    case 'steal': { const d = damage(u, tgt, 0.8), r = mostHurt(); if (r) { heal(r, d * S.stealPct); log(`Thief passes ${Math.round(d * S.stealPct)} HP to ${r.name}.`); } break; }
+    case 'trip': damage(u, tgt, 0.4); if (tgt.hp > 0) { pushBack(tgt, S.delayAmt); pop(tgt, 'DELAY', 'info'); } break;
+    case 'haste': tgt.ct = now; pop(tgt, 'HASTE', 'info'); log(`${tgt.name} will act next.`); break;
+    case 'stab': damage(u, tgt, 1.1, { mult: tgt.delayed ? 2 : 1 }); break;
+    case 'attack': damage(u, tgt, 1, { mult: crit }); break;
+    case 'reckless': damage(u, tgt, 2, { mult: crit }); break;
+    case 'rampage': alive('enemy').forEach(e => damage(u, e, 1, { mult: crit })); break;
+    case 'roar': u.buff = 'crit'; break;
+  }
+  if (crit > 1 && ['attack', 'reckless', 'rampage'].includes(a.id)) u.buff = null;
+  return w;
+}
+
+// ---------- Enemy AI ----------
+function pickIntent(e) {
+  if (e.cycle) { e.intent = e.cycle[e.step % e.cycle.length]; e.step++; }
+  else e.intent = e.moves[Math.floor(Math.random() * e.moves.length)];
+}
+function pickVictim() {
+  const p = alive('party');
+  const k = p.find(x => x.stance === 'shield');
+  if (k && Math.random() < S.taunt) return k;
+  return p[Math.floor(Math.random() * p.length)];
+}
+async function enemyTurn(e) {
+  if (e.mark === 'burn' && e.burnT > 0) {
+    const d = Math.round(S.burnDmg * S.partyDmg); e.hp = Math.max(0, e.hp - d); pop(e, d, 'dmg');
+    if (--e.burnT <= 0) e.mark = null;
+    render(); await wait(400);
+    if (e.hp <= 0) { log(`${e.name} burns away!`); return; }
+  }
+  e.delayed = false;
+  const [name, power, kind] = e.intent;
+  if (kind === 'windup') { e.charged = true; log(`${e.name} winds up a huge attack!`); }
+  else if (kind === 'aoe') { log(`${e.name} uses ${name}!`); alive('party').forEach(p => damage(e, p, power)); }
+  else { const t = pickVictim(); log(`${e.name} uses ${name} on ${t.name}.`); damage(e, t, power); e.charged = false; }
+  pickIntent(e);
+}
+
+// ---------- Player input ----------
+function showMenu(u) {
+  $('who').innerHTML = `${u.face} ${u.name}'s turn <span>${u.cls === 'berserker' ? 'Rage x' + rage(u).toFixed(2) : ''}</span>`;
+  $('desc').textContent = 'Pick an action.';
+  $('acts').replaceChildren(...ACTIONS[u.cls].map(a => {
+    const b = document.createElement('button');
+    b.textContent = a.n + (a.cost ? ` (-${hpCostOf(u, a)}HP)` : '');
+    b.disabled = !canUse(u, a);
+    if (a.stance && u.stance !== a.stance) b.style.display = 'none';
+    b.onclick = () => chooseAction(u, a, b);
+    return b;
+  }));
+}
+function chooseAction(u, a, btn) {
+  document.querySelectorAll('#acts button').forEach(b => b.classList.remove('sel'));
+  $('desc').textContent = a.d;
+  if (a.t === 'self' || a.t === 'allEnemies') { sel = null; finish(u, a, null); return; }
+  btn.classList.add('sel');
+  sel = { u, a };
+  $('desc').textContent = a.d + ' Tap a target.';
+  render();
+}
+function pickTarget(t) {
+  if (!sel || !validTargets(sel.a).includes(t)) return;
+  const { u, a } = sel; sel = null; finish(u, a, t);
+}
+function finish(u, a, t) { $('acts').replaceChildren(); if (pending) { const p = pending; pending = null; p({ a, t }); } }
+
+// ---------- Main loop ----------
+async function loop() {
+  const myWave = wave, myUnits = units;
+  while (units === myUnits) {
+    const u = nextActor(); now = u.ct; u.acting = true; render();
+    let w = 1;
+    if (u.side === 'enemy') {
+      $('who').innerHTML = `${u.face} ${u.name}'s turn`; $('acts').replaceChildren(); $('desc').textContent = '';
+      await wait(500); await enemyTurn(u);
+    } else {
+      showMenu(u);
+      const { a, t } = await new Promise(r => pending = r);
+      if (units !== myUnits) return;
+      w = await doAction(u, a, t);
+    }
+    u.acting = false;
+    if (u.hp > 0 && u.ct === now) u.ct += delay(u) * w;
+    else if (u.hp > 0) u.ct = Math.max(u.ct, now + delay(u) * w);
+    render(); await wait(650);
+    if (units !== myUnits) return;
+    if (!alive('enemy').length) return win();
+    if (!alive('party').length) return lose();
+  }
+}
+function overlay(t, p, b, fn) { $('ovT').textContent = t; $('ovP').textContent = p; $('ovB').textContent = b; $('ovB').onclick = fn; $('over').classList.add('show'); }
+function win() {
+  if (wave + 1 >= WAVES.length) return overlay('Victory!', 'All test battles cleared.', 'Play again', startGame);
+  overlay('Victory!', `The party rests and recovers ${Math.round(S.restHeal * 100)}% HP. Fallen allies get up with that much HP.`, 'Next battle', () => {
+    waveStart = units.filter(u => u.side === 'party').map(p => ({ ...p, acting: false, hp: Math.min(p.max, p.hp + Math.round(p.max * S.restHeal)) }));
+    wave++; startWave();
+  });
+}
+function lose() { overlay('Defeat', 'The party has fallen.', 'Retry battle', startWave); }
+
+startGame();
+</script>
+</body>
+</html>
