@@ -147,7 +147,6 @@ const DEFAULTS = {
   wildHeal:   [30, 0, 60, 1, 'Wild Card / All In heal'],
   _a: 'All heroes',
   guardCut:   [0.5, 0, 0.9, 0.05, 'Guard damage cut'],
-  healFade:   [0.5, 0, 1, 0.05, 'Heal power kept per heal in a row'],
   stunDelay:  [12, 0, 30, 1, 'Doubles stun delay'],
 };
 const S = {};
@@ -189,7 +188,7 @@ const HEROES = {
 const ENEMIES = {
   golem:  { name: 'Stone Golem', face: '🗿', max: 700, atk: 30, def: 8, spd: 7, cycle: [['Slam', 1], ['Slam', 1], ['Rumble', 0, 'windup'], ['QUAKE', 1.7, 'aoe big']] },
   bandit: { name: 'Bandit', face: '🥷', max: 130, atk: 22, def: 3, spd: 12, moves: [['Slash', 1], ['Slash', 1], ['Dirty Kick', 1.3]] },
-  brute:  { name: 'Brute', face: '👹', max: 300, atk: 26, def: 5, spd: 9, cycle: [['Punch', 1], ['Punch', 1], ['Wind up', 0, 'windup'], ['HAYMAKER', 2.2, 'big']] },
+  brute:  { name: 'Brute', face: '👹', max: 230, atk: 21, def: 5, spd: 9, cycle: [['Punch', 1], ['Punch', 1], ['Wind up', 0, 'windup'], ['HAYMAKER', 2, 'big']] },
   duelist:{ name: 'Duelist', face: '🤺', max: 230, atk: 22, def: 4, spd: 15, cycle: [['Slash', 1], ['Feint', 0.6], ['En garde', 0, 'windup'], ['LUNGE', 2.6, 'big']] },
   wyrm:   { name: 'Fire Wyrm', face: '🐉', max: 280, atk: 23, def: 5, spd: 10, weak: { ice: 1.6, fire: 0.4 }, cycle: [['Bite', 1], ['Ember', 1.2], ['Inhale', 0, 'windup'], ['INFERNO', 2.3, 'big']] },
   shark:  { name: 'Card Shark', face: '🃏', max: 200, atk: 19, def: 4, spd: 10, cycle: [['Deal', 1], ['Cheat', 0.5, 'cheat'], ['Shuffle', 0, 'windup'], ['ROYAL FLUSH', 2, 'big']] },
@@ -247,7 +246,7 @@ const rnd = n => Math.floor(Math.random() * n);
 function startBattle(key) {
   battle = key; const B = BATTLES[key]; solo = B.heroes.length === 1;
   const party = B.heroes.map((h, i) => ({ ...HEROES[h], art: h, id: 'p' + i, side: 'party', hp: HEROES[h].max,
-    chi: 0, charges: 0, mp: 3, fortune: 0, guard: false, healStreak: 0, lucky: false, riposte: false, power: 0 }));
+    chi: 0, charges: 0, mp: 3, fortune: 0, guard: false, lucky: false, riposte: false, power: 0 }));
   const foes = B.foes.map((k, i) => {
     const e = ENEMIES[k], max = Math.round(e.max * S.enemyHp);
     const n = B.foes.filter(x => x === k).length, tag = n > 1 ? 'AB'[B.foes.slice(0, i).filter(x => x === k).length] : '';
@@ -369,7 +368,6 @@ function tagsOf(u) {
   if (u.marked > 0) tags.push(`<span class="tag">🎯Marked ${u.marked}</span>`);
   if (u.delayed) tags.push('<span class="tag">⏳</span>');
   if (u.guard) tags.push('<span class="tag">🛡Guard</span>');
-  if (u.healStreak > 0) tags.push(`<span class="tag">😮‍💨Heal x${Math.pow(S.healFade, u.healStreak).toFixed(2)}</span>`);
   if (u.side === 'enemy' && u.intent && u.hp > 0) {
     const [nm, , kind = ''] = u.intent, big = kind.includes('big') || kind === 'windup';
     tags.push(`<span class="tag ${big ? 'warn' : ''}">${big ? '⚠ ' : ''}${nm}${kind.includes('aoe') ? ' (all)' : ''}</span>`);
@@ -579,17 +577,14 @@ function gainRes(u) {
   if (u.cls === 'ranger') u.mp = Math.min(S.mpMax, u.mp + 1);
   if (u.cls === 'gambler') u.fortune = Math.min(S.fortuneMax, u.fortune + 1);
 }
-// Heals in a row get weaker so a fight can't stall on heal spam; attacking resets it
-function healPower(u) { return Math.pow(S.healFade, u.healStreak++); }
 function doAction(u, a, tgt) {
   if (a.mp) u.mp -= S.roundCost;
-  if ((a.t === 'enemy' || a.t === 'allEnemies') && a.id !== 'mark') u.healStreak = 0;
   switch (a.id) {
     // Kai
     case 'flurry': damage(u, tgt, 0.55); damage(u, tgt, 0.55, { lag: 250 }); u.chi = Math.min(S.chiMax, u.chi + 1); break;
     case 'palm': { const full = u.chi >= S.chiMax; damage(u, tgt, 0.8 + S.chiPower * u.chi); if (full) breakWindup(tgt); u.chi = 0; break; }
     case 'guard': u.guard = true; gainRes(u); log(`${u.name} guards.`); break;
-    case 'meditate': heal(u, u.max * S.medHeal * healPower(u)); u.chi = Math.min(S.chiMax, u.chi + 1); log('Kai meditates.'); break;
+    case 'meditate': heal(u, u.max * S.medHeal); u.chi = Math.min(S.chiMax, u.chi + 1); log('Kai meditates.'); break;
     case 'share': u.chi -= 1; heal(tgt, S.shareHeal); log(`Kai shares Chi with ${tgt.name}.`); break;
     // Wren
     case 'twin': damage(u, tgt, 0.6, { crit: rollCrit(u, tgt) }); damage(u, tgt, 0.6, { crit: rollCrit(u, tgt), lag: 250 }); break;
@@ -600,7 +595,7 @@ function doAction(u, a, tgt) {
     case 'shot': damage(u, tgt, 1); u.mp = Math.min(S.mpMax, u.mp + 1); break;
     case 'fire': damage(u, tgt, 1, { el: 'fire' }); if (tgt.hp > 0) tgt.burnT = 3; break;
     case 'ice': damage(u, tgt, 1, { el: 'ice' }); if (tgt.hp > 0) { pushBack(tgt, S.iceDelay); breakWindup(tgt); } break;
-    case 'mend': heal(tgt, S.mendHeal * healPower(u)); log(`Sela fires a Mend Round at ${tgt === u ? 'herself' : tgt.name}.`); break;
+    case 'mend': heal(tgt, S.mendHeal); log(`Sela fires a Mend Round at ${tgt === u ? 'herself' : tgt.name}.`); break;
     // Vance
     case 'coin': if (takeLuck(u) || Math.random() < 0.5) { log('Heads!'); damage(u, tgt, 1.4); } else { log('Tails...'); damage(u, tgt, 0.6); addFortune(u, 1); } break;
     case 'dice': {
