@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>HD-2D Dungeon</title>
+<style>
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; height:100%; background:#0d0f16; color:#e8ebf5; font:14px system-ui,sans-serif; overflow:hidden; user-select:none; touch-action:none; }
+  #app { display:flex; flex-direction:column; height:100%; max-width:560px; margin:0 auto; }
+  #top { display:flex; align-items:center; gap:8px; padding:8px; }
+  #top a { color:#8a92aa; text-decoration:none; font-size:20px; }
+  #msg { flex:1; font-size:13px; color:#cfd5e6; }
+  #top button { width:36px; height:36px; border-radius:8px; border:1px solid #445; background:#1c2030; color:#e8ebf5; font-size:16px; }
+  canvas { flex:1; width:100%; min-height:0; display:block; image-rendering:pixelated; }
+  #pad { display:grid; grid-template-columns:repeat(3,64px); grid-template-rows:repeat(3,64px); gap:4px; justify-content:center; padding:10px 0 18px; }
+  #pad button { border:1px solid #3a4160; border-radius:12px; background:#1c2030; color:#e8ebf5; font-size:24px; }
+  #pad button:active, #pad button.on { background:#2e3550; }
+  #pad .u { grid-area:1/2; } #pad .l { grid-area:2/1; } #pad .r { grid-area:2/3; } #pad .d { grid-area:3/2; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top">
+    <a href="../">←</a>
+    <div id="msg">Find a way past the locked door.</div>
+    <button id="reset" title="Restart">↻</button>
+  </div>
+  <canvas id="cv"></canvas>
+  <div id="pad">
+    <button class="u" data-d="0,-1">▲</button>
+    <button class="l" data-d="-1,0">◀</button>
+    <button class="r" data-d="1,0">▶</button>
+    <button class="d" data-d="0,1">▼</button>
+  </div>
+</div>
+<script>
+// # wall, . floor, S switch, D locked door, G goal stairs, K start (Kai)
+const MAP = [
+  '##################',
+  '#.....#..........#',
+  '#..K..#..######..#',
+  '#.....#..#....#..#',
+  '#.....D..#.G..#..#',
+  '#.....#..#....#..#',
+  '#.....#..##.###..#',
+  '##.####..........#',
+  '#.....############',
+  '#..S..#',
+  '#.....#',
+  '#######',
+];
+const T = 16, cv = document.getElementById('cv'), g = cv.getContext('2d'), msg = document.getElementById('msg');
+let grid, kai, open, won, held = null;
+
+function reset() {
+  grid = MAP.map(r => r.split(''));
+  grid.forEach((r, y) => r.forEach((c, x) => { if (c === 'K') { kai = { x, y, px: x, py: y, dir: 1, step: 0 }; r[x] = '.'; } }));
+  open = false; won = false;
+  say('Find a way past the locked door.');
+}
+const say = t => msg.textContent = t;
+const tile = (x, y) => (grid[y] && grid[y][x]) || '#';
+const solid = c => c === '#' || (c === 'D' && !open);
+
+function tryMove(dx, dy) {
+  if (won || kai.px !== kai.x || kai.py !== kai.y) return;
+  if (dx) kai.dir = dx;
+  const nx = kai.x + dx, ny = kai.y + dy;
+  if (solid(tile(nx, ny))) { if (tile(nx, ny) === 'D') say('Locked. There must be a switch somewhere.'); return; }
+  kai.x = nx; kai.y = ny;
+}
+function arrive() {
+  const c = tile(kai.x, kai.y);
+  if (c === 'S' && !open) { open = true; say('Click! You hear a door grind open.'); }
+  if (c === 'G' && !won) { won = true; say('You found the stairs down. Level clear!'); }
+}
+
+// Input: keyboard + on-screen pad (hold to keep walking)
+const KEYS = { ArrowUp:[0,-1], w:[0,-1], ArrowDown:[0,1], s:[0,1], ArrowLeft:[-1,0], a:[-1,0], ArrowRight:[1,0], d:[1,0] };
+addEventListener('keydown', e => { const k = KEYS[e.key] || KEYS[e.key.toLowerCase()]; if (k) { held = k; e.preventDefault(); } });
+addEventListener('keyup', e => { const k = KEYS[e.key] || KEYS[e.key.toLowerCase()]; if (k && held === k) held = null; });
+document.querySelectorAll('#pad button').forEach(b => {
+  const d = b.dataset.d.split(',').map(Number);
+  b.addEventListener('pointerdown', e => { e.preventDefault(); held = d; b.classList.add('on'); });
+  ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => { if (held === d) held = null; b.classList.remove('on'); }));
+});
+document.getElementById('reset').onclick = reset;
+
+// Drawing
+function drawTile(c, x, y, t) {
+  const X = x * T, Y = y * T;
+  if (c === '#') {
+    g.fillStyle = '#2a2f45'; g.fillRect(X, Y, T, T);
+    g.fillStyle = '#353b56'; g.fillRect(X, Y, T, 4);
+    g.fillStyle = '#1e2234'; g.fillRect(X, Y + 8, T, 1); g.fillRect(X + ((y % 2) ? 4 : 11), Y + 4, 1, 12);
+    return;
+  }
+  g.fillStyle = (x + y) % 2 ? '#4a4038' : '#52473e'; g.fillRect(X, Y, T, T);
+  g.fillStyle = '#3d342d'; g.fillRect(X, Y + 15, T, 1); g.fillRect(X + 15, Y, 1, T);
+  if (c === 'S') {
+    g.fillStyle = '#222'; g.fillRect(X + 3, Y + 3, 10, 10);
+    g.fillStyle = open ? '#34d399' : '#f87171'; g.fillRect(X + 4, Y + (open ? 6 : 4), 8, open ? 6 : 7);
+  } else if (c === 'D') {
+    if (open) { g.fillStyle = '#2a2f45'; g.fillRect(X, Y, 2, T); g.fillRect(X + 14, Y, 2, T); }
+    else {
+      g.fillStyle = '#6b4a2b'; g.fillRect(X, Y, T, T);
+      g.fillStyle = '#4a321d'; for (let i = 3; i < T; i += 4) g.fillRect(X + i, Y, 1, T);
+      g.fillStyle = '#fbbf24'; g.fillRect(X + 6, Y + 7, 4, 3);
+    }
+  } else if (c === 'G') {
+    for (let i = 0; i < 4; i++) { g.fillStyle = ['#1a1612', '#2a231d', '#3a3028', '#4a4038'][i]; g.fillRect(X + 2 + i, Y + 2 + i * 3, 12 - i * 2, 3); }
+    g.fillStyle = `rgba(251,191,36,${0.25 + 0.2 * Math.sin(t / 300)})`; g.fillRect(X, Y, T, T);
+  }
+}
+// Kai: small pixel monk (orange gi, bald head, black belt)
+function drawKai(t) {
+  const X = Math.round(kai.px * T), Y = Math.round(kai.py * T), bob = kai.step % 2 ? -1 : 0;
+  g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(X + 3, Y + 13, 10, 2);
+  g.save(); g.translate(X + 8, Y + bob); g.scale(kai.dir, 1); g.translate(-8, 0);
+  const px = (c, x, y, w, h) => { g.fillStyle = c; g.fillRect(x, y, w, h); };
+  px('#e0a878', 5, 1, 6, 5);            // head
+  px('#1f1a17', 9, 3, 1, 1);            // eye
+  px('#ea7a1e', 4, 6, 8, 5);            // gi
+  px('#111', 4, 9, 8, 1);               // belt
+  px('#e0a878', kai.step % 2 ? 12 : 11, 7, 2, 2); // fist
+  px('#7a3e0e', kai.step % 2 ? 5 : 4, 11, 3, 3); px('#7a3e0e', kai.step % 2 ? 8 : 9, 11, 3, 3); // legs
+  g.restore();
+}
+
+let last = 0;
+function frame(t) {
+  const dt = Math.min(50, t - last); last = t;
+  // Walk: tween toward the target tile, then take the next held step
+  const sp = dt / 140;
+  for (const a of ['x', 'y']) { const p = 'p' + a, d = kai[a] - kai[p]; kai[p] = Math.abs(d) <= sp ? kai[a] : kai[p] + Math.sign(d) * sp; }
+  if (kai.px === kai.x && kai.py === kai.y) {
+    if (kai.moving) { kai.moving = false; arrive(); }
+    if (held) { const ox = kai.x, oy = kai.y; tryMove(...held); if (kai.x !== ox || kai.y !== oy) { kai.moving = true; kai.step++; } }
+  }
+
+  // Fit canvas, zoom so roughly 9 tiles show across, camera follows Kai
+  const w = cv.clientWidth, h = cv.clientHeight, dpr = devicePixelRatio || 1;
+  if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+  const z = Math.max(2, Math.floor(w * dpr / (9 * T)));
+  g.setTransform(1, 0, 0, 1, 0, 0); g.imageSmoothingEnabled = false;
+  g.fillStyle = '#0d0f16'; g.fillRect(0, 0, cv.width, cv.height);
+  g.setTransform(z, 0, 0, z, Math.round(cv.width / 2 - (kai.px + .5) * T * z), Math.round(cv.height / 2 - (kai.py + .5) * T * z));
+  grid.forEach((r, y) => r.forEach((c, x) => drawTile(c, x, y, t)));
+  drawKai(t);
+
+  // Torchlight vignette around Kai for an HD-2D mood
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  const cx = cv.width / 2, cy = cv.height / 2, R = 7 * T * z;
+  const v = g.createRadialGradient(cx, cy, R * .25, cx, cy, R);
+  v.addColorStop(0, 'rgba(255,190,110,.10)'); v.addColorStop(1, 'rgba(5,6,12,.6)');
+  g.fillStyle = v; g.fillRect(0, 0, cv.width, cv.height);
+  requestAnimationFrame(frame);
+}
+reset();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
