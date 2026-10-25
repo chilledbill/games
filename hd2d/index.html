@@ -15,6 +15,7 @@
   .chip { flex:0 0 auto; width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; background:var(--panel); border:2px solid #3a4160; position:relative; }
   .chip.enemy { border-color:#7f3a3a; }
   .chip.now { border-color:var(--gold); transform:scale(1.08); }
+  .chip img { height:28px; image-rendering:pixelated; }
   .chip small { position:absolute; bottom:-2px; right:1px; font-size:9px; color:var(--dim); }
   #top button { width:36px; height:36px; border-radius:8px; border:1px solid #445; background:var(--panel); color:var(--text); font-size:18px; flex:0 0 auto; }
   .row { display:grid; gap:6px; justify-content:center; }
@@ -237,7 +238,7 @@ const rnd = n => Math.floor(Math.random() * n);
 
 function startBattle(key) {
   battle = key; const B = BATTLES[key]; solo = B.heroes.length === 1;
-  const party = B.heroes.map((h, i) => ({ ...HEROES[h], id: 'p' + i, side: 'party', hp: HEROES[h].max,
+  const party = B.heroes.map((h, i) => ({ ...HEROES[h], art: h, id: 'p' + i, side: 'party', hp: HEROES[h].max,
     chi: 0, charges: 0, mp: 3, fortune: 0, lucky: false, riposte: false, power: 0 }));
   const foes = B.foes.map((k, i) => {
     const e = ENEMIES[k], max = Math.round(e.max * S.enemyHp);
@@ -280,13 +281,67 @@ function spriteURL(face) {
   }
   return spriteCache[face];
 }
+// Hand-placed pixel-art heroes: 16x22 rects on a grid, outlined automatically
+const SKIN = '#f0c08a', EYE = '#1a1420';
+const HERO_ART = {
+  kai: [ // young monk: black topknot, orange gi, wrapped fists
+    ['#5a3a24', 5, 18, 2, 3], ['#5a3a24', 9, 18, 2, 3], ['#8a5a30', 4, 21, 3, 1], ['#8a5a30', 9, 21, 3, 1],
+    ['#e8742c', 5, 12, 6, 5], ['#b04e1a', 10, 12, 1, 5], [SKIN, 7, 12, 2, 2], ['#3a2a20', 5, 16, 6, 1], ['#e8742c', 5, 17, 6, 1],
+    ['#e8742c', 3, 12, 2, 2], ['#e8742c', 11, 12, 2, 2], [SKIN, 3, 14, 2, 2], [SKIN, 11, 14, 2, 2], ['#f3efe4', 3, 16, 2, 2], ['#f3efe4', 11, 16, 2, 2],
+    [SKIN, 4, 3, 8, 8], ['#c68a55', 7, 11, 2, 1], [EYE, 6, 6, 1, 2], [EYE, 9, 6, 1, 2], ['#c68a55', 7, 9, 2, 1],
+    ['#1d1b26', 4, 2, 8, 3], ['#1d1b26', 4, 5, 1, 2], ['#1d1b26', 11, 5, 1, 2], ['#1d1b26', 5, 1, 1, 1], ['#1d1b26', 10, 1, 1, 1], ['#1d1b26', 7, 0, 2, 2],
+  ],
+  wren: [ // young thief: teal hood, red scarf, twin daggers
+    ['#2b2438', 5, 18, 2, 3], ['#2b2438', 9, 18, 2, 3], ['#6b4226', 5, 19, 2, 2], ['#6b4226', 9, 19, 2, 2], ['#6b4226', 4, 21, 3, 1], ['#6b4226', 9, 21, 3, 1],
+    ['#4a3b5c', 5, 12, 6, 5], ['#382c48', 10, 12, 1, 5], ['#6b4226', 5, 16, 6, 1], ['#e2b04a', 8, 16, 1, 1], ['#4a3b5c', 5, 17, 6, 1],
+    ['#4a3b5c', 3, 12, 2, 5], ['#4a3b5c', 11, 12, 2, 5], [SKIN, 3, 17, 2, 1], [SKIN, 11, 17, 2, 1],
+    ['#6b4226', 2, 17, 1, 1], ['#e8eef5', 1, 18, 1, 4], ['#ffffff', 1, 18, 1, 1], ['#6b4226', 13, 17, 1, 1], ['#e8eef5', 14, 18, 1, 4], ['#ffffff', 14, 18, 1, 1],
+    [SKIN, 4, 3, 8, 8], [EYE, 6, 7, 1, 2], [EYE, 9, 7, 1, 2], ['#e88a7a', 5, 9, 1, 1], ['#e88a7a', 10, 9, 1, 1],
+    ['#b5532f', 5, 5, 6, 1], ['#b5532f', 5, 6, 1, 1], ['#b5532f', 10, 6, 1, 1],
+    ['#2f7d6d', 3, 2, 10, 3], ['#2f7d6d', 3, 5, 1, 6], ['#2f7d6d', 12, 5, 1, 6], ['#24604f', 11, 3, 2, 2], ['#2f7d6d', 6, 1, 4, 1],
+    ['#c0392b', 4, 11, 8, 2], ['#c0392b', 11, 13, 2, 3], ['#8e2a20', 10, 12, 2, 1],
+  ],
+  sela: [ // older ranger: wide hat, long hair, green coat, rune rifle
+    ['#3a3226', 5, 18, 2, 3], ['#3a3226', 9, 18, 2, 3], ['#6b4226', 4, 21, 3, 1], ['#6b4226', 9, 21, 3, 1],
+    ['#3f5a3a', 5, 12, 6, 6], ['#2e4430', 10, 12, 1, 6], ['#3f5a3a', 4, 17, 3, 3], ['#3f5a3a', 9, 17, 3, 3], ['#e6d6b0', 7, 12, 2, 2],
+    ['#3f5a3a', 3, 12, 2, 5], ['#3f5a3a', 11, 12, 2, 5], ['#6b4226', 3, 17, 2, 1], ['#6b4226', 11, 17, 2, 1],
+    [SKIN, 4, 3, 8, 8], [EYE, 6, 7, 1, 1], [EYE, 9, 7, 1, 1], ['#c68a55', 6, 6, 1, 1], ['#c68a55', 9, 6, 1, 1], ['#c68a55', 7, 9, 2, 1],
+    ['#7a3e22', 3, 4, 2, 9], ['#7a3e22', 11, 4, 2, 9], ['#7a3e22', 5, 4, 6, 1], ['#7a3e22', 5, 5, 2, 1],
+    ['#7a5230', 2, 3, 12, 1], ['#7a5230', 5, 0, 6, 3], ['#2e4430', 5, 2, 6, 1],
+    ['#555a66', 1, 16, 11, 1], ['#7a5230', 11, 16, 3, 2], ['#5ee0ff', 4, 16, 2, 1],
+  ],
+  vance: [ // older gambler: fedora, grey beard, red vest, card and die
+    ['#22222a', 5, 18, 2, 3], ['#22222a', 9, 18, 2, 3], ['#4a2c1c', 4, 21, 3, 1], ['#4a2c1c', 9, 21, 3, 1],
+    ['#a12a2a', 5, 12, 6, 6], ['#7a1e1e', 10, 12, 1, 6], ['#f3efe4', 7, 12, 2, 5], ['#a12a2a', 7, 15, 1, 1], ['#e2b04a', 6, 14, 1, 1], ['#e2b04a', 5, 15, 1, 1],
+    ['#2a2a34', 3, 12, 2, 5], ['#2a2a34', 11, 12, 2, 5], [SKIN, 3, 17, 2, 1], [SKIN, 11, 17, 2, 1],
+    ['#ffffff', 1, 15, 2, 3], ['#c0392b', 1, 16, 1, 1], ['#ffffff', 13, 16, 2, 2], ['#1a1420', 14, 16, 1, 1],
+    [SKIN, 4, 3, 8, 8], [EYE, 6, 6, 1, 1], [EYE, 9, 6, 2, 1], ['#8a8a8a', 5, 8, 6, 3], ['#6a6a6a', 6, 8, 4, 1], [SKIN, 7, 9, 2, 1],
+    ['#9a9aa0', 4, 4, 1, 3], ['#9a9aa0', 11, 4, 1, 3],
+    ['#26262e', 2, 3, 12, 1], ['#26262e', 4, 0, 8, 3], ['#b03030', 4, 2, 8, 1],
+  ],
+};
+function heroURL(key) {
+  if (spriteCache[key]) return spriteCache[key];
+  const W = 18, H = 24, grid = Array.from({ length: H }, () => Array(W).fill(null));
+  for (const [c, x, y, w, h] of HERO_ART[key]) for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) grid[y + j + 1][x + i + 1] = c;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const g = cv.getContext('2d');
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    let c = grid[y][x];
+    if (!c && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => grid[y + dy]?.[x + dx])) c = '#1a1420';
+    if (c) { g.fillStyle = c; g.fillRect(x, y, 1, 1); }
+  }
+  return spriteCache[key] = cv.toDataURL();
+}
+const artOf = u => u.art ? heroURL(u.art) : spriteURL(u.face);
+
 const els = {};
 function unitEl(u) {
   let el = els[u.id];
   if (!el || el.__u !== u) {
     el = document.createElement('div'); el.id = 'c' + u.id; el.__u = u;
     const scale = u.side === 'party' ? 3 : u.max >= 400 * S.enemyHp ? 5 : 4;
-    el.innerHTML = `<div class="sprite"><img src="${spriteURL(u.face)}" style="width:${scale * 20}px"></div><div class="info"></div>`;
+    el.innerHTML = `<div class="sprite"><img src="${artOf(u)}" style="width:${u.art ? 54 : scale * 20}px"></div><div class="info"></div>`;
     el.onclick = () => pickTarget(u);
     els[u.id] = el;
   }
@@ -332,7 +387,7 @@ function render() {
   $('order').replaceChildren(...forecast(10).map((u, i) => {
     const c = document.createElement('div');
     c.className = 'chip ' + u.side + (i === 0 && act === u ? ' now' : '');
-    c.innerHTML = `${u.face}<small>${u.tag || ''}</small>`;
+    c.innerHTML = `${u.art ? `<img src="${heroURL(u.art)}">` : u.face}<small>${u.tag || ''}</small>`;
     return c;
   }));
 }
