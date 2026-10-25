@@ -73,6 +73,7 @@
   #who span { color:var(--dim); font-weight:400; font-size:12px; text-align:right; }
   #acts { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
   #acts button { padding:11px 6px; font-size:14px; border-radius:8px; border:1px solid #3a4160; background:var(--panel2); color:var(--text); }
+  #acts[style*="1fr 1fr 1fr"] button { font-size:13px; padding:10px 4px; }
   #acts button:disabled { opacity:.35; }
   #acts button.sel { border-color:var(--accent); }
   #desc { font-size:12px; color:var(--dim); margin-top:6px; min-height:16px; }
@@ -144,6 +145,9 @@ const DEFAULTS = {
   luckHeal:   [15, 0, 40, 1, 'Jackpot heals Vance'],
   jokerOdds:  [0.25, 0, 0.6, 0.05, 'Wild Card joker chance'],
   wildHeal:   [30, 0, 60, 1, 'Wild Card / All In heal'],
+  _a: 'All heroes',
+  guardCut:   [0.5, 0, 0.9, 0.05, 'Guard damage cut'],
+  healFade:   [0.5, 0, 1, 0.05, 'Heal power kept per heal in a row'],
   stunDelay:  [12, 0, 30, 1, 'Doubles stun delay'],
 };
 const S = {};
@@ -199,6 +203,8 @@ const BATTLES = {
 };
 
 // actions: target 'enemy' | 'ally' (any living hero, incl. self) | 'other' (ally not self) | 'self' | 'allEnemies'; w = turn weight (lower = acts again sooner)
+const GUARD = { id: 'guard', n: '🛡 Guard', t: 'self', d: 'Take less damage until your next turn and gain 1 ' };
+const RES = { monk: 'Chi', thief: 'charge', ranger: 'mana', gambler: 'Fortune' };
 const ACTIONS = {
   monk: [
     { id: 'flurry', n: 'Flurry', t: 'enemy', d: 'Two quick punches. +1 Chi.' },
@@ -228,6 +234,8 @@ const ACTIONS = {
   ],
 };
 
+for (const c in ACTIONS) ACTIONS[c].push({ ...GUARD, d: GUARD.d + RES[c] + '.' });
+
 // ---------- State ----------
 let units = [], now = 0, battle = 'party', logLines = [], pending = null, sel = null, solo = false;
 const $ = id => document.getElementById(id);
@@ -239,7 +247,7 @@ const rnd = n => Math.floor(Math.random() * n);
 function startBattle(key) {
   battle = key; const B = BATTLES[key]; solo = B.heroes.length === 1;
   const party = B.heroes.map((h, i) => ({ ...HEROES[h], art: h, id: 'p' + i, side: 'party', hp: HEROES[h].max,
-    chi: 0, charges: 0, mp: 3, fortune: 0, lucky: false, riposte: false, power: 0 }));
+    chi: 0, charges: 0, mp: 3, fortune: 0, guard: false, healStreak: 0, lucky: false, riposte: false, power: 0 }));
   const foes = B.foes.map((k, i) => {
     const e = ENEMIES[k], max = Math.round(e.max * S.enemyHp);
     const n = B.foes.filter(x => x === k).length, tag = n > 1 ? 'AB'[B.foes.slice(0, i).filter(x => x === k).length] : '';
@@ -360,6 +368,8 @@ function tagsOf(u) {
   if (u.exposed > 0) tags.push(`<span class="tag">💔Exposed ${u.exposed}</span>`);
   if (u.marked > 0) tags.push(`<span class="tag">🎯Marked ${u.marked}</span>`);
   if (u.delayed) tags.push('<span class="tag">⏳</span>');
+  if (u.guard) tags.push('<span class="tag">🛡Guard</span>');
+  if (u.healStreak > 0) tags.push(`<span class="tag">😮‍💨Heal x${Math.pow(S.healFade, u.healStreak).toFixed(2)}</span>`);
   if (u.side === 'enemy' && u.intent && u.hp > 0) {
     const [nm, , kind = ''] = u.intent, big = kind.includes('big') || kind === 'windup';
     tags.push(`<span class="tag ${big ? 'warn' : ''}">${big ? '⚠ ' : ''}${nm}${kind.includes('aoe') ? ' (all)' : ''}</span>`);
@@ -500,6 +510,7 @@ function damage(src, tgt, power, opts = {}) {
   if (opts.mult) d *= opts.mult;
   if (opts.crit) { d *= S.critMult; kind = 'crit'; }
   if (tgt.exposed > 0) d *= S.exposeMult;
+  if (tgt.guard) d *= 1 - S.guardCut;
   // Wren's dodge: charges decide the tier, a perfect dodge counters
   if (tgt.cls === 'thief' && src.side === 'enemy') {
     if (tgt.charges >= 2) {
@@ -562,13 +573,23 @@ function validTargets(u, a) {
   return [];
 }
 
+function gainRes(u) {
+  if (u.cls === 'monk') u.chi = Math.min(S.chiMax, u.chi + 1);
+  if (u.cls === 'thief') u.charges = Math.min(S.chargeMax, u.charges + 1);
+  if (u.cls === 'ranger') u.mp = Math.min(S.mpMax, u.mp + 1);
+  if (u.cls === 'gambler') u.fortune = Math.min(S.fortuneMax, u.fortune + 1);
+}
+// Heals in a row get weaker so a fight can't stall on heal spam; attacking resets it
+function healPower(u) { return Math.pow(S.healFade, u.healStreak++); }
 function doAction(u, a, tgt) {
   if (a.mp) u.mp -= S.roundCost;
+  if ((a.t === 'enemy' || a.t === 'allEnemies') && a.id !== 'mark') u.healStreak = 0;
   switch (a.id) {
     // Kai
     case 'flurry': damage(u, tgt, 0.55); damage(u, tgt, 0.55, { lag: 250 }); u.chi = Math.min(S.chiMax, u.chi + 1); break;
     case 'palm': { const full = u.chi >= S.chiMax; damage(u, tgt, 0.8 + S.chiPower * u.chi); if (full) breakWindup(tgt); u.chi = 0; break; }
-    case 'meditate': heal(u, u.max * S.medHeal); u.chi = Math.min(S.chiMax, u.chi + 1); log('Kai meditates.'); break;
+    case 'guard': u.guard = true; gainRes(u); log(`${u.name} guards.`); break;
+    case 'meditate': heal(u, u.max * S.medHeal * healPower(u)); u.chi = Math.min(S.chiMax, u.chi + 1); log('Kai meditates.'); break;
     case 'share': u.chi -= 1; heal(tgt, S.shareHeal); log(`Kai shares Chi with ${tgt.name}.`); break;
     // Wren
     case 'twin': damage(u, tgt, 0.6, { crit: rollCrit(u, tgt) }); damage(u, tgt, 0.6, { crit: rollCrit(u, tgt), lag: 250 }); break;
@@ -579,7 +600,7 @@ function doAction(u, a, tgt) {
     case 'shot': damage(u, tgt, 1); u.mp = Math.min(S.mpMax, u.mp + 1); break;
     case 'fire': damage(u, tgt, 1, { el: 'fire' }); if (tgt.hp > 0) tgt.burnT = 3; break;
     case 'ice': damage(u, tgt, 1, { el: 'ice' }); if (tgt.hp > 0) { pushBack(tgt, S.iceDelay); breakWindup(tgt); } break;
-    case 'mend': heal(tgt, S.mendHeal); log(`Sela fires a Mend Round at ${tgt === u ? 'herself' : tgt.name}.`); break;
+    case 'mend': heal(tgt, S.mendHeal * healPower(u)); log(`Sela fires a Mend Round at ${tgt === u ? 'herself' : tgt.name}.`); break;
     // Vance
     case 'coin': if (takeLuck(u) || Math.random() < 0.5) { log('Heads!'); damage(u, tgt, 1.4); } else { log('Tails...'); damage(u, tgt, 0.6); addFortune(u, 1); } break;
     case 'dice': {
@@ -662,6 +683,7 @@ async function enemyTurn(e) {
 
 // ---------- Player input ----------
 function startOfTurn(u) {
+  u.guard = false;
   if (u.cls === 'thief') u.charges = Math.min(S.chargeMax, u.charges + 1);
   if (u.cls === 'ranger') u.mp = Math.min(S.mpMax, u.mp + 1);
 }
@@ -669,7 +691,9 @@ function showMenu(u) {
   const info = { monk: `Chi ${u.chi}/${S.chiMax}`, thief: `◆${u.charges} charges · dodge ${dodgeTier(u)}`, ranger: `Mana ${u.mp}/${S.mpMax}`, gambler: `Fortune ${u.fortune}/${S.fortuneMax}` }[u.cls];
   $('who').innerHTML = `${u.face} ${u.name} the ${u.role} <span>${info}</span>`;
   $('desc').textContent = 'Pick an action.';
-  $('acts').replaceChildren(...ACTIONS[u.cls].filter(a => !(a.party && solo)).map(a => {
+  const list = ACTIONS[u.cls].filter(a => !(a.party && solo));
+  $('acts').style.gridTemplateColumns = list.length > 4 ? '1fr 1fr 1fr' : '1fr 1fr';
+  $('acts').replaceChildren(...list.map(a => {
     const b = document.createElement('button');
     b.textContent = a.n + (a.mp ? ` (${S.roundCost}MP)` : a.id === 'loaded' ? ` (${S.loadedCost}🍀)` : '');
     b.disabled = !canUse(u, a);
