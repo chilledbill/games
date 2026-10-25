@@ -186,12 +186,12 @@ const HEROES = {
 };
 // Enemy moves: [name, power, kind]. kind: 'aoe' hits everyone, 'windup' telegraphs, 'big' is the telegraphed hit, 'cheat' steals Fortune
 const ENEMIES = {
-  golem:  { name: 'Stone Golem', face: '🗿', max: 700, atk: 30, def: 8, spd: 7, cycle: [['Slam', 1], ['Slam', 1], ['Rumble', 0, 'windup'], ['QUAKE', 1.7, 'aoe big']] },
-  bandit: { name: 'Bandit', face: '🥷', max: 130, atk: 22, def: 3, spd: 12, moves: [['Slash', 1], ['Slash', 1], ['Dirty Kick', 1.3]] },
-  brute:  { name: 'Brute', face: '👹', max: 230, atk: 21, def: 5, spd: 9, cycle: [['Punch', 1], ['Punch', 1], ['Wind up', 0, 'windup'], ['HAYMAKER', 2, 'big']] },
-  duelist:{ name: 'Duelist', face: '🤺', max: 230, atk: 22, def: 4, spd: 15, cycle: [['Slash', 1], ['Feint', 0.6], ['En garde', 0, 'windup'], ['LUNGE', 2.6, 'big']] },
-  wyrm:   { name: 'Fire Wyrm', face: '🐉', max: 280, atk: 23, def: 5, spd: 10, weak: { ice: 1.6, fire: 0.4 }, cycle: [['Bite', 1], ['Ember', 1.2], ['Inhale', 0, 'windup'], ['INFERNO', 2.3, 'big']] },
-  shark:  { name: 'Card Shark', face: '🃏', max: 200, atk: 19, def: 4, spd: 10, cycle: [['Deal', 1], ['Cheat', 0.5, 'cheat'], ['Shuffle', 0, 'windup'], ['ROYAL FLUSH', 2, 'big']] },
+  golem:  { name: 'Stone Golem', face: '🗿', max: 420, atk: 30, def: 8, spd: 7, cycle: [['Slam', 1], ['Slam', 1], ['Rumble', 0, 'windup'], ['QUAKE', 1.7, 'aoe big']] },
+  bandit: { name: 'Bandit', face: '🥷', max: 80, atk: 22, def: 3, spd: 12, moves: [['Slash', 1], ['Slash', 1], ['Dirty Kick', 1.3]] },
+  brute:  { name: 'Brute', face: '👹', max: 120, atk: 21, def: 5, spd: 9, cycle: [['Punch', 1], ['Punch', 1], ['Wind up', 0, 'windup'], ['HAYMAKER', 2, 'big']] },
+  duelist:{ name: 'Duelist', face: '🤺', max: 120, atk: 22, def: 4, spd: 15, cycle: [['Slash', 1], ['Feint', 0.6], ['En garde', 0, 'windup'], ['LUNGE', 2.6, 'big']] },
+  wyrm:   { name: 'Fire Wyrm', face: '🐉', max: 140, atk: 23, def: 5, spd: 10, weak: { ice: 1.6, fire: 0.4 }, cycle: [['Bite', 1], ['Ember', 1.2], ['Inhale', 0, 'windup'], ['INFERNO', 2.3, 'big']] },
+  shark:  { name: 'Card Shark', face: '🃏', max: 95, atk: 19, def: 4, spd: 10, cycle: [['Deal', 1], ['Cheat', 0.5, 'cheat'], ['Shuffle', 0, 'windup'], ['ROYAL FLUSH', 2, 'big']] },
 };
 const BATTLES = {
   party: { title: 'Party', label: 'Party battle', sub: 'All four vs a Stone Golem that telegraphs QUAKE.', heroes: ['kai', 'wren', 'sela', 'vance'], foes: ['bandit', 'golem', 'bandit'] },
