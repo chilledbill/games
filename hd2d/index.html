@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>HD-2D Battle Prototype</title>
+<style>
+  :root { --bg:#12141c; --panel:#1c2030; --panel2:#262b40; --text:#e8ebf5; --dim:#8a92aa; --accent:#6ee7b7; --enemy:#f87171; --gold:#fbbf24; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--text); font:14px system-ui,sans-serif; overflow:hidden; user-select:none; }
+  #app { display:flex; flex-direction:column; height:100%; max-width:560px; margin:0 auto; padding:8px; gap:6px; }
+  #top { display:flex; align-items:center; gap:6px; }
+  #title { color:var(--dim); font-size:12px; white-space:nowrap; max-width:70px; overflow:hidden; text-overflow:ellipsis; }
+  #order { display:flex; gap:4px; overflow:hidden; flex:1; }
+  .chip { flex:0 0 auto; width:34px; height:34px; border-radius:8px; display:flex; align-items:center; justify-content:center; font-size:18px; background:var(--panel); border:2px solid #3a4160; position:relative; }
+  .chip.enemy { border-color:#7f3a3a; }
+  .chip.now { border-color:var(--gold); transform:scale(1.08); }
+  .chip small { position:absolute; bottom:-2px; right:1px; font-size:9px; color:var(--dim); }
+  #top button { width:36px; height:36px; border-radius:8px; border:1px solid #445; background:var(--panel); color:var(--text); font-size:18px; flex:0 0 auto; }
+  .row { display:grid; gap:6px; justify-content:center; }
+  .card { background:var(--panel); border-radius:10px; padding:6px; border:2px solid transparent; position:relative; min-height:100px; transition:opacity .3s, transform .15s; }
+  .card .face { font-size:30px; text-align:center; line-height:1.1; }
+  .card .nm { font-size:12px; font-weight:600; text-align:center; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bar { height:6px; background:#0b0d14; border-radius:3px; overflow:hidden; margin-top:3px; }
+  .bar i { display:block; height:100%; background:var(--accent); transition:width .25s; }
+  .enemy .bar i { background:var(--enemy); }
+  .hpn { font-size:10px; color:var(--dim); text-align:center; }
+  .tags { display:flex; flex-wrap:wrap; gap:2px; justify-content:center; margin-top:2px; min-height:16px; }
+  .tag { font-size:10px; padding:1px 4px; border-radius:4px; background:var(--panel2); }
+  .tag.warn { background:#5b1d1d; color:#fecaca; animation:blink 1s infinite; }
+  .tag.res { background:#1e3a4a; color:#bae6fd; }
+  @keyframes blink { 50% { opacity:.55; } }
+  .card.active { border-color:var(--gold); transform:translateY(-3px); }
+  .card.target { border-color:var(--accent); box-shadow:0 0 0 2px rgba(110,231,183,.35); cursor:pointer; }
+  .card.dead { opacity:.3; }
+  .card.hit { animation:shake .25s; }
+  @keyframes shake { 25% { transform:translateX(-4px); } 75% { transform:translateX(4px); } }
+  .pop { position:absolute; left:50%; top:20px; transform:translateX(-50%); font-weight:800; font-size:18px; pointer-events:none; animation:pop .9s forwards; text-shadow:0 2px 3px #000; white-space:nowrap; z-index:5; }
+  .pop.heal { color:#86efac; } .pop.dmg { color:#fff; } .pop.info { color:var(--gold); font-size:13px; } .pop.crit { color:#fb923c; font-size:22px; }
+  @keyframes pop { from { opacity:1; margin-top:0; } to { opacity:0; margin-top:-34px; } }
+  #stage { flex:1; display:flex; flex-direction:column; justify-content:space-between; padding:10px 6px; border-radius:12px; background:linear-gradient(#1d2540, #2a3350 55%, #34402e 56%, #222a1e); }
+  #stage .card { background:rgba(20,24,36,.82); }
+  #log { height:62px; background:var(--panel); border-radius:10px; padding:6px 8px; font-size:12px; color:var(--dim); overflow:hidden; display:flex; flex-direction:column; justify-content:flex-end; }
+  #log div:last-child { color:var(--text); }
+  #menu { background:var(--panel); border-radius:10px; padding:8px; min-height:170px; }
+  #who { font-weight:700; margin-bottom:6px; display:flex; justify-content:space-between; gap:6px; }
+  #who span { color:var(--dim); font-weight:400; font-size:12px; text-align:right; }
+  #acts { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  #acts button { padding:11px 6px; font-size:14px; border-radius:8px; border:1px solid #3a4160; background:var(--panel2); color:var(--text); }
+  #acts button:disabled { opacity:.35; }
+  #acts button.sel { border-color:var(--accent); }
+  #desc { font-size:12px; color:var(--dim); margin-top:6px; min-height:16px; }
+  #panel { position:fixed; top:52px; right:8px; width:min(280px,80vw); max-height:calc(100% - 64px); overflow:auto; display:none; background:rgba(20,24,36,.97); border:1px solid #445; border-radius:10px; padding:10px; font-size:12px; z-index:20; }
+  #panel.show { display:block; }
+  #panel h4 { margin:12px 0 0; color:var(--gold); }
+  #panel label { display:block; margin:8px 0 2px; } #panel label b { float:right; color:#8fd; font-weight:500; }
+  #panel input { width:100%; margin:0; }
+  #panel button { margin-top:10px; width:100%; padding:8px; background:#223; color:#cfd6e6; border:1px solid #556; border-radius:6px; }
+  #over { position:fixed; inset:0; background:rgba(0,0,0,.75); display:none; align-items:center; justify-content:center; z-index:30; }
+  #over.show { display:flex; }
+  #over > div { background:var(--panel); padding:20px; border-radius:14px; text-align:center; width:min(340px,92vw); }
+  #over h2 { margin:0 0 8px; } #over p { color:var(--dim); margin:0 0 12px; }
+  #ovBtns { display:flex; flex-direction:column; gap:8px; }
+  #ovBtns button { padding:12px 16px; font-size:15px; border-radius:8px; border:1px solid #3a4160; background:var(--panel2); color:var(--text); text-align:left; }
+  #ovBtns button.main { background:var(--accent); color:#0b1d15; font-weight:700; border:none; text-align:center; }
+  #ovBtns button.main small { color:#14532d; }
+  #ovBtns button small { display:block; color:var(--dim); font-size:11px; margin-top:2px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="top"><span id="title"></span><div id="order"></div><button id="home">☰</button><button id="gear">⚙</button></div>
+  <div id="stage"><div id="enemies" class="row"></div><div id="party" class="row"></div></div>
+  <div id="log"></div>
+  <div id="menu"><div id="who"></div><div id="acts"></div><div id="desc"></div></div>
+</div>
+<div id="panel"></div>
+<div id="over"><div><h2 id="ovT"></h2><p id="ovP"></p><div id="ovBtns"></div></div></div>
+<script>
+// ---------- Tunable settings (sliders) ----------
+const DEFAULTS = {
+  _g: 'General',
+  partyDmg:   [1, 0.5, 2, 0.05, 'Hero damage x'],
+  enemyDmg:   [1, 0.5, 2, 0.05, 'Enemy damage x'],
+  enemyHp:    [1, 0.5, 2, 0.05, 'Enemy HP x (next battle)'],
+  speed:      [1, 0.3, 2, 0.1, 'Animation time x'],
+  _k: 'Kai (Monk)',
+  chiMax:     [3, 1, 5, 1, 'Max Chi'],
+  medHeal:    [0.2, 0, 0.5, 0.01, 'Meditate heal (of max HP)'],
+  chiPower:   [0.5, 0, 1.5, 0.05, 'Palm Strike bonus per Chi'],
+  shareHeal:  [25, 0, 60, 1, 'Share Chi ally heal'],
+  _w: 'Wren (Thief)',
+  chargeMax:  [3, 1, 5, 1, 'Max charges'],
+  baseDodge:  [0.3, 0, 1, 0.05, 'Dodge chance with 0 charges'],
+  partialCut: [0.5, 0, 1, 0.05, 'Partial dodge damage cut'],
+  dodgeHeal:  [10, 0, 40, 1, 'Perfect dodge heal'],
+  critRate:   [0.25, 0, 1, 0.05, 'Crit chance'],
+  critMult:   [2, 1, 3, 0.1, 'Crit damage x'],
+  exposeMult: [1.3, 1, 2, 0.05, 'Exposed: damage taken x'],
+  markTurns:  [2, 1, 4, 1, 'Mark lasts (enemy turns)'],
+  _s: 'Sela (Ranger)',
+  mpMax:      [5, 2, 8, 1, 'Max mana'],
+  roundCost:  [2, 1, 4, 1, 'Magic round cost'],
+  mendHeal:   [35, 0, 80, 1, 'Mend Round heal'],
+  burnDmg:    [9, 0, 25, 1, 'Burn per turn'],
+  iceDelay:   [8, 0, 25, 1, 'Ice Round delay'],
+  _v: 'Vance (Gambler)',
+  fortuneMax: [5, 2, 8, 1, 'Max Fortune'],
+  loadedCost: [2, 1, 5, 1, 'Loaded Dice Fortune cost'],
+  donOdds:    [0.5, 0.1, 0.9, 0.05, 'Double or Nothing hit chance'],
+  luckHeal:   [15, 0, 40, 1, 'Jackpot heals Vance'],
+  jokerOdds:  [0.25, 0, 0.6, 0.05, 'Wild Card joker chance'],
+  wildHeal:   [30, 0, 60, 1, 'Wild Card / All In heal'],
+  stunDelay:  [12, 0, 30, 1, 'Doubles stun delay'],
+};
+const S = {};
+for (const k in DEFAULTS) if (k[0] !== '_') S[k] = DEFAULTS[k][0];
+try { Object.assign(S, JSON.parse(localStorage.hd2dS || '{}')); } catch (e) {}
+
+const panel = document.getElementById('panel');
+function buildPanel() {
+  panel.innerHTML = '';
+  for (const k in DEFAULTS) {
+    if (k[0] === '_') { const h = document.createElement('h4'); h.textContent = DEFAULTS[k]; panel.append(h); continue; }
+    const [, min, max, step, name] = DEFAULTS[k];
+    const l = document.createElement('label');
+    const b = document.createElement('b'); b.textContent = S[k];
+    l.append(name, b);
+    const i = document.createElement('input');
+    i.type = 'range'; i.min = min; i.max = max; i.step = step; i.value = S[k];
+    i.oninput = () => { S[k] = +i.value; b.textContent = S[k]; try { localStorage.hd2dS = JSON.stringify(S); } catch (e) {} render(); };
+    panel.append(l, i);
+  }
+  const r = document.createElement('button'); r.textContent = 'Reset to defaults';
+  r.onclick = () => { for (const k in DEFAULTS) if (k[0] !== '_') S[k] = DEFAULTS[k][0]; try { delete localStorage.hd2dS; } catch (e) {} buildPanel(); };
+  const rs = document.createElement('button'); rs.textContent = 'Restart this battle';
+  rs.onclick = () => { panel.classList.remove('show'); startBattle(battle); };
+  panel.append(r, rs);
+}
+buildPanel();
+document.getElementById('gear').onclick = () => panel.classList.toggle('show');
+document.getElementById('home').onclick = () => { panel.classList.remove('show'); showSelect(); };
+
+// ---------- Data ----------
+const HEROES = {
+  kai:   { cls: 'monk',    name: 'Kai',   face: '👊', max: 125, atk: 16, def: 5, spd: 14, role: 'Monk' },
+  wren:  { cls: 'thief',   name: 'Wren',  face: '🗡️', max: 95,  atk: 14, def: 4, spd: 16, role: 'Thief' },
+  sela:  { cls: 'ranger',  name: 'Sela',  face: '🔫', max: 105, atk: 15, def: 5, spd: 11, role: 'Ranger' },
+  vance: { cls: 'gambler', name: 'Vance', face: '🎲', max: 130, atk: 17, def: 5, spd: 10, role: 'Gambler' },
+};
+// Enemy moves: [name, power, kind]. kind: 'aoe' hits everyone, 'windup' telegraphs, 'big' is the telegraphed hit, 'cheat' steals Fortune
+const ENEMIES = {
+  golem:  { name: 'Stone Golem', face: '🗿', max: 700, atk: 30, def: 8, spd: 7, cycle: [['Slam', 1], ['Slam', 1], ['Rumble', 0, 'windup'], ['QUAKE', 1.7, 'aoe big']] },
+  bandit: { name: 'Bandit', face: '🥷', max: 130, atk: 22, def: 3, spd: 12, moves: [['Slash', 1], ['Slash', 1], ['Dirty Kick', 1.3]] },
+  brute:  { name: 'Brute', face: '👹', max: 300, atk: 26, def: 5, spd: 9, cycle: [['Punch', 1], ['Punch', 1], ['Wind up', 0, 'windup'], ['HAYMAKER', 2.2, 'big']] },
+  duelist:{ name: 'Duelist', face: '🤺', max: 230, atk: 22, def: 4, spd: 15, cycle: [['Slash', 1], ['Feint', 0.6], ['En garde', 0, 'windup'], ['LUNGE', 2.6, 'big']] },
+  wyrm:   { name: 'Fire Wyrm', face: '🐉', max: 280, atk: 23, def: 5, spd: 10, weak: { ice: 1.6, fire: 0.4 }, cycle: [['Bite', 1], ['Ember', 1.2], ['Inhale', 0, 'windup'], ['INFERNO', 2.3, 'big']] },
+  shark:  { name: 'Card Shark', face: '🃏', max: 200, atk: 19, def: 4, spd: 10, cycle: [['Deal', 1], ['Cheat', 0.5, 'cheat'], ['Shuffle', 0, 'windup'], ['ROYAL FLUSH', 2, 'big']] },
+};
+const BATTLES = {
+  party: { title: 'Party', label: 'Party battle', sub: 'All four vs a Stone Golem that telegraphs QUAKE.', heroes: ['kai', 'wren', 'sela', 'vance'], foes: ['bandit', 'golem', 'bandit'] },
+  kai:   { title: 'Kai solo', label: '👊 Kai vs Brute', sub: 'Build Chi, Meditate to heal, Palm Strike at full Chi breaks the wind-up.', heroes: ['kai'], foes: ['brute'] },
+  wren:  { title: 'Wren solo', label: '🗡️ Wren vs Duelist', sub: 'Save 2 charges for a perfect dodge on LUNGE, then crit the exposed Duelist.', heroes: ['wren'], foes: ['duelist'] },
+  sela:  { title: 'Sela solo', label: '🔫 Sela vs Fire Wyrm', sub: 'Ice Rounds hit hard and break INFERNO. Mend yourself when low.', heroes: ['sela'], foes: ['wyrm'] },
+  vance: { title: 'Vance solo', label: '🎲 Vance vs Card Shark', sub: 'Backfires fill Fortune. The Shark cheats and steals it. Know when to go All In.', heroes: ['vance'], foes: ['shark'] },
+};
+
+// actions: target 'enemy' | 'ally' (any living hero, incl. self) | 'other' (ally not self) | 'self' | 'allEnemies'; w = turn weight (lower = acts again sooner)
+const ACTIONS = {
+  monk: [
+    { id: 'flurry', n: 'Flurry', t: 'enemy', d: 'Two quick punches. +1 Chi.' },
+    { id: 'palm', n: 'Palm Strike', t: 'enemy', d: 'Spends all Chi for a big hit. At full Chi it breaks a wind-up.' },
+    { id: 'meditate', n: 'Meditate', t: 'self', w: 0.8, d: 'Heal yourself and gain 1 Chi. Quick action.' },
+    { id: 'share', n: 'Share Chi', t: 'other', party: true, chi: 1, d: 'Spend 1 Chi to heal an ally.' },
+  ],
+  thief: [
+    { id: 'twin', n: 'Twin Slash', t: 'enemy', d: 'Two hits that can crit. Exposed targets get crit more.' },
+    { id: 'shred', n: 'Shred', t: 'enemy', d: 'Light hit that Exposes the target (takes more damage, easier to crit).' },
+    { id: 'mark', n: 'Mark', t: 'enemy', w: 0.6, party: true, d: 'The target can only attack Wren, even its all-party attacks. Quick action.' },
+    { id: 'dance', n: 'Blade Dance', t: 'enemy', needCharge: true, d: 'Spend all charges: one hit per charge plus one.' },
+  ],
+  ranger: [
+    { id: 'shot', n: 'Shoot', t: 'enemy', d: 'Plain shot. +1 extra mana.' },
+    { id: 'fire', n: '🔥 Fire Round', t: 'enemy', mp: true, d: 'Burns the target for 3 turns.' },
+    { id: 'ice', n: '❄ Ice Round', t: 'enemy', mp: true, d: 'Delays the target and breaks a wind-up.' },
+    { id: 'mend', n: '💚 Mend Round', t: 'ally', mp: true, d: 'Shoot an ally, or yourself, to heal.' },
+  ],
+  gambler: [
+    { id: 'coin', n: 'Coin Flip', t: 'enemy', d: 'Heads: bonus damage. Tails: weak hit, +1 Fortune.' },
+    { id: 'dice', n: 'Roll the Dice', t: 'enemy', d: 'Damage from 2 dice. Doubles stun and break wind-ups. Low roll: +1 Fortune.' },
+    { id: 'wild', n: 'Wild Card', t: 'enemy', d: 'Random: big hit, party heal, party power-up, or a Joker that hurts you (+2 Fortune).' },
+    { id: 'don', n: 'Double or Nothing', t: 'enemy', d: 'Hit lands: double damage. Miss: you get hurt, +2 Fortune. Better odds on Exposed foes.' },
+    { id: 'loaded', n: 'Loaded Dice', t: 'self', w: 0.6, d: 'Spend Fortune: your next roll is a guaranteed jackpot. Quick action.' },
+    { id: 'allin', n: 'All In', t: 'allEnemies', d: 'Spend all Fortune. More Fortune = better odds of a jackpot that hits all foes and heals the party.' },
+  ],
+};
+
+// ---------- State ----------
+let units = [], now = 0, battle = 'party', logLines = [], pending = null, sel = null, solo = false;
+const $ = id => document.getElementById(id);
+const wait = ms => new Promise(r => setTimeout(r, ms * S.speed));
+const alive = side => units.filter(u => u.side === side && u.hp > 0);
+const delay = u => 100 / u.spd;
+const rnd = n => Math.floor(Math.random() * n);
+
+function startBattle(key) {
+  battle = key; const B = BATTLES[key]; solo = B.heroes.length === 1;
+  const party = B.heroes.map((h, i) => ({ ...HEROES[h], id: 'p' + i, side: 'party', hp: HEROES[h].max,
+    chi: 0, charges: 0, mp: 3, fortune: 0, lucky: false, riposte: false, power: 0 }));
+  const foes = B.foes.map((k, i) => {
+    const e = ENEMIES[k], max = Math.round(e.max * S.enemyHp);
+    const n = B.foes.filter(x => x === k).length, tag = n > 1 ? 'AB'[B.foes.slice(0, i).filter(x => x === k).length] : '';
+    return { ...e, name: e.name + (tag ? ' ' + tag : ''), tag, id: 'e' + i, side: 'enemy', hp: max, max, burnT: 0, exposed: 0, marked: 0, step: 0, intent: null, charged: false, delayed: false };
+  });
+  units = [...party, ...foes];
+  units.forEach((u, i) => { u.ct = delay(u) * (0.3 + 0.1 * (i % 3)); u.idx = i; });
+  foes.forEach(pickIntent);
+  now = 0; logLines = []; pending = null; sel = null;
+  $('enemies').style.gridTemplateColumns = `repeat(${foes.length}, minmax(0, ${foes.length > 1 ? '1fr' : '140px'}))`;
+  $('party').style.gridTemplateColumns = `repeat(${party.length}, minmax(0, ${party.length > 1 ? '1fr' : '140px'}))`;
+  $('over').classList.remove('show');
+  log(`${B.label}: ${foes.map(f => f.name).join(', ')}`);
+  render(); loop();
+}
+
+// ---------- Turn order ----------
+function nextActor() { return units.filter(u => u.hp > 0).sort((a, b) => a.ct - b.ct || a.idx - b.idx)[0]; }
+function forecast(n) {
+  const sim = units.filter(u => u.hp > 0).map(u => ({ u, ct: u.ct })), out = [];
+  for (let i = 0; i < n && sim.length; i++) {
+    sim.sort((a, b) => a.ct - b.ct || a.u.idx - b.u.idx);
+    out.push(sim[0].u); sim[0].ct += delay(sim[0].u);
+  }
+  return out;
+}
+
+// ---------- Rendering ----------
+function log(t) { logLines.push(t); if (logLines.length > 4) logLines.shift(); $('log').innerHTML = logLines.map(l => `<div>${l}</div>`).join(''); }
+const pips = (n, max, on, off) => on.repeat(Math.min(n, max)) + off.repeat(Math.max(0, max - n));
+function dodgeTier(u) { return u.charges >= 2 ? 'Perfect' : u.charges === 1 ? 'Partial' : Math.round(S.baseDodge * 100) + '%'; }
+function card(u) {
+  const el = document.createElement('div');
+  el.className = `card ${u.side}` + (u.hp <= 0 ? ' dead' : '');
+  el.id = 'c' + u.id;
+  const tags = [];
+  if (u.cls === 'monk') tags.push(`<span class="tag res">Chi ${pips(u.chi, S.chiMax, '●', '○')}</span>`);
+  if (u.cls === 'thief') tags.push(`<span class="tag res">◆${u.charges} ${dodgeTier(u)}</span>`);
+  if (u.cls === 'ranger') tags.push(`<span class="tag res">MP ${u.mp}/${S.mpMax}</span>`);
+  if (u.cls === 'gambler') tags.push(`<span class="tag res">🍀${u.fortune}/${S.fortuneMax}</span>`);
+  if (u.riposte) tags.push('<span class="tag">⚔Counter</span>');
+  if (u.lucky) tags.push('<span class="tag">🎯Jackpot</span>');
+  if (u.power > 0) tags.push(`<span class="tag">💪${u.power}</span>`);
+  if (u.burnT > 0) tags.push(`<span class="tag">🔥${u.burnT}</span>`);
+  if (u.exposed > 0) tags.push(`<span class="tag">💔Exposed ${u.exposed}</span>`);
+  if (u.marked > 0) tags.push(`<span class="tag">🎯Marked ${u.marked}</span>`);
+  if (u.delayed) tags.push('<span class="tag">⏳</span>');
+  if (u.side === 'enemy' && u.intent && u.hp > 0) {
+    const [nm, , kind = ''] = u.intent, big = kind.includes('big') || kind === 'windup';
+    tags.push(`<span class="tag ${big ? 'warn' : ''}">${big ? '⚠ ' : ''}${nm}${kind.includes('aoe') ? ' (all)' : ''}</span>`);
+  }
+  el.innerHTML = `<div class="face">${u.face}</div><div class="nm">${u.name}</div>
+    <div class="bar"><i style="width:${Math.max(0, u.hp / u.max * 100)}%"></i></div>
+    <div class="hpn">${Math.max(0, u.hp)}/${u.max}</div><div class="tags">${tags.join('')}</div>`;
+  el.onclick = () => pickTarget(u);
+  return el;
+}
+function render() {
+  if (!units.length) return;
+  $('title').textContent = BATTLES[battle].title;
+  $('enemies').replaceChildren(...units.filter(u => u.side === 'enemy').map(card));
+  $('party').replaceChildren(...units.filter(u => u.side === 'party').map(card));
+  const act = units.find(u => u.acting);
+  if (act) $('c' + act.id)?.classList.add('active');
+  if (sel) validTargets(sel.u, sel.a).forEach(t => $('c' + t.id)?.classList.add('target'));
+  $('order').replaceChildren(...forecast(10).map((u, i) => {
+    const c = document.createElement('div');
+    c.className = 'chip ' + u.side + (i === 0 && act === u ? ' now' : '');
+    c.innerHTML = `${u.face}<small>${u.tag || ''}</small>`;
+    return c;
+  }));
+}
+function pop(u, text, kind) {
+  const el = $('c' + u.id); if (!el) return;
+  const p = document.createElement('div'); p.className = 'pop ' + kind; p.textContent = text;
+  el.append(p);
+  if (kind === 'dmg' || kind === 'crit') { el.classList.remove('hit'); void el.offsetWidth; el.classList.add('hit'); }
+  setTimeout(() => p.remove(), 900);
+}
+
+// ---------- Combat math ----------
+function damage(src, tgt, power, opts = {}) {
+  if (tgt.hp <= 0) return 0;
+  let d = src.atk * power * (0.9 + Math.random() * 0.2), kind = 'dmg';
+  if (src.side === 'party') d *= S.partyDmg * (1 + 0.25 * (src.power > 0));
+  else d *= S.enemyDmg;
+  if (opts.el && tgt.weak && tgt.weak[opts.el]) d *= tgt.weak[opts.el];
+  if (opts.mult) d *= opts.mult;
+  if (opts.crit) { d *= S.critMult; kind = 'crit'; }
+  if (tgt.exposed > 0) d *= S.exposeMult;
+  // Wren's dodge: charges decide the tier, a perfect dodge counters
+  if (tgt.cls === 'thief' && src.side === 'enemy') {
+    if (tgt.charges >= 2) {
+      tgt.charges -= 2; pop(tgt, 'PERFECT', 'info');
+      src.exposed = 2; tgt.riposte = true; heal(tgt, S.dodgeHeal, true);
+      log(`${tgt.name} perfectly dodges! ${src.name} is Exposed.`); return 0;
+    }
+    if (tgt.charges === 1 || Math.random() < S.baseDodge) {
+      if (tgt.charges === 1) tgt.charges = 0;
+      d *= 1 - S.partialCut; pop(tgt, 'dodge', 'info');
+    }
+  }
+  d = Math.max(1, Math.round(d - tgt.def * 0.5));
+  tgt.hp = Math.max(0, tgt.hp - d);
+  setTimeout(() => pop(tgt, d + (kind === 'crit' ? '!' : ''), kind), opts.lag || 0);
+  if (tgt.hp <= 0) { log(`${tgt.name} falls!`); tgt.burnT = 0; tgt.exposed = 0; }
+  return d;
+}
+function heal(u, n, quiet) {
+  if (u.hp <= 0) return 0;
+  const h = Math.min(u.max - u.hp, Math.round(n));
+  u.hp += h;
+  setTimeout(() => pop(u, '+' + h, 'heal'), quiet ? 300 : 0);
+  return h;
+}
+function breakWindup(e) {
+  if (e.hp <= 0 || !e.charged) return false;
+  e.charged = false; e.step = 0; pickIntent(e);
+  pop(e, 'BREAK', 'info'); log(`${e.name}'s attack is broken!`);
+  return true;
+}
+function pushBack(u, amt) { u.ct += amt; u.delayed = true; }
+function rollCrit(u, tgt) {
+  if (u.riposte) { u.riposte = false; return true; }
+  return Math.random() < S.critRate + (tgt.exposed > 0 ? 0.25 : 0);
+}
+// Gambler: a jackpot is guaranteed when Loaded or when the Fortune meter is full
+function takeLuck(u) {
+  if (u.fortune >= S.fortuneMax && !u.lucky) { u.fortune = 0; u.lucky = true; log('Fortune is full: jackpot!'); }
+  if (!u.lucky) return false;
+  u.lucky = false; heal(u, S.luckHeal, true);
+  return true;
+}
+function addFortune(u, n) { u.fortune = Math.min(S.fortuneMax, u.fortune + n); pop(u, `+${n}🍀`, 'info'); }
+
+function canUse(u, a) {
+  if (a.party && solo) return false;
+  if (a.chi && u.chi < a.chi) return false;
+  if (a.needCharge && u.charges < 1) return false;
+  if (a.mp && u.mp < S.roundCost) return false;
+  if (a.id === 'loaded' && (u.fortune < S.loadedCost || u.lucky)) return false;
+  if (a.id === 'allin' && u.fortune < 1 && !u.lucky) return false;
+  if (a.id === 'palm' && u.chi < 1) return false;
+  return true;
+}
+function validTargets(u, a) {
+  if (a.t === 'enemy') return alive('enemy');
+  if (a.t === 'ally') return alive('party');
+  if (a.t === 'other') return alive('party').filter(p => p !== u);
+  return [];
+}
+
+function doAction(u, a, tgt) {
+  if (a.mp) u.mp -= S.roundCost;
+  switch (a.id) {
+    // Kai
+    case 'flurry': damage(u, tgt, 0.55); damage(u, tgt, 0.55, { lag: 250 }); u.chi = Math.min(S.chiMax, u.chi + 1); break;
+    case 'palm': { const full = u.chi >= S.chiMax; damage(u, tgt, 0.8 + S.chiPower * u.chi); if (full) breakWindup(tgt); u.chi = 0; break; }
+    case 'meditate': heal(u, u.max * S.medHeal); u.chi = Math.min(S.chiMax, u.chi + 1); log('Kai meditates.'); break;
+    case 'share': u.chi -= 1; heal(tgt, S.shareHeal); log(`Kai shares Chi with ${tgt.name}.`); break;
+    // Wren
+    case 'twin': damage(u, tgt, 0.6, { crit: rollCrit(u, tgt) }); damage(u, tgt, 0.6, { crit: rollCrit(u, tgt), lag: 250 }); break;
+    case 'shred': damage(u, tgt, 0.5, { crit: rollCrit(u, tgt) }); if (tgt.hp > 0) { tgt.exposed = 3; pop(tgt, 'EXPOSED', 'info'); } break;
+    case 'mark': tgt.marked = S.markTurns; pop(tgt, 'MARKED', 'info'); log(`${tgt.name} is Marked and will only attack Wren.`); break;
+    case 'dance': { const n = u.charges + 1; for (let i = 0; i < n; i++) damage(u, tgt, 0.55, { crit: rollCrit(u, tgt), lag: i * 200 }); u.charges = 0; log(`Blade Dance x${n}!`); break; }
+    // Sela
+    case 'shot': damage(u, tgt, 1); u.mp = Math.min(S.mpMax, u.mp + 1); break;
+    case 'fire': damage(u, tgt, 1, { el: 'fire' }); if (tgt.hp > 0) tgt.burnT = 3; break;
+    case 'ice': damage(u, tgt, 1, { el: 'ice' }); if (tgt.hp > 0) { pushBack(tgt, S.iceDelay); breakWindup(tgt); } break;
+    case 'mend': heal(tgt, S.mendHeal); log(`Sela fires a Mend Round at ${tgt === u ? 'herself' : tgt.name}.`); break;
+    // Vance
+    case 'coin': if (takeLuck(u) || Math.random() < 0.5) { log('Heads!'); damage(u, tgt, 1.4); } else { log('Tails...'); damage(u, tgt, 0.6); addFortune(u, 1); } break;
+    case 'dice': {
+      let a1 = rnd(6) + 1, a2 = rnd(6) + 1;
+      if (takeLuck(u)) a1 = a2 = 6;
+      log(`🎲 ${a1} + ${a2}${a1 === a2 ? ' DOUBLES!' : ''}`);
+      damage(u, tgt, (a1 + a2) / 7);
+      if (a1 === a2 && tgt.hp > 0) { pushBack(tgt, S.stunDelay); pop(tgt, 'STUN', 'info'); breakWindup(tgt); }
+      if (a1 + a2 <= 4) addFortune(u, 1);
+      break;
+    }
+    case 'wild': {
+      const lucky = takeLuck(u), hurt = alive('party').some(p => p.hp / p.max < 0.4);
+      const pick = lucky ? (hurt ? 'heal' : 'hit') : Math.random() < S.jokerOdds ? 'joker' : ['hit', 'heal', 'power'][rnd(3)];
+      if (pick === 'hit') { log('🃏 Ace of Spades: big hit!'); damage(u, tgt, 2.2); }
+      if (pick === 'heal') { log('🃏 Queen of Hearts: party heal!'); alive('party').forEach(p => heal(p, S.wildHeal)); }
+      if (pick === 'power') { log('🃏 King of Clubs: party power up!'); alive('party').forEach(p => { p.power = 3; pop(p, 'POWER', 'info'); }); }
+      if (pick === 'joker') { log('🃏 Joker! It backfires.'); damage({ ...u, side: 'enemy' }, u, 0.8); addFortune(u, 2); }
+      break;
+    }
+    case 'don':
+      if (takeLuck(u) || Math.random() < S.donOdds + (tgt.exposed > 0 ? 0.25 : 0)) { log('Double!'); damage(u, tgt, 2, { crit: false, mult: 1.2 }); }
+      else { log('Nothing... Vance takes the hit.'); damage({ ...u, side: 'enemy' }, u, 0.9); addFortune(u, 2); }
+      break;
+    case 'loaded': u.fortune -= S.loadedCost; u.lucky = true; log('Vance loads the dice.'); break;
+    case 'allin': {
+      const odds = u.fortune / S.fortuneMax, jackpot = takeLuck(u) || Math.random() < odds;
+      u.fortune = 0;
+      if (jackpot) { log('ALL IN: JACKPOT!'); alive('enemy').forEach((e, i) => damage(u, e, 1.8, { lag: i * 150 })); alive('party').forEach(p => heal(p, S.wildHeal, true)); }
+      else { log(`All In misses (${Math.round(odds * 100)}% odds).`); alive('enemy').forEach(e => damage(u, e, 0.6)); }
+      break;
+    }
+  }
+  return a.w || 1;
+}
+
+// ---------- Enemy AI ----------
+function pickIntent(e) {
+  if (e.cycle) { e.intent = e.cycle[e.step % e.cycle.length]; e.step++; }
+  else e.intent = e.moves[rnd(e.moves.length)];
+}
+function pickVictim(e) {
+  const p = alive('party');
+  if (e.marked > 0) { const w = p.find(x => x.cls === 'thief'); if (w) return w; }
+  return p[rnd(p.length)];
+}
+async function enemyTurn(e) {
+  if (e.burnT > 0) {
+    const d = Math.round(S.burnDmg * S.partyDmg); e.hp = Math.max(0, e.hp - d); pop(e, d, 'dmg'); e.burnT--;
+    render(); await wait(400);
+    if (e.hp <= 0) { log(`${e.name} burns away!`); return; }
+  }
+  e.delayed = false;
+  const [name, power, kind = ''] = e.intent;
+  if (kind === 'windup') { e.charged = true; log(`⚠ ${e.name} gets ready for a huge attack!`); }
+  else {
+    const marked = e.marked > 0 && alive('party').some(p => p.cls === 'thief');
+    if (kind.includes('aoe') && !marked) { log(`${e.name} uses ${name}!`); alive('party').forEach(p => damage(e, p, power)); }
+    else {
+      const t = pickVictim(e);
+      log(`${e.name} uses ${name} on ${t.name}${kind.includes('aoe') ? ' (Marked)' : ''}.`);
+      damage(e, t, power);
+      if (kind === 'cheat' && t.cls === 'gambler' && t.fortune > 0) { const s = 1; t.fortune -= s; log(`The Shark steals ${s} Fortune!`); }
+    }
+    e.charged = false;
+    if (e.marked > 0) e.marked--;
+  }
+  if (e.exposed > 0) e.exposed--;
+  pickIntent(e);
+}
+
+// ---------- Player input ----------
+function startOfTurn(u) {
+  if (u.cls === 'thief') u.charges = Math.min(S.chargeMax, u.charges + 1);
+  if (u.cls === 'ranger') u.mp = Math.min(S.mpMax, u.mp + 1);
+}
+function showMenu(u) {
+  const info = { monk: `Chi ${u.chi}/${S.chiMax}`, thief: `◆${u.charges} charges · dodge ${dodgeTier(u)}`, ranger: `Mana ${u.mp}/${S.mpMax}`, gambler: `Fortune ${u.fortune}/${S.fortuneMax}` }[u.cls];
+  $('who').innerHTML = `${u.face} ${u.name} the ${u.role} <span>${info}</span>`;
+  $('desc').textContent = 'Pick an action.';
+  $('acts').replaceChildren(...ACTIONS[u.cls].filter(a => !(a.party && solo)).map(a => {
+    const b = document.createElement('button');
+    b.textContent = a.n + (a.mp ? ` (${S.roundCost}MP)` : a.id === 'loaded' ? ` (${S.loadedCost}🍀)` : '');
+    b.disabled = !canUse(u, a);
+    b.onclick = () => chooseAction(u, a, b);
+    return b;
+  }));
+}
+function chooseAction(u, a, btn) {
+  document.querySelectorAll('#acts button').forEach(b => b.classList.remove('sel'));
+  $('desc').textContent = a.d;
+  if (a.t === 'self' || a.t === 'allEnemies') { sel = null; finish(a, null); return; }
+  const targets = validTargets(u, a);
+  if (targets.length === 1 && solo) { sel = null; finish(a, targets[0]); return; }
+  btn.classList.add('sel');
+  sel = { u, a };
+  $('desc').textContent = a.d + ' Tap a target.';
+  render();
+}
+function pickTarget(t) {
+  if (!sel || !validTargets(sel.u, sel.a).includes(t)) return;
+  const { a } = sel; sel = null; finish(a, t);
+}
+function finish(a, t) { $('acts').replaceChildren(); if (pending) { const p = pending; pending = null; p({ a, t }); } }
+
+// ---------- Main loop ----------
+async function loop() {
+  const myUnits = units;
+  while (units === myUnits) {
+    const u = nextActor(); now = u.ct; u.acting = true;
+    let w = 1;
+    if (u.side === 'enemy') {
+      render();
+      $('who').innerHTML = `${u.face} ${u.name}'s turn`; $('acts').replaceChildren(); $('desc').textContent = '';
+      await wait(500); if (units !== myUnits) return;
+      await enemyTurn(u);
+    } else {
+      startOfTurn(u); render(); showMenu(u);
+      const { a, t } = await new Promise(r => pending = r);
+      if (units !== myUnits) return;
+      w = doAction(u, a, t);
+      if (u.power > 0 && a.id !== 'wild') u.power--;
+    }
+    u.acting = false;
+    if (u.hp > 0 && u.ct === now) u.ct += delay(u) * w;
+    else if (u.hp > 0) u.ct = Math.max(u.ct, now + delay(u) * w);
+    render(); await wait(700);
+    if (units !== myUnits) return;
+    if (!alive('enemy').length) return overlay('Victory!', BATTLES[battle].label + ' cleared.', [['Pick another battle', showSelect, true], ['Replay', () => startBattle(battle)]]);
+    if (!alive('party').length) return overlay('Defeat', solo ? 'Try a different plan, or tune it with ⚙.' : 'The party has fallen.', [['Retry', () => startBattle(battle), true], ['Pick another battle', showSelect]]);
+  }
+}
+function overlay(t, p, btns) {
+  $('ovT').textContent = t; $('ovP').textContent = p;
+  $('ovBtns').replaceChildren(...btns.map(([label, fn, main, sub]) => {
+    const b = document.createElement('button'); b.className = main ? 'main' : '';
+    b.innerHTML = label + (sub ? `<small>${sub}</small>` : ''); b.onclick = fn; return b;
+  }));
+  $('over').classList.add('show');
+}
+function showSelect() {
+  pending = null; units = units.slice(); // stops the running loop
+  overlay('Choose a battle', 'Each hero has a solo fight that teaches their trick.',
+    Object.keys(BATTLES).map((k, i) => [BATTLES[k].label, () => startBattle(k), i === 0, BATTLES[k].sub]));
+}
+
+showSelect();
+</script>
+</body>
+</html>
