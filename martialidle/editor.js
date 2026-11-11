@@ -4,7 +4,7 @@
    Your edits are kept in this browser automatically; "Save to file" writes content.js.
    ===================================================================== */
 (function(){
-const ED={tab:'enemies',sel:{},issues:[],saveT:0,gameS:null,previewMode:null,previewOpts:null};
+const ED={tab:'enemies',sel:{},issues:[],saveT:0,gameS:null,previewMode:null,previewOpts:null,clip:null,clipTime:0,clipPlaying:false,clipSpeed:1,clipMirror:false};
 window.ED=ED;
 
 /* ---------- tiny DOM helpers ---------- */
@@ -146,6 +146,7 @@ function tabHero(b){
     h('div',{class:'btns'},h('button',{text:'Add move',onclick:()=>{ const i=newId('hero','new_move'); if(!i) return; H.moves[i]={name:i,startup:4,active:2,recovery:36,damage:1,knockback:1.2,hitstop:2,focus:4,onSwing:[],onHit:['spark_small']}; ED.sel.heroMove=i; commit(); render(); }}),
       h('button',{text:'Delete',onclick:()=>{ if(['click','parry','blast'].includes(mid)||H.combo.includes(mid)&&H.combo.length<2){ alert('That move is required.'); return; } delete H.moves[mid]; H.combo=H.combo.filter(x=>x!==mid); commit(); render(); }}))));
   b.append(row('Move name',txtIn(m,'name')));
+  animRows(b,m,H.model);
   if(m.startup!==undefined){ b.append(frameBar(m),row('Startup frames',numIn(m,'startup',{min:0,step:1,redraw:true})),row('Active frames',numIn(m,'active',{min:1,step:1,redraw:true})),row('Recovery frames',numIn(m,'recovery',{min:0,step:1,redraw:true}))); }
   else b.append(h('small',{class:'fnote',text:'This move is instant (no frames); it is triggered by a click, a parry or the Focus blast.'}));
   if(mid!=='blast') b.append(row('Damage multiplier',numIn(m,'damage')));
@@ -202,6 +203,7 @@ function tabAttacks(b){
     row('Startup frames',numIn(a,'startup',{min:0,step:1,redraw:true}),'the windup: Hero can parry here'),row('Active frames',numIn(a,'active',{min:1,step:1,redraw:true}),'the attack can hit'),row('Recovery frames',numIn(a,'recovery',{min:0,step:1,redraw:true}),'open for a counter'),
     row('Cooldown after (frames)',numIn(a,'cooldown',{min:0,step:1}),'before this attack can be used again'),
     row('Can be parried',chkIn({get v(){return a.parryable!==false;},set v(x){ if(x) delete a.parryable; else a.parryable=false; }},'v')));
+  animRows(b,a,(ownerOf(id)&&CONTENT.enemies[ownerOf(id)].model)||CONTENT.hero.model);
   if(k!=='heal'&&k!=='teleport') b.append(row('Damage multiplier',numIn(a,'damage'),'of the enemy\'s damage'));
   if(k==='melee'||k==='charge'){ if(!a.hitbox) a.hitbox={offsetX:0,reachX:2,halfZ:.7}; b.append(sec('Hitbox'),hitboxPic(a),row('Start offset',numIn(a.hitbox,'offsetX'),'forward from the attacker'),row('Reach forward',numIn(a.hitbox,'reachX')),row('Half depth (up/down)',numIn(a.hitbox,'halfZ'))); }
   if(k==='projectile') b.append(sec('Projectile'),hitboxPic(a),row('Speed',numIn(a,'speed')),row('Line up with Hero while winding up',chkIn(a,'track',{optional:true})),row('Trail color',colIn(a,'trail')));
@@ -218,9 +220,9 @@ function tabAttacks(b){
 
 const PRIM={sparks:[['count','num'],['color','col']],slash:[['color','col'],['size0','num'],['size1','num'],['stretch','num'],['life','num'],['y','num'],['rot','num']],
   ring:[['color','col'],['max','num'],['life','num'],['y','num'],['flat','chk']],glow:[['color','col'],['size0','num'],['size1','num'],['stretch','num'],['life','num'],['y','num']],
-  shake:[['amount','num']],flash:[['color','col'],['opacity','num']],text:[['text','txt'],['style','sel',['','big','chi','block','crit','dodge','hurt']]],smoke:[['count','num'],['color','col']],rise:[['count','num'],['color','col']]};
+  shake:[['amount','num']],flash:[['color','col'],['opacity','num']],impactFrame:[['frames','num'],['color','col'],['opacity','num'],['shake','num']],text:[['text','txt'],['style','sel',['','big','chi','block','crit','dodge','hurt']]],smoke:[['count','num'],['color','col']],rise:[['count','num'],['color','col']]};
 const PRIM_DEF={sparks:{type:'sparks',count:8,color:'#ffe9a0'},slash:{type:'slash',color:'#ffffff',size0:.5,size1:1.3,stretch:3,life:8,y:1.15,offsetX:1,rot:.55},ring:{type:'ring',color:'#ffffff',max:2,life:18,y:1},
-  glow:{type:'glow',color:'#ffffff',size0:.5,size1:1,life:10,y:1},shake:{type:'shake',amount:.1},flash:{type:'flash',color:'#ffffff',opacity:.3},text:{type:'text',text:'TEXT',style:'big'},smoke:{type:'smoke',count:8,color:'#8a8aa8'},rise:{type:'rise',count:8,color:'#7dffa0'}};
+  glow:{type:'glow',color:'#ffffff',size0:.5,size1:1,life:10,y:1},shake:{type:'shake',amount:.1},flash:{type:'flash',color:'#ffffff',opacity:.3},impactFrame:{type:'impactFrame',frames:3,color:'#ffffff',opacity:.65,shake:.25},text:{type:'text',text:'TEXT',style:'big'},smoke:{type:'smoke',count:8,color:'#8a8aa8'},rise:{type:'rise',count:8,color:'#7dffa0'}};
 function tabEffects(b){
   const F=CONTENT.effects, id=ED.sel.effects=pick(F,ED.sel.effects), fx=F[id], isT=!Array.isArray(fx);
   b.append(listBar('effects',ids(F),id,k=>k+(F[k].type==='telegraph'?'  [telegraph]':''),{
@@ -295,7 +297,7 @@ function tabProps(b){
 function modelReport(g,name){
   let tris=0,skinned=0,bones=0,mats=new Set(),imgs=[],meshes=[]; g.scene.traverse(o=>{ if(o.isMesh){ const geo=o.geometry; tris+=(geo.index?geo.index.count:geo.attributes.position.count)/3; if(o.isSkinnedMesh){ skinned++; bones=Math.max(bones,o.skeleton.bones.length); } mats.add(o.material.type+(o.material.map?'+map':'')); if(o.material.map&&o.material.map.image) imgs.push(o.material.map.image.width+'x'+o.material.map.image.height); } });
   g.scene.children.forEach(c=>{ let has=false; c.traverse(o=>{ if(o.isMesh) has=true; }); if(has) meshes.push(c.name); });
-  const issues=[]; if(tris>3000) issues.push('over 3,000 triangles ('+Math.round(tris)+')'); if(imgs.some(s=>parseInt(s)>1024)) issues.push('texture larger than 1024'); if(mats.size>2) issues.push('more than 2 materials'); if(g.animations&&g.animations.length) issues.push(g.animations.length+' animation clip(s) in the file: unused data, strip them to save space');
+  const issues=[]; if(tris>3000) issues.push('over 3,000 triangles ('+Math.round(tris)+')'); if(imgs.some(s=>parseInt(s)>1024)) issues.push('texture larger than 1024'); if(mats.size>2) issues.push('more than 2 materials'); 
   return {name,tris:Math.round(tris),skinned,bones,mats:[...mats],imgs,meshes,anims:(g.animations||[]).length,height:measureHeight(g.scene),issues};
 }
 function tabModels(b){
@@ -313,6 +315,7 @@ function tabModels(b){
     row('Pose',selIn(m,'pose',['arms_down','none']),'arms_down needs the arm bones below'),sec('Bone names'),h('small',{class:'fnote',text:'Props attach by these keys. Type the exact bone name from your model for each.'}));
   if(!m.bones) m.bones={};
   for(const k of ['head','hand_r','hand_l','back','hips','upperarm_l','forearm_l','upperarm_r','forearm_r']) b.append(row(k,txtIn(m.bones,k,{optional:true})));
+  animSection(b,id,m);
   const g=GLTFS[id]; if(g){ const rp=modelReport(g,m.file); b.append(sec('Report'),h('div',{class:'rep'},rp.tris+' triangles, '+rp.skinned+' skinned mesh(es), '+rp.bones+' bones, '+rp.anims+' animation clip(s), height '+rp.height.toFixed(2)+' m',h('br'),rp.issues.length?rp.issues.join(' | '):'Looks good.')); }
   idbKeys().then(keys=>{ if(keys.length&&document.getElementById('edStore')==null){ b.append(h('div',{id:'edStore'},sec('Stored files'),...keys.map(k=>h('div',{class:'crow'},h('span',{text:k}),h('button',{class:'x',text:'delete',onclick:async()=>{ await idbDel(k); delete KITS[k]; render(); }}))))); } }).catch(()=>{});
 }
@@ -323,8 +326,11 @@ async function importGlb(file){
     rep.innerHTML=''; rep.append(h('div',{class:'rep'},file.name+': '+r.tris+' triangles, '+r.skinned+' skinned, '+r.bones+' bones, '+r.anims+' animation clip(s), '+r.mats.join('/')+(r.imgs.length?', texture '+r.imgs.join(','):'')+', '+r.height.toFixed(2)+' m tall',h('br'),r.issues.length?'Warnings: '+r.issues.join(' | '):'Looks good.'));
     await idbPut(file.name,buf);
     if(isChar){
+      const names=(g.animations||[]).map(c=>c.name);
+      if(names.length) rep.append(h('div',{class:'fnote',text:'Animation clips: '+names.map(n=>n+' ('+g.animations.find(c=>c.name===n).duration.toFixed(2)+'s)').join(', ')}));
+      rep.append(h('div',{class:'crow'},h('button',{class:'play',text:"Use as Hero's model (replaces the current one)",onclick:async()=>{ const hm=CONTENT.models.hero; hm.file=file.name; hm.anims=guessAnims(names); ED.sel.models='hero'; commit(); await preloadModels(); refreshViews(); render(); toast('Hero now uses '+file.name+(names.length?' with '+names.length+' clips':'')); }})));
       const idIn=h('input',{type:'text',value:slug(file.name.replace(/\.glb$/i,'')),class:'hex'});
-      rep.append(h('div',{class:'crow'},h('span',{text:'Add as character model with id'}),idIn,h('button',{text:'Add',onclick:async()=>{ const i=slug(idIn.value); if(!i) return; const base=CONTENT.models.hero||{}; CONTENT.models[i]={file:file.name,yaw:90,height:0,pose:'arms_down',bones:clone(base.bones||{})}; ED.sel.models=i; commit(); await preloadModels(); refreshViews(); render(); toast('Model added: '+i); }})));
+      rep.append(h('div',{class:'crow'},h('span',{text:'Add as character model with id'}),idIn,h('button',{text:'Add',onclick:async()=>{ const i=slug(idIn.value); if(!i) return; const base=CONTENT.models.hero||{}; CONTENT.models[i]={file:file.name,yaw:90,height:0,pose:'arms_down',anims:guessAnims(names),bones:clone(base.bones||{})}; ED.sel.models=i; commit(); await preloadModels(); refreshViews(); render(); toast('Model added: '+i); }})));
     } else {
       rep.append(h('div',{},h('small',{class:'fnote',text:'No skeleton found, so this is a prop kit. Each object becomes a prop you can attach to a bone:'}),
         ...r.meshes.filter(Boolean).map(n=>h('div',{class:'crow'},h('span',{text:n}),h('button',{text:'Add as prop',onclick:async()=>{ const i=slug(n); if(CONTENT.props[i]){ alert('A prop with id '+i+' already exists.'); return; } CONTENT.props[i]={shape:'kit',file:file.name,mesh:n,bone:(n.startsWith('hat')||n.startsWith('mask'))?'head':'hand_r',size:[1,1,1],offset:[0,0,0],rot:[0,0,0]}; ED.sel.props=i; ED.tab='props'; commit(); await preloadModels(); refreshViews(); render(); toast('Prop added: '+i); }})))));
@@ -341,6 +347,84 @@ function tabSettings(b){
   b.append(sec('Default effects'));
   const fd=S0.fxDefaults||(S0.fxDefaults={});
   for(const [k,l] of [['crit','Critical hit'],['block','Blocked by a guard'],['guardBreak','Guard broken'],['heroHurt','Hero is hurt'],['kill','An enemy dies']]) b.append(row(l,selIn(fd,k,fxList(false))));
+}
+
+
+/* ---------- animation helpers ---------- */
+function guessAnims(names){                                    // pick clips for the game states from their names
+  const find=(...res)=>{ for(const re of res){ const n=names.find(x=>re.test(x)); if(n) return n; } return undefined; };
+  const o={idle:find(/idle/i),move:find(/^run/i,/run/i,/walk/i),hurt:find(/hit_head/i,/hit/i,/hurt/i,/damage/i),stun:find(/hit_side/i,/stun/i,/hit/i),defeat:find(/knock/i,/death/i,/die/i,/defeat/i),meditate:find(/medit/i)};
+  for(const k of Object.keys(o)) if(o[k]===undefined) delete o[k]; return o;
+}
+function clipsOf(modelId){ const g=GLTFS[modelId]||GLTFS.hero; return g?(g.animations||[]).map(c=>[c.name,c.name+' ('+c.duration.toFixed(2)+'s)']):[]; }
+function detectImpact(modelId,name){
+  const id=GLTFS[modelId]?modelId:'hero', g=GLTFS[id], clips={}; (g.animations||[]).forEach(c=>clips[c.name]=c);
+  delete IMPACT_CACHE[id+'/'+name]; return autoImpact({modelId:id,clips},name);
+}
+function playClipInViewer(name,m){
+  stopPreview(); if(!vf||!vf.mixer||!vf.clips[name]){ toast('Nothing to play on this preview model'); return; }
+  ED.clip=name; ED.clipTime=0; ED.clipPlaying=true; ED.clipSpeed=m&&m.animSpeed>0?m.animSpeed:1; ED.clipMirror=!!(m&&m.animMirror);
+  playAct(vf,name,'scrub',1,0,true); vf.onceUntil=0; updateClipPose(); render();
+}
+function updateClipPose(){
+  if(!ED.clip||!vf||!vf.mixer||!vf.clips[ED.clip]) return;
+  vf.rig.scale.z=ED.clipMirror?-1:1;
+  const a=playAct(vf,ED.clip,'scrub',1,0);
+  // Keep the action just inside the clip: LoopOnce disables sampling at its exact end.
+  a.paused=false; a.enabled=true;
+  a.time=Math.min(ED.clipTime,Math.max(0,vf.clips[ED.clip].duration-.00001)); vf.mixer.update(0);
+  const t=document.getElementById('clipTime'), s=document.getElementById('clipSeek');
+  if(t) t.textContent=ED.clipTime.toFixed(3)+'s / '+vf.clips[ED.clip].duration.toFixed(3)+'s  (frame '+Math.round(ED.clipTime*60)+')';
+  if(s&&document.activeElement!==s) s.value=ED.clipTime;
+  const play=document.getElementById('clipPlay');
+  if(play) play.textContent=ED.clipPlaying?'Pause':'Play';
+}
+window.updateEditorClip=function(dt){
+  if(!ED.clip||!vf||!vf.clips[ED.clip]) return false;
+  const duration=vf.clips[ED.clip].duration;
+  if(ED.clipPlaying){ ED.clipTime=Math.min(duration,ED.clipTime+dt*ED.clipSpeed); if(ED.clipTime>=duration) ED.clipPlaying=false; }
+  updateClipPose(); return true;
+};
+function clipControls(b){
+  if(!ED.clip||!vf||!vf.clips[ED.clip]) return;
+  const duration=vf.clips[ED.clip].duration;
+  const seek=h('input',{id:'clipSeek',type:'range',min:0,max:duration,step:.001,value:ED.clipTime});
+  seek.addEventListener('input',()=>{ ED.clipPlaying=false; ED.clipTime=+seek.value; updateClipPose(); });
+  b.append(h('div',{class:'card'},h('div',{text:'Clip: '+ED.clip}),
+    h('div',{id:'clipTime',text:ED.clipTime.toFixed(3)+'s / '+duration.toFixed(3)+'s  (frame '+Math.round(ED.clipTime*60)+')'}),seek,
+    h('div',{class:'btns'},
+      h('button',{text:'⏮ Start',onclick:()=>{ED.clipPlaying=false;ED.clipTime=0;updateClipPose();render();}}),
+      h('button',{text:'−1 frame',onclick:()=>{ED.clipPlaying=false;ED.clipTime=Math.max(0,ED.clipTime-1/60);updateClipPose();render();}}),
+      h('button',{id:'clipPlay',class:'play',text:ED.clipPlaying?'Pause':'Play',onclick:()=>{if(!ED.clipPlaying&&ED.clipTime>=duration) ED.clipTime=0; ED.clipPlaying=!ED.clipPlaying;updateClipPose();}}),
+      h('button',{text:'+1 frame',onclick:()=>{ED.clipPlaying=false;ED.clipTime=Math.min(duration,ED.clipTime+1/60);updateClipPose();render();}}),
+      h('button',{text:'End ⏭',onclick:()=>{ED.clipPlaying=false;ED.clipTime=duration;updateClipPose();render();}}),
+      h('label',null,h('input',{type:'checkbox',checked:ED.clipMirror?'checked':null,onchange:e=>{ED.clipMirror=e.target.checked;updateClipPose();}}),' Flip left/right'),
+      h('label',null,'Speed ',h('select',{onchange:e=>{ED.clipSpeed=+e.target.value;}},...[.25,.5,1,2,4].map(v=>{const o=h('option',{value:v,text:v+'×'});o.selected=v===ED.clipSpeed;return o;}))))));
+}
+function animRows(b,m,modelId){                                // "which clip does this attack use, and when does it land"
+  const clips=clipsOf(modelId);
+  b.append(sec('Animation'));
+  if(!clips.length){ b.append(h('small',{class:'fnote',text:'This model has no animation clips. Import a model with clips on the Models tab.'})); return; }
+  b.append(row('Clip',selIn(m,'anim',clips,{blank:'(none)',redraw:true}),'by default, clip timing is fitted to the attack frames'));
+  if(m.anim){
+    b.append(row('Playback speed',numIn(m,'animSpeed',{optional:true,min:.05,step:.05}),'1 = original speed, 2 = twice as fast. Empty = fit clip to attack frames. Attack frames still set hit timing.'),
+      row('Mirror attack animation',chkIn(m,'animMirror',{optional:true}),'flip the pose left/right; use the same clip for either handed version'),
+      row('Impact time (seconds)',numIn(m,'animImpact',{optional:true}),'used for automatic timing when playback speed is empty'),
+      h('div',{class:'btns'},h('button',{class:'play',text:'Play clip',onclick:()=>playClipInViewer(m.anim,m)}),
+        h('button',{text:'Detect impact',onclick:()=>{ const t=detectImpact(modelId,m.anim); m.animImpact=+t.toFixed(2); commit(); render(); toast('Impact detected at '+t.toFixed(2)+'s'); }})));
+  }
+  clipControls(b);
+}
+function animSection(b,id,m){
+  const g=GLTFS[id], names=g?(g.animations||[]).map(c=>c.name):[];
+  b.append(sec('Animations'));
+  if(!names.length){ b.append(h('small',{class:'fnote',text:'No animation clips in this model.'})); return; }
+  if(!m.anims) m.anims={};
+  b.append(h('small',{class:'fnote',text:'Which clip plays in each game state. Animation turns on once an Idle clip is set. Attacks and moves choose their own clip on their tabs.'}));
+  for(const [k,l] of [['idle','Idle (required)'],['move','Moving'],['hurt','Hero is hit'],['stun','Stunned'],['defeat','Defeated / dying'],['meditate','Meditating (optional)']]) b.append(row(l,selIn(m.anims,k,names,{blank:'(none)'})));
+  b.append(h('div',{class:'btns'},h('button',{text:'Auto-map by name',onclick:()=>{ m.anims=guessAnims(names); commit(); render(); }})));
+  g.animations.forEach(c=>b.append(h('div',{class:'crow'},h('span',{text:c.name+'  ('+c.duration.toFixed(2)+'s, '+c.tracks.length+' tracks)'}),h('button',{class:'x',text:'▶ play',onclick:()=>playClipInViewer(c.name)}))));
+  clipControls(b);
 }
 
 /* ---------- panel shell ---------- */

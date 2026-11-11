@@ -123,6 +123,27 @@ A prop is a hat, weapon, shield or any attachment: `shape` (`box`, `disc`, `bow`
 - **Blender tip:** put each hat's origin where it sits on the head (base centre), +Y up, +Z forward. Then the offset is usually `[0, 0, 0]`. Name objects `hat_...`, `mask_...`, `weapon_...`.
 - Give props to Hero or an enemy through their `props` list. The viewer shows the prop on the selected character while you tune it.
 
+## Animation
+
+Characters can play the animation clips stored in their `.glb`.
+
+**Importing:** Models tab > drop the file. The report lists every clip with its length. Press **Use as Hero's model** to replace Hero, or **Add** to make a new character model. Clips are mapped to game states by name (idle, run, hit, knockdown...), and you can change that mapping.
+
+**Game states** (Models tab > Animations): `idle` (required: animation turns on once an idle clip is set), `move`, `hurt` (Hero is hit), `stun`, `defeat`, and optionally `meditate`. Enemies share these clips when they use the same model. These live in `models.<id>.anims` in `content.js`.
+
+**Attacks and Hero moves** choose a clip with `"anim": "punch_left"`. The clip is stretched to fit the frame data, so the strike lands exactly when the active frames begin:
+
+```
+clip:   |---- wind-up ----|X impact |---- follow-through ----|
+frames: |---- startup ----|-- active --|------ recovery ------|
+```
+
+- `animImpact` is the moment (in seconds) the strike lands inside the clip. If you leave it out, the game finds it by sampling the clip for the moment the hands or feet move fastest. The editor has **Detect impact** and **Play clip** buttons.
+- Shorter startup frames make the wind-up part of the clip play faster. Tune the frames in the editor and watch it with **Preview**.
+- Instant moves (dash strike, parry) have no frames; their clip plays from just before its impact.
+
+**Size:** the animation data is the biggest part of a model file (10 clips on 41 bones is about 350 KB). To shrink it: fewer bones, fewer or shorter clips, drop clips you do not use, and export only rotation tracks (plus the hips position) from Blender.
+
 ## Settings
 
 Balance and wave numbers: enemy health/damage growth per wave, chi growth, wave size, boss frequency, offline progress cap.

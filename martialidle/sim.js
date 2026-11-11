@@ -8,7 +8,7 @@ let ARENA_X=12, ZMAX=2.3;
 const LANES=[0,-.65,.65], FPS=60;
 const KINDS=['melee','projectile','burst','charge','heal','teleport'];
 const AIS=['melee','ranged','support','rusher','dummy'];
-const FX_TYPES=['sparks','slash','ring','glow','shake','flash','text','smoke','rise','telegraph'];
+const FX_TYPES=['sparks','slash','ring','glow','shake','flash','impactFrame','text','smoke','rise','telegraph'];
 const STAT_NAMES=['damage','attackScale','reach','cleave','maxHp','armor','chiMult','focusGain','move','regen','crit','critMult','finisherMult','blastMult','dodge','thorns','revives','offline','sweep','spirit'];
 
 function applyContent(c){

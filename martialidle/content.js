@@ -17,29 +17,29 @@ window.CONTENT = {
     "hp": 100, "damage": 5, "reach": 2.0, "move": 5.5,
     "combo": ["jab", "cross", "finisher"],
     "moves": {
-      "jab":      { "name": "Jab",            "startup": 4, "active": 2, "recovery": 36, "damage": 1,   "knockback": 1.2, "hitstop": 2, "focus": 4, "onSwing": ["slash_white"], "onHit": ["spark_small"] },
-      "cross":    { "name": "Cross",          "startup": 4, "active": 2, "recovery": 36, "damage": 1.1, "knockback": 1.5, "hitstop": 2, "focus": 4, "onSwing": ["slash_white"], "onHit": ["spark_small"] },
-      "finisher": { "name": "Spinning Kick",  "startup": 8, "active": 4, "recovery": 30, "damage": 2.2, "knockback": 5,   "stun": 36, "hitstop": 4, "focus": 4, "breakGuard": true, "finisher": true, "onSwing": ["slash_gold", "ring_gold"], "onHit": ["spark_big"] },
-      "click":    { "name": "Dash Strike",    "damage": 1.5, "knockback": 1.8, "hitstop": 2, "focus": 8, "onSwing": ["slash_cyan"], "onHit": ["spark_small"] },
-      "parry":    { "name": "Parry Counter",  "damage": 3,   "knockback": 5,   "stun": 78, "hitstop": 6, "focus": 20, "breakGuard": true, "parry": true, "onSwing": ["slash_cyan"], "onHit": ["spark_parry"] },
+      "jab":      { "name": "Jab",            "anim": "punch_left", "startup": 9, "active": 3, "recovery": 30, "damage": 1,   "knockback": 1.2, "hitstop": 2, "focus": 4, "onSwing": ["slash_white"], "onHit": ["spark_small"] },
+      "cross":    { "name": "Cross",          "anim": "punch_left", "startup": 9, "active": 3, "recovery": 30, "damage": 1.1, "knockback": 1.5, "hitstop": 2, "focus": 4, "onSwing": ["slash_white"], "onHit": ["spark_small"] },
+      "finisher": { "name": "Spinning Kick",  "anim": "strong_kick", "startup": 14, "active": 4, "recovery": 26, "damage": 2.2, "knockback": 5,   "stun": 36, "hitstop": 4, "focus": 4, "breakGuard": true, "finisher": true, "onSwing": ["slash_gold", "ring_gold"], "onHit": ["spark_big"] },
+      "click":    { "name": "Dash Strike",    "anim": "kick_head", "damage": 1.5, "knockback": 1.8, "hitstop": 2, "focus": 8, "onSwing": ["slash_cyan"], "onHit": ["spark_small"] },
+      "parry":    { "name": "Parry Counter",  "anim": "punch_left", "damage": 3,   "knockback": 5,   "stun": 78, "hitstop": 6, "focus": 20, "breakGuard": true, "parry": true, "onSwing": ["slash_cyan"], "onHit": ["spark_parry"] },
       "blast":    { "name": "Focus Blast",    "knockback": 5, "stun": 48, "hitstop": 7, "breakGuard": true, "onUse": ["blast_fx"], "onHit": ["spark_big"] }
     }
   },
 
   "attacks": {
-    "jab_thug":    { "name": "Thug Jab",     "kind": "melee", "startup": 36, "active": 3, "recovery": 21, "cooldown": 78,  "damage": 1, "hitbox": { "offsetX": 0, "reachX": 2.3, "halfZ": 0.7 }, "telegraph": ["tg_pulse"] },
-    "jab_fast":    { "name": "Quick Jab",    "kind": "melee", "startup": 24, "active": 3, "recovery": 21, "cooldown": 60,  "damage": 1, "hitbox": { "offsetX": 0, "reachX": 2.3, "halfZ": 0.7 }, "telegraph": ["tg_pulse"] },
-    "heavy_swing": { "name": "Heavy Swing",  "kind": "melee", "startup": 54, "active": 4, "recovery": 21, "cooldown": 126, "damage": 1, "hitbox": { "offsetX": 0, "reachX": 2.3, "halfZ": 0.7 }, "telegraph": ["tg_pulse"] },
-    "shield_bash": { "name": "Shield Bash",  "kind": "melee", "startup": 48, "active": 3, "recovery": 21, "cooldown": 114, "damage": 1, "hitbox": { "offsetX": 0, "reachX": 2.3, "halfZ": 0.7 }, "telegraph": ["tg_pulse"] },
-    "staff_sweep": { "name": "Staff Sweep",  "kind": "melee", "startup": 51, "active": 4, "recovery": 21, "cooldown": 132, "damage": 1, "hitbox": { "offsetX": 0, "reachX": 3.9, "halfZ": 1.1 }, "telegraph": ["tg_pulse"] },
-    "stab":        { "name": "Ninja Stab",   "kind": "melee", "startup": 27, "active": 3, "recovery": 21, "cooldown": 96,  "damage": 1, "hitbox": { "offsetX": 0, "reachX": 2.3, "halfZ": 0.7 }, "telegraph": ["tg_pulse"] },
+    "jab_thug":    { "anim": "punch_left", "name": "Thug Jab",     "kind": "melee", "startup": 36, "active": 3, "recovery": 21, "cooldown": 78,  "damage": 1, "hitbox": { "offsetX": 0, "reachX": 2.3, "halfZ": 0.7 }, "telegraph": ["tg_pulse"] },
+    "jab_fast":    { "anim": "punch_left", "name": "Quick Jab",    "kind": "melee", "startup": 24, "active": 3, "recovery": 21, "cooldown": 60,  "damage": 1, "hitbox": { "offsetX": 0, "reachX": 2.3, "halfZ": 0.7 }, "telegraph": ["tg_pulse"] },
+    "heavy_swing": { "anim": "strong_kick", "name": "Heavy Swing",  "kind": "melee", "startup": 54, "active": 4, "recovery": 21, "cooldown": 126, "damage": 1, "hitbox": { "offsetX": 0, "reachX": 2.3, "halfZ": 0.7 }, "telegraph": ["tg_pulse"] },
+    "shield_bash": { "anim": "strong_kick", "name": "Shield Bash",  "kind": "melee", "startup": 48, "active": 3, "recovery": 21, "cooldown": 114, "damage": 1, "hitbox": { "offsetX": 0, "reachX": 2.3, "halfZ": 0.7 }, "telegraph": ["tg_pulse"] },
+    "staff_sweep": { "anim": "kick_head", "name": "Staff Sweep",  "kind": "melee", "startup": 51, "active": 4, "recovery": 21, "cooldown": 132, "damage": 1, "hitbox": { "offsetX": 0, "reachX": 3.9, "halfZ": 1.1 }, "telegraph": ["tg_pulse"] },
+    "stab":        { "anim": "punch_left", "name": "Ninja Stab",   "kind": "melee", "startup": 27, "active": 3, "recovery": 21, "cooldown": 96,  "damage": 1, "hitbox": { "offsetX": 0, "reachX": 2.3, "halfZ": 0.7 }, "telegraph": ["tg_pulse"] },
     "arrow_shot":  { "name": "Arrow Shot",   "kind": "projectile", "startup": 48, "active": 1, "recovery": 24, "cooldown": 144, "damage": 1, "speed": 14, "track": true, "trail": "#ffe9a0", "telegraph": ["tg_pulse", "tg_aim_line"], "onActive": ["shot_fx"] },
     "heal_pulse":  { "name": "Heal Pulse",   "kind": "heal", "startup": 42, "active": 1, "recovery": 24, "cooldown": 180, "heal": 0.3, "telegraph": ["tg_pulse", "tg_heal_link"], "onActive": ["heal_fx"] },
     "fuse_blast":  { "name": "Fuse Blast",   "kind": "burst", "startup": 33, "active": 1, "recovery": 0, "cooldown": 0, "damage": 1, "radius": 2.2, "zRadius": 1.3, "hitsHero": true, "hitsEnemies": true, "enemyDamage": 1.5, "knockback": 4, "selfDestruct": true, "telegraph": ["tg_pulse_fuse"], "onStart": ["fuse_ring"], "onActive": ["explode_fx"] },
     "death_blast": { "name": "Death Blast",  "kind": "burst", "startup": 0, "active": 1, "recovery": 0, "cooldown": 0, "damage": 1, "radius": 2.2, "zRadius": 1.3, "hitsHero": false, "hitsEnemies": true, "enemyDamage": 1.5, "knockback": 4, "onActive": ["explode_fx"] },
     "vanish_strike": { "name": "Vanish Strike", "kind": "teleport", "startup": 33, "active": 1, "recovery": 0, "cooldown": 300, "invisible": true, "behind": 1.4, "then": "stab", "onStart": ["smoke_puff", "smoke_warn"], "onActive": ["smoke_puff"] },
-    "boss_melee":  { "name": "Boss Strike",  "kind": "melee", "startup": 72, "active": 4, "recovery": 21, "cooldown": 144, "damage": 1, "hitbox": { "offsetX": 0, "reachX": 2.3, "halfZ": 0.7 }, "telegraph": ["tg_pulse"] },
-    "boss_slam":   { "name": "Ground Slam",  "kind": "burst", "startup": 84, "active": 2, "recovery": 36, "cooldown": 144, "damage": 1.5, "radius": 3.5, "zRadius": 2.0, "hitsHero": true, "hitsEnemies": false, "telegraph": ["tg_pulse", "tg_ground_ring"], "onActive": ["slam_fx"] },
+    "boss_melee":  { "anim": "strong_kick", "name": "Boss Strike",  "kind": "melee", "startup": 72, "active": 4, "recovery": 21, "cooldown": 144, "damage": 1, "hitbox": { "offsetX": 0, "reachX": 2.3, "halfZ": 0.7 }, "telegraph": ["tg_pulse"] },
+    "boss_slam":   { "anim": "strong_kick", "name": "Ground Slam",  "kind": "burst", "startup": 84, "active": 2, "recovery": 36, "cooldown": 144, "damage": 1.5, "radius": 3.5, "zRadius": 2.0, "hitsHero": true, "hitsEnemies": false, "telegraph": ["tg_pulse", "tg_ground_ring"], "onActive": ["slam_fx"] },
     "boss_charge": { "name": "Bull Charge",  "kind": "charge", "startup": 60, "active": 30, "recovery": 60, "cooldown": 144, "damage": 1.2, "speed": 16, "track": true, "hitbox": { "offsetX": 0, "reachX": 1.0, "halfZ": 0.8 }, "telegraph": ["tg_pulse", "tg_path"] }
   },
 
@@ -55,6 +55,7 @@ window.CONTENT = {
     "ring_gold":    [ { "type": "ring", "color": "#ffe9a0", "max": 3.5, "life": 19, "y": 0.9 } ],
     "spark_small":  [ { "type": "sparks", "count": 6,  "color": "#ffe9a0" }, { "type": "shake", "amount": 0.05 } ],
     "spark_big":    [ { "type": "sparks", "count": 14, "color": "#ffd24a" }, { "type": "shake", "amount": 0.22 } ],
+    "impact_frame": [ { "type": "impactFrame", "frames": 3, "color": "#ffffff", "opacity": 0.65, "shake": 0.25 } ],
     "spark_crit":   [ { "type": "sparks", "count": 10, "color": "#ff9f43" }, { "type": "shake", "amount": 0.12 } ],
     "spark_parry":  [ { "type": "sparks", "count": 14, "color": "#ffffff" }, { "type": "ring", "color": "#ffffff", "max": 2.4, "life": 18, "y": 1.1 },
                       { "type": "flash", "color": "#ffffff", "opacity": 0.3 }, { "type": "shake", "amount": 0.3 } ],
@@ -118,7 +119,8 @@ window.CONTENT = {
 
   "models": {
     "hero": { "file": "hero.glb", "yaw": 90, "height": 0, "pose": "arms_down",
-              "bones": { "head": "mixamorigHead", "hand_r": "mixamorigRightHand", "hand_l": "mixamorigLeftHand", "back": "mixamorigSpine2", "hips": "mixamorigHips",
+              "anims": { "idle": "idle_stance", "move": "run", "hurt": "hit_head", "stun": "hit_side", "defeat": "knockdown" },
+              "bones": { "head": "mixamorigHead", "hand_r": "mixamorigRightHand", "hand_l": "mixamorigLeftHand", "foot_l": "mixamorigLeftFoot", "foot_r": "mixamorigRightFoot", "back": "mixamorigSpine2", "hips": "mixamorigHips",
                          "upperarm_l": "mixamorigLeftArm", "forearm_l": "mixamorigLeftForeArm", "upperarm_r": "mixamorigRightArm", "forearm_r": "mixamorigRightForeArm" } }
   },
 
