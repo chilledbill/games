@@ -1,0 +1,12 @@
+{
+  "name": "martial-idler-overlay",
+  "version": "0.1.0",
+  "description": "Taskbar overlay wrapper for Martial Idler",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^33.2.0"
+  }
+}
