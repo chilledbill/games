@@ -47,12 +47,12 @@ const CONFIG = {
   touch: {
     hitPad: 8,
     scheme: 'dpad',                                       // 'dpad' = four arrow buttons | 'stick' = floating left/right stick
-    dpad: { size: 76, gap: 20, cx: 160, cy: 392 },        // arrows: Left/Right move, Up = HIGH stance, Down = LOW stance (while Block held)
+    dpad: { size: 76, gap: 20, cx: 178, cy: 387 },        // arrows: Left/Right move, Up = HIGH stance, Down = LOW stance (while Block held)
     stick: { zone: { x: 0, y: 90, w: 470, h: 450 }, hint: { x: 150, y: 410 }, radius: 64, deadX: 16, stanceY: 30, follow: true },
     buttons: {
-      jump:   { cx: 850, cy: 430, w: 124, h: 124 },
-      block:  { cx: 676, cy: 404, w: 112, h: 112 },
-      attack: { cx: 800, cy: 262, w: 112, h: 112 }
+      jump:   { cx: 875, cy: 445, w: 124, h: 124 },
+      block:  { cx: 871, cy: 285, w: 112, h: 112 },
+      attack: { cx: 717, cy: 448, w: 112, h: 112 }
     },
     dbg:   { x: 868, y: 14, w: 78, h: 64 },
     fs:    { x: 770, y: 14, w: 78, h: 64 },
@@ -60,14 +60,17 @@ const CONFIG = {
     enemy: { x: 352, y: 14, w: 116, h: 64 },              // picks which enemy you fight
     layoutBtn: { x: 868, y: 100, w: 78, h: 64 },          // opens the on-screen layout editor
     presets: [                                            // quick starting layouts in the editor (PRESET button)
-      { name: 'A arc (default)',
-        buttons: { jump: { cx: 850, cy: 430, w: 124, h: 124 }, block: { cx: 676, cy: 404, w: 112, h: 112 }, attack: { cx: 800, cy: 262, w: 112, h: 112 } },
-        dpad: { size: 76, gap: 20, cx: 160, cy: 392 } },
+      { name: 'A yours (default)',
+        buttons: { jump: { cx: 875, cy: 445, w: 124, h: 124 }, block: { cx: 871, cy: 285, w: 112, h: 112 }, attack: { cx: 717, cy: 448, w: 112, h: 112 } },
+        dpad: { size: 76, gap: 20, cx: 178, cy: 387 } },
       { name: 'B corner: attack+jump low, block above',
         buttons: { jump: { cx: 862, cy: 440, w: 120, h: 120 }, attack: { cx: 722, cy: 452, w: 112, h: 112 }, block: { cx: 842, cy: 296, w: 112, h: 112 } },
         dpad: { size: 76, gap: 20, cx: 160, cy: 392 } },
       { name: 'C attack corner: attack low-right, block left, jump above',
         buttons: { attack: { cx: 860, cy: 440, w: 124, h: 124 }, block: { cx: 716, cy: 430, w: 112, h: 112 }, jump: { cx: 842, cy: 290, w: 112, h: 112 } },
+        dpad: { size: 76, gap: 20, cx: 160, cy: 392 } },
+      { name: 'D original arc',
+        buttons: { jump: { cx: 850, cy: 430, w: 124, h: 124 }, block: { cx: 676, cy: 404, w: 112, h: 112 }, attack: { cx: 800, cy: 262, w: 112, h: 112 } },
         dpad: { size: 76, gap: 20, cx: 160, cy: 392 } }
     ]
   },
