@@ -1,0 +1,796 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Guard - Stage 4: The Trainer</title>
+<style>
+  html, body {
+    margin: 0; height: 100%; background: #000; overflow: hidden;
+    overscroll-behavior: none; touch-action: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  }
+  canvas { display: block; touch-action: none; }
+  #rotate {
+    display: none; position: fixed; inset: 0; z-index: 10; background: #10151f; color: #cfe3ff;
+    font: 600 20px/1.4 system-ui, sans-serif; text-align: center;
+    align-items: center; justify-content: center; padding: 24px;
+  }
+  @media (orientation: portrait) { #rotate { display: flex; } }
+</style>
+</head>
+<body>
+<div id="rotate">Rotate your phone to landscape</div>
+<script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+<script>
+/* =====================================================================
+   CONFIG - every tunable number lives here.
+   Units: pixels, seconds, pixels/second, pixels/second^2 (unless "Ms").
+   Screen-space coordinates are in the 960x540 base resolution.
+   ===================================================================== */
+const CONFIG = {
+  view:  { w: 960, h: 540 },
+  world: { width: 1700, groundY: 460, groundH: 80 },      // Stage 4: a small flat arena
+  stepHz: 60,                                             // fixed gameplay/physics rate
+
+  player: { w: 32, h: 56, startX: 260 },
+
+  move: {
+    maxSpeed:       340,
+    groundAccel:    2800,
+    groundFriction: 3200,
+    airAccel:       2000,
+    airFriction:     600,
+    turnBoost:       1.6
+  },
+
+  jump: { velocity: 820, cutFactor: 0.45, coyoteMs: 100, bufferMs: 100 },
+  gravity: { rise: 2300, fallMult: 1.7, maxFall: 1100 },
+  camera: { lerp: 0.12, lookAhead: 90, lookAheadSpeed: 3.0 },
+
+  /* ---- touch controls ---- */
+  touch: {
+    hitPad: 8,
+    stick: {
+      zone:    { x: 0, y: 90, w: 470, h: 450 },
+      hint:    { x: 150, y: 410 },
+      radius:  64,
+      deadX:   16,
+      stanceY: 30,
+      follow:  true
+    },
+    buttons: {
+      jump:   { cx: 850, cy: 430, w: 124, h: 124 },
+      block:  { cx: 676, cy: 404, w: 112, h: 112 },
+      attack: { cx: 800, cy: 262, w: 112, h: 112 }       // Stage 4: above-left of Jump, same thumb arc
+    },
+    dbg:     { x: 868, y: 14, w: 78, h: 64 },
+    fs:      { x: 770, y: 14, w: 78, h: 64 },
+    trainer: { x: 352, y: 14, w: 116, h: 64 }            // TEMP test button: AUTO / practice one phase / passive
+  },
+
+  block: { neutralStance: 'high' },                       // 'high' | 'low' | 'last'
+
+  /* ---- Stage 3: combat ---- */
+  combat: {
+    maxHp: 5,
+    block:   { pushback: 170, stunMs: 500,  requireFacing: true },
+    perfect: { windowMs: 100, stunMs: 1200, pushback: 60, healHp: 1 },   // guard raised <= windowMs before impact
+    hurt:    { stunMs: 320, knockbackX: 320, knockbackY: 300, invulnMs: 1100 },
+    koInvulnMs: 2000
+  },
+
+  /* ---- Stage 4: player's basic attack (the counter) ---- */
+  attack: {
+    startupMs: 70, activeMs: 110, recoveryMs: 220,        // windup / active / recovery
+    bufferMs: 120,                                        // press slightly early and it still fires
+    reach: 66, zone: [8, 52],                             // hitbox in front of you: [bottom, top] px above your feet
+    damage: 1,
+    stunnedMult: 3                                        // damage multiplier vs a STUNNED Trainer (the reward for blocking)
+  },
+
+  /* ---- Stage 4: THE TRAINER ----
+     Telegraph per attack: windup -> (flash cue: RED bar over the head = HIGH, YELLOW bar at the feet = LOW)
+     -> active -> recovery. Phases run in order and loop. All times in ms. */
+  trainer: {
+    name: 'THE TRAINER',
+    x: 1150, w: 48, h: 80, maxHp: 24,
+    triggerRange: 340,                                    // only fights when you're this close
+    startDelayMs: 900, postStunIdleMs: 450,
+    defeatedResetMs: 2800,
+    speedScale: 1.0,                                      // global multiplier for windup/recovery/gaps (0.8 = faster, 1.3 = slower)
+    telegraph: {
+      style: 'steady',                                    // 'steady' = no blinking, cue brightens toward the hit | 'flash' = blink
+      flashHz: 9,                                         // blink rate (only used when style is 'flash')
+      minAlpha: 0.4,                                      // steady style: cue brightness at the start of the windup
+      solidLastMs: 120,                                   // cue turns SOLID this long before the hit = "block NOW"
+      zonePreviewAlpha: 0.14                              // faint preview of the hit zone (0 = off)
+    },
+    attacks: {                                            // zone = [bottom, top] px above the ground
+      high:        { reach: 110, zone: [28, 96], damage: 1 },
+      low:         { reach: 120, zone: [0, 26],  damage: 1 },
+      unblockable: { reach: 110, zone: [0, 120], damage: 1 }     // unused here, for Stage 5 enemies/boss
+    },
+    phases: [
+      { name: 'slow high',  attacks: ['high', 'high', 'high'],                          windupMs: 600, activeMs: 160, recoveryMs: 500, gapMs: 650, endPauseMs: 1500 },
+      { name: 'slow low',   attacks: ['low', 'low', 'low'],                             windupMs: 600, activeMs: 160, recoveryMs: 500, gapMs: 650, endPauseMs: 1500 },
+      { name: 'mixed',      attacks: ['high', 'low', 'high', 'low'],                    windupMs: 500, activeMs: 160, recoveryMs: 420, gapMs: 500, endPauseMs: 1500 },
+      { name: 'fast combo', attacks: ['high', 'low', 'low', 'high', 'low', 'high'],     windupMs: 400, activeMs: 140, recoveryMs: 260, gapMs: 140, endPauseMs: 2000 }
+    ]
+  },
+
+  debug: { startOn: true },
+
+  colors: {
+    sky: '#16213a', far: 0x1f2d4a, near: 0x2a4066, ground: 0x34503a, groundTop: 0x4f7a56,
+    groundStripe: 0x2e4834, post: 0xe8d28a, wall: 0x1b2438,
+    idle: 0x4aa3ff, run: 0x41d98a, jump: 0xffd34a, fall: 0xff7a4a, block: 0x7a8cff, hurt: 0xff9a9a, attack: 0xe6f6ff,
+    stanceHigh: 0xff5a6a,           // red    = HIGH
+    stanceLow:  0xffd34a,           // yellow = LOW
+    unblockable: 0xc77dff,          // purple = UNBLOCKABLE
+    enemy: { idle: 0x9b5d5d, windup: 0xb07a3a, active: 0xd04a4a, recovery: 0x7a6a6a, stunned: 0x5aa0ff, defeated: 0x44444c }
+  }
+};
+
+/* ===================================================================== */
+
+const inRect = (p, r) => p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+const rectOf = (b, pad = 0) => ({ x: b.cx - b.w / 2 - pad, y: b.cy - b.h / 2 - pad, w: b.w + pad * 2, h: b.h + pad * 2 });
+const rectGap = (a, b) => {
+  const dx = Math.max(0, a.x - (b.x + b.w), b.x - (a.x + a.w));
+  const dy = Math.max(0, a.y - (b.y + b.h), b.y - (a.y + a.h));
+  return Math.hypot(dx, dy);
+};
+const overlap = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+const attackColor = (h) => h === 'high' ? CONFIG.colors.stanceHigh : h === 'low' ? CONFIG.colors.stanceLow : CONFIG.colors.unblockable;
+
+class GameScene extends Phaser.Scene {
+  constructor() { super('Game'); }
+
+  create() {
+    const C = CONFIG;
+    this.cameras.main.setBackgroundColor(C.colors.sky);
+    this.physics.world.setBounds(0, 0, C.world.width, C.view.h);
+    this.input.addPointer(2);
+    if (this.input.mouse) this.input.mouse.disableContextMenu();
+
+    this.buildWorld();
+    this.buildPlayer();
+    this.buildTrainer();
+    this.buildInput();
+    this.buildTouchUI();
+    this.buildCombatUI();
+    this.buildHud();
+
+    const cam = this.cameras.main;
+    cam.setBounds(0, 0, C.world.width, C.view.h);
+    cam.startFollow(this.player, true, C.camera.lerp, 1);
+
+    this.p = {
+      state: 'idle', facing: 1, coyote: 0, buffer: 0, jumping: false, grounded: false,
+      jumpHeldPrev: false, blocking: false, stance: C.block.neutralStance === 'low' ? 'low' : 'high',
+      hp: C.combat.maxHp, hurt: 0, invuln: 0, guardAge: 0,
+      atk: { state: 'idle', timer: 0, hasHit: false }, atkBuffer: 0
+    };
+    this.lastResult = '-';
+    this.ticks = 0; this.tickHz = 0; this.tickClock = 0;
+    this.physics.world.on('worldstep', this.tick, this);
+    this.events.on(Phaser.Scenes.Events.POST_UPDATE, this.renderUpdate, this);
+
+    this.debugOn = C.debug.startOn;
+    this.applyDebugVisibility();
+    this.refreshHearts();
+    window.__scene = this;
+  }
+
+  /* ---------------- world ---------------- */
+  buildWorld() {
+    const C = CONFIG, W = C.world.width, gy = C.world.groundY, gh = C.world.groundH;
+    const layer = (factor, color, minH, maxH, minW, maxW, seed) => {
+      const g = this.add.graphics().setScrollFactor(factor).setDepth(0);
+      g.fillStyle(color, 1);
+      let s = seed; const rnd = () => (s = (s * 16807) % 2147483647) / 2147483647;
+      const span = W * factor + C.view.w + 200;
+      for (let x = -50; x < span; ) {
+        const w = minW + rnd() * (maxW - minW), h = minH + rnd() * (maxH - minH);
+        g.fillRect(x, gy - h, w, h + 4);
+        x += w * (0.55 + rnd() * 0.5);
+      }
+    };
+    layer(0.25, C.colors.far,  120, 300, 90, 200, 7);
+    layer(0.55, C.colors.near,  50, 170, 70, 150, 13);
+
+    this.ground = this.add.rectangle(W / 2, gy + gh / 2, W, gh, C.colors.ground).setDepth(1);
+    this.physics.add.existing(this.ground, true);
+
+    const g = this.add.graphics().setDepth(2);
+    g.fillStyle(C.colors.groundTop, 1); g.fillRect(0, gy, W, 6);
+    g.fillStyle(C.colors.groundStripe, 1);
+    for (let x = 0; x < W; x += 200) g.fillRect(x, gy + 6, 100, gh - 6);
+    g.fillStyle(C.colors.wall, 1);                      // arena end walls
+    g.fillRect(0, 0, 18, gy); g.fillRect(W - 18, 0, 18, gy);
+    g.fillStyle(C.colors.post, 1);
+    for (let x = 250; x < W; x += 250) g.fillRect(x - 2, gy - 22, 4, 22);
+  }
+
+  buildPlayer() {
+    const C = CONFIG, P = C.player;
+    this.player = this.add.rectangle(P.startX, C.world.groundY - P.h / 2, P.w, P.h, C.colors.idle).setDepth(5);
+    this.physics.add.existing(this.player);
+    const b = this.player.body;
+    b.setCollideWorldBounds(true);
+    b.setAllowGravity(false);
+    this.physics.add.collider(this.player, this.ground);
+    this.nose = this.add.rectangle(0, 0, 12, 8, 0xffffff).setDepth(6);
+    this.shield = this.add.rectangle(0, 0, 10, 30, 0xffffff).setDepth(7).setVisible(false);
+    this.fx = this.add.graphics().setDepth(9);          // player attack visual
+  }
+
+  /* ---------------- THE TRAINER ---------------- */
+  buildTrainer() {
+    const C = CONFIG, E = C.trainer;
+    this.trainerRect = this.add.rectangle(E.x, C.world.groundY - E.h / 2, E.w, E.h, C.colors.enemy.idle).setDepth(4);
+    this.physics.add.existing(this.trainerRect, true);
+    this.physics.add.collider(this.player, this.trainerRect);
+    this.trainerEye = this.add.rectangle(0, 0, 10, 8, 0xffffff).setDepth(5);
+    this.tg = this.add.graphics().setDepth(4.5);        // telegraph / weapon drawing
+    this.barG = this.add.graphics().setDepth(8);        // health bar
+    this.barName = this.add.text(E.x, C.world.groundY - E.h - 86, E.name, { fontFamily: 'monospace', fontSize: '12px', color: '#cfd8ee' }).setOrigin(0.5).setDepth(8);
+    this.trainerModes = ['auto', 0, 1, 2, 3, 'off'];
+    this.trainerMode = 0;
+    this.trainer = {
+      x: E.x, facing: -1, state: 'idle', timer: E.startDelayMs / 1000, attack: 'high', hasHit: false,
+      hp: E.maxHp, phaseIdx: 0, atkIdx: 0, ph: E.phases[0], windupTotal: 0, nextGapMs: 0, flash: 0
+    };
+  }
+
+  modeLabel() {
+    const m = this.trainerModes[this.trainerMode];
+    return m === 'auto' ? 'AUTO' : m === 'off' ? 'PASSIVE' : 'P' + (m + 1) + ' ' + CONFIG.trainer.phases[m].name.toUpperCase();
+  }
+  cycleTrainer() {
+    this.trainerMode = (this.trainerMode + 1) % this.trainerModes.length;
+    const m = this.trainerModes[this.trainerMode], tr = this.trainer;
+    if (typeof m === 'number') { tr.phaseIdx = m; tr.atkIdx = 0; }
+    if (tr.state === 'idle') tr.timer = 0.6;
+    this.ui.trainer.txt.setText('TRAINER\n' + this.modeLabel().slice(0, 12));
+  }
+  curPhaseIdx() { const m = this.trainerModes[this.trainerMode]; return typeof m === 'number' ? m : this.trainer.phaseIdx; }
+
+  attackBox() {
+    const C = CONFIG, E = C.trainer, tr = this.trainer, A = E.attacks[tr.attack], gy = C.world.groundY;
+    const x0 = tr.facing > 0 ? tr.x + E.w / 2 : tr.x - E.w / 2 - A.reach;
+    return { x: x0, y: gy - A.zone[1], w: A.reach, h: A.zone[1] - A.zone[0] };
+  }
+  hurtBox() { const C = CONFIG, E = C.trainer; return { x: this.trainer.x - E.w / 2, y: C.world.groundY - E.h, w: E.w, h: E.h }; }
+
+  startAttack() {
+    const E = CONFIG.trainer, tr = this.trainer, S = E.speedScale;
+    const ph = E.phases[this.curPhaseIdx()];
+    tr.ph = ph; tr.attack = ph.attacks[tr.atkIdx];
+    tr.facing = (this.player.x < tr.x) ? -1 : 1;
+    tr.state = 'windup'; tr.windupTotal = ph.windupMs * S / 1000; tr.timer = tr.windupTotal; tr.hasHit = false;
+  }
+
+  advanceAttack() {                                       // an attack is finished (or was blocked): move the script on
+    const E = CONFIG.trainer, tr = this.trainer, ph = E.phases[this.curPhaseIdx()];
+    tr.atkIdx++;
+    if (tr.atkIdx >= ph.attacks.length) {
+      tr.atkIdx = 0; tr.nextGapMs = ph.endPauseMs;
+      if (this.trainerModes[this.trainerMode] === 'auto') tr.phaseIdx = (tr.phaseIdx + 1) % E.phases.length;
+    } else tr.nextGapMs = ph.gapMs;
+  }
+
+  tickTrainer(dt) {
+    const E = CONFIG.trainer, tr = this.trainer, p = this.p, S = E.speedScale;
+    tr.timer = Math.max(0, tr.timer - dt);
+    tr.flash = Math.max(0, tr.flash - dt);
+    const mode = this.trainerModes[this.trainerMode];
+    switch (tr.state) {
+      case 'idle':
+        if (tr.timer <= 0 && mode !== 'off' && p.hurt <= 0 && Math.abs(this.player.x - tr.x) <= E.triggerRange) this.startAttack();
+        break;
+      case 'windup':   if (tr.timer <= 0) { tr.state = 'active'; tr.timer = tr.ph.activeMs / 1000; tr.hasHit = false; } break;
+      case 'active':   if (tr.timer <= 0) { tr.state = 'recovery'; tr.timer = tr.ph.recoveryMs * S / 1000; } break;
+      case 'recovery': if (tr.timer <= 0) { this.advanceAttack(); tr.state = 'idle'; tr.timer = tr.nextGapMs * S / 1000; } break;
+      case 'stunned':  if (tr.timer <= 0) { tr.state = 'idle'; tr.timer = Math.max(tr.nextGapMs * S, E.postStunIdleMs) / 1000; } break;
+      case 'defeated': if (tr.timer <= 0) {
+        tr.hp = E.maxHp; tr.phaseIdx = 0; tr.atkIdx = 0; tr.state = 'idle'; tr.timer = E.startDelayMs / 1000;
+        if (typeof mode === 'number') tr.phaseIdx = mode;
+      } break;
+    }
+  }
+
+  /* ---------------- trainer attack -> player ---------------- */
+  resolveHits() {
+    const C = CONFIG, K = C.combat, tr = this.trainer, p = this.p, pl = this.player, b = pl.body;
+    if (tr.state !== 'active' || tr.hasHit || p.invuln > 0) return;
+    const box = this.attackBox();
+    if (!overlap(box, { x: b.x, y: b.y, w: b.width, h: b.height })) return;
+    tr.hasHit = true;                                  // one hit per swing
+
+    const A = C.trainer.attacks[tr.attack];
+    const awayDir = (pl.x >= tr.x) ? 1 : -1;
+    const facingEnemy = Math.sign(tr.x - pl.x) === p.facing;
+    const correct = p.blocking && tr.attack !== 'unblockable' && p.stance === tr.attack && (facingEnemy || !K.block.requireFacing);
+
+    if (correct) {
+      const perfect = p.guardAge <= K.perfect.windowMs / 1000;
+      const sx = pl.x + p.facing * (C.player.w / 2 + 14), sy = pl.y + (p.stance === 'high' ? -12 : 17);
+      b.setVelocityX(awayDir * (perfect ? K.perfect.pushback : K.block.pushback));
+      tr.state = 'stunned'; tr.timer = (perfect ? K.perfect.stunMs : K.block.stunMs) / 1000;
+      this.advanceAttack();
+      if (perfect) {
+        this.spark(sx, sy, 0x66f0ff, 16, 70); this.floatText(sx, sy - 24, 'PERFECT!', '#66f0ff');
+        if (K.perfect.healHp > 0 && p.hp < K.maxHp) { p.hp = Math.min(K.maxHp, p.hp + K.perfect.healHp); this.refreshHearts(); this.floatText(pl.x, pl.y - 60, '+HP', '#7dff9a'); }
+      } else this.spark(sx, sy, 0xffffff, 9, 38);
+      this.lastResult = (perfect ? 'PERFECT' : 'BLOCK') + ' (' + tr.attack + ', guard ' + Math.round(p.guardAge * 1000) + 'ms)';
+    } else {
+      const H = K.hurt;
+      const why = tr.attack === 'unblockable' ? 'unblockable' : (p.blocking ? (facingEnemy ? 'wrong stance' : 'facing away') : 'no block');
+      p.hp -= A.damage; p.hurt = H.stunMs / 1000; p.invuln = H.invulnMs / 1000;
+      p.jumping = false; p.grounded = false; p.blocking = false; p.buffer = 0; p.atk.state = 'idle'; p.atkBuffer = 0;
+      b.setVelocity(awayDir * H.knockbackX, -H.knockbackY);
+      this.spark(pl.x, pl.y - 10, 0xff4a4a, 12, 50); this.floatText(pl.x, pl.y - 50, '-' + A.damage, '#ff6a6a');
+      this.lastResult = 'HIT by ' + tr.attack + ' (' + why + ')';
+      if (p.hp <= 0) { p.hp = K.maxHp; p.invuln = K.koInvulnMs / 1000; this.toast('KO - HP reset'); }
+      this.refreshHearts();
+    }
+  }
+
+  /* ---------------- player attack -> trainer ---------------- */
+  playerAttackBox() {
+    const AT = CONFIG.attack, b = this.player.body, f = this.p.facing;
+    return { x: f > 0 ? b.right : b.left - AT.reach, y: b.bottom - AT.zone[1], w: AT.reach, h: AT.zone[1] - AT.zone[0] };
+  }
+  resolvePlayerAttack() {
+    const C = CONFIG, AT = C.attack, a = this.p.atk, tr = this.trainer;
+    if (a.state !== 'active' || a.hasHit || tr.state === 'defeated') return;
+    if (!overlap(this.playerAttackBox(), this.hurtBox())) return;
+    a.hasHit = true;
+    const counter = tr.state === 'stunned';
+    const dmg = AT.damage * (counter ? AT.stunnedMult : 1);
+    tr.hp = Math.max(0, tr.hp - dmg); tr.flash = 0.09;
+    const y = C.world.groundY - C.trainer.h / 2;
+    this.spark(tr.x - this.p.facing * (C.trainer.w / 2), y, counter ? 0xfff2a0 : 0xffffff, counter ? 12 : 6, counter ? 56 : 30);
+    this.floatText(tr.x, C.world.groundY - C.trainer.h - 14, (counter ? 'COUNTER -' : '-') + dmg, counter ? '#ffe36a' : '#ffffff');
+    this.lastResult = (counter ? 'COUNTER ' : 'hit ') + dmg;
+    if (tr.hp <= 0) {
+      tr.state = 'defeated'; tr.timer = C.trainer.defeatedResetMs / 1000;
+      this.toast('The Trainer is down! Resetting...');
+    }
+  }
+
+  /* ---------------- input ---------------- */
+  buildInput() {
+    const kb = this.input.keyboard, T = CONFIG.touch, S = T.stick;
+
+    // keyboard: arrows/WASD move, Space jump, J block (hold), Up/W = high, Down/S = low while J held, K attack, T cycles trainer mode
+    this.keys = kb.addKeys({
+      left: 'LEFT', right: 'RIGHT', up: 'UP', down: 'DOWN',
+      a: 'A', d: 'D', w: 'W', s: 'S', space: 'SPACE', j: 'J', k: 'K', t: 'T'
+    });
+    this.jumpLatch = false; this.atkLatch = false;
+    this.keys.space.on('down', () => { this.jumpLatch = true; });
+    this.keys.k.on('down', () => { this.atkLatch = true; });
+    this.keys.t.on('down', () => this.cycleTrainer());
+    [kb.addKey(113), kb.addKey(192)].forEach(k => k.on('down', () => this.toggleDebug()));   // F2, `
+
+    const B = T.buttons;
+    this.vis = { jump: rectOf(B.jump), block: rectOf(B.block), attack: rectOf(B.attack) };
+    this.hit = {
+      jump: rectOf(B.jump, T.hitPad), block: rectOf(B.block, T.hitPad), attack: rectOf(B.attack, T.hitPad),
+      dbg: T.dbg, fs: T.fs, trainer: T.trainer
+    };
+
+    const names = ['jump', 'block', 'attack'];
+    for (const k of names) if (this.vis[k].w < 64 || this.vis[k].h < 64) console.warn(`[touch] ${k} button is under 64px`);
+    for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++)
+      if (rectGap(this.vis[names[i]], this.vis[names[j]]) < 20) console.warn(`[touch] ${names[i]}/${names[j]} gap is under 20px`);
+
+    this.stick = { pointer: null, ox: 0, oy: 0, dx: 0, dy: 0 };
+    this.input.on('pointerdown', p => {
+      if (inRect(p, this.hit.jump)) this.jumpLatch = true;
+      else if (inRect(p, this.hit.attack)) this.atkLatch = true;
+      else if (inRect(p, this.hit.block)) { /* held state is polled */ }
+      else if (inRect(p, this.hit.dbg)) this.toggleDebug();
+      else if (inRect(p, this.hit.fs)) { /* handled on pointerup */ }
+      else if (inRect(p, this.hit.trainer)) this.cycleTrainer();
+      else if (!this.stick.pointer && inRect(p, S.zone)) {
+        this.stick.pointer = p; this.stick.ox = p.x; this.stick.oy = p.y; this.stick.dx = 0; this.stick.dy = 0;
+      }
+    });
+    this.held = { left: false, right: false, jump: false, block: false };
+
+    this.input.on('pointerup', p => { if (inRect(p, this.hit.fs)) this.toggleFullscreen(); });
+    this.scale.on('enterfullscreenfailed', () => this.toast('Fullscreen blocked by this page'));
+    this.scale.on('enterfullscreenunsupported', () => this.toast('Fullscreen not supported here'));
+  }
+
+  toggleFullscreen() {
+    try {
+      if (this.scale.isFullscreen) this.scale.stopFullscreen();
+      else if (this.scale.fullscreen.available) this.scale.startFullscreen();
+      else this.toast('Fullscreen not available here');
+    } catch (e) { this.toast('Fullscreen blocked by this page'); }
+  }
+
+  toast(msg) {
+    if (!this.toastTxt) this.toastTxt = this.add.text(CONFIG.view.w / 2, 100, '', { fontFamily: 'monospace', fontSize: '18px', color: '#fff', backgroundColor: '#000000cc', padding: { x: 10, y: 6 } })
+      .setOrigin(0.5).setScrollFactor(0).setDepth(200);
+    this.toastTxt.setText(msg).setAlpha(1).setVisible(true);
+    this.tweens.killTweensOf(this.toastTxt);
+    this.tweens.add({ targets: this.toastTxt, alpha: 0, delay: 2000, duration: 400 });
+  }
+
+  updateStick() {
+    const st = this.stick, S = CONFIG.touch.stick;
+    if (st.pointer && !st.pointer.isDown) st.pointer = null;
+    if (!st.pointer) { st.dx = 0; st.dy = 0; return; }
+    const p = st.pointer;
+    let dx = p.x - st.ox, dy = p.y - st.oy;
+    if (S.follow) {
+      const d = Math.hypot(dx, dy);
+      if (d > S.radius) {
+        const k = (d - S.radius) / d;
+        st.ox += dx * k; st.oy += dy * k;
+        dx = p.x - st.ox; dy = p.y - st.oy;
+      }
+    }
+    st.dx = dx; st.dy = dy;
+  }
+
+  readInput() {
+    const k = this.keys, S = CONFIG.touch.stick, st = this.stick;
+    this.updateStick();
+
+    let left = k.left.isDown || k.a.isDown, right = k.right.isDown || k.d.isDown;
+    let up = k.up.isDown || k.w.isDown, down = k.down.isDown || k.s.isDown;
+    let jump = k.space.isDown, block = k.j.isDown;
+
+    if (st.pointer) {
+      if (st.dx < -S.deadX) left = true;
+      if (st.dx >  S.deadX) right = true;
+      if (st.dy < -S.stanceY) up = true;
+      if (st.dy >  S.stanceY) down = true;
+    }
+    for (const p of this.input.manager.pointers) {
+      if (!p.isDown || p === st.pointer) continue;
+      if (inRect(p, this.hit.jump)) jump = true;
+      if (inRect(p, this.hit.block)) block = true;
+    }
+    this.held.left = left; this.held.right = right; this.held.jump = jump; this.held.block = block;
+    return {
+      dir: (right ? 1 : 0) - (left ? 1 : 0),
+      jumpHeld: jump, block,
+      stanceIn: down ? 'low' : (up ? 'high' : null)
+    };
+  }
+
+  /* ---------------- fixed-step gameplay ---------------- */
+  tick() {
+    const dt = 1 / CONFIG.stepHz;
+    const inp = this.readInput();
+    this.ticks++;
+    this.tickPlayer(inp, dt);
+    this.tickTrainer(dt);
+    this.resolveHits();
+    this.resolvePlayerAttack();
+  }
+
+  tickPlayer(inp, dt) {
+    const C = CONFIG, M = C.move, J = C.jump, G = C.gravity, AT = C.attack, p = this.p, b = this.player.body;
+    const jumpPressed = this.jumpLatch || (inp.jumpHeld && !p.jumpHeldPrev);
+    const atkPressed = this.atkLatch;
+    this.jumpLatch = false; this.atkLatch = false; p.jumpHeldPrev = inp.jumpHeld;
+
+    p.grounded = b.blocked.down;
+    p.hurt = Math.max(0, p.hurt - dt);
+    p.invuln = Math.max(0, p.invuln - dt);
+    const stunned = p.hurt > 0;
+
+    p.coyote = p.grounded ? J.coyoteMs / 1000 : Math.max(0, p.coyote - dt);
+    p.buffer = stunned ? 0 : (jumpPressed ? J.bufferMs / 1000 : Math.max(0, p.buffer - dt));
+    p.atkBuffer = stunned ? 0 : (atkPressed ? AT.bufferMs / 1000 : Math.max(0, p.atkBuffer - dt));
+    if (p.grounded && !stunned) p.jumping = false;
+
+    // attack state machine: idle -> windup -> active -> recovery -> idle  (hurt cancels it)
+    const a = p.atk;
+    a.timer = Math.max(0, a.timer - dt);
+    if (stunned) a.state = 'idle';
+    if (a.state === 'windup' && a.timer <= 0) { a.state = 'active'; a.timer = AT.activeMs / 1000; a.hasHit = false; }
+    else if (a.state === 'active' && a.timer <= 0) { a.state = 'recovery'; a.timer = AT.recoveryMs / 1000; }
+    else if (a.state === 'recovery' && a.timer <= 0) a.state = 'idle';
+
+    if (inp.dir !== 0 && !stunned && a.state === 'idle') p.facing = inp.dir;     // turn before swinging
+    if (a.state === 'idle' && p.atkBuffer > 0 && p.grounded && !stunned) {
+      a.state = 'windup'; a.timer = AT.startupMs / 1000; a.hasHit = false; p.atkBuffer = 0;
+    }
+    const attacking = a.state !== 'idle';
+
+    // block: hold, ground only, not while hurt or attacking. Stance from stick/keys up-down.
+    const wasBlocking = p.blocking, prevStance = p.stance;
+    p.blocking = inp.block && p.grounded && !stunned && !attacking;
+    if (p.blocking) {
+      if (inp.stanceIn) p.stance = inp.stanceIn;
+      else if (C.block.neutralStance !== 'last') p.stance = C.block.neutralStance;
+      if (!wasBlocking || p.stance !== prevStance) p.guardAge = 0; else p.guardAge += dt;
+    } else p.guardAge = 0;
+
+    const dir = (p.blocking || stunned || attacking) ? 0 : inp.dir;
+
+    let vx = b.velocity.x;
+    if (dir !== 0) {
+      const reversing = Math.sign(vx) === -dir;
+      const accel = (p.grounded ? M.groundAccel : M.airAccel) * (reversing ? M.turnBoost : 1);
+      vx += dir * accel * dt;
+    } else {
+      const dec = (p.grounded ? M.groundFriction : M.airFriction) * dt;
+      vx = Math.abs(vx) <= dec ? 0 : vx - Math.sign(vx) * dec;
+    }
+    vx = Phaser.Math.Clamp(vx, -M.maxSpeed, M.maxSpeed);
+
+    let vy = b.velocity.y;
+    if (p.buffer > 0 && p.coyote > 0 && !p.blocking && !stunned && !attacking) {
+      vy = -J.velocity; p.buffer = 0; p.coyote = 0; p.jumping = true; p.grounded = false;
+    }
+    if (p.jumping && vy < 0 && !inp.jumpHeld) vy = Math.max(vy, -J.velocity * J.cutFactor);
+    vy += G.rise * (vy > 0 ? G.fallMult : 1) * dt;
+    vy = Math.min(vy, G.maxFall);
+
+    b.setVelocity(vx, vy);
+
+    // player state: idle / run / jump / fall / block / attack / hurt
+    if (stunned) p.state = 'hurt';
+    else if (attacking) p.state = 'attack';
+    else if (p.blocking) p.state = 'block';
+    else if (!p.grounded && vy < 0) p.state = 'jump';
+    else if (!p.grounded) p.state = 'fall';
+    else p.state = Math.abs(vx) > 20 ? 'run' : 'idle';
+  }
+
+  /* ---------------- effects ---------------- */
+  spark(x, y, color, n, dist) {
+    for (let i = 0; i < n; i++) {
+      const r = this.add.rectangle(x, y, 5, 5, color).setDepth(60);
+      const a = Math.random() * Math.PI * 2, d = dist * (0.5 + Math.random() * 0.5);
+      this.tweens.add({ targets: r, x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, alpha: 0, duration: 260, onComplete: () => r.destroy() });
+    }
+  }
+  floatText(x, y, str, color) {
+    const t = this.add.text(x, y, str, { fontFamily: 'monospace', fontSize: '20px', fontStyle: 'bold', color }).setOrigin(0.5).setDepth(61);
+    this.tweens.add({ targets: t, y: y - 36, alpha: 0, duration: 800, onComplete: () => t.destroy() });
+  }
+
+  /* ---------------- UI ---------------- */
+  buildTouchUI() {
+    const T = CONFIG.touch, S = T.stick;
+    const D = 100;
+    const mkBtn = (r, label, size) => {
+      const rect = this.add.rectangle(r.x + r.w / 2, r.y + r.h / 2, r.w, r.h, 0xffffff, 0.18)
+        .setStrokeStyle(3, 0xffffff, 0.6).setScrollFactor(0).setDepth(D);
+      const txt = this.add.text(r.x + r.w / 2, r.y + r.h / 2, label, { fontFamily: 'monospace', fontSize: size, color: '#fff', align: 'center' })
+        .setOrigin(0.5).setScrollFactor(0).setDepth(D + 1);
+      return { rect, txt };
+    };
+    this.ui = {
+      jump: mkBtn(this.vis.jump, 'JUMP', '24px'),
+      block: mkBtn(this.vis.block, 'BLOCK', '22px'),
+      attack: mkBtn(this.vis.attack, 'ATTACK', '20px'),
+      dbg: mkBtn(T.dbg, 'DBG', '20px'),
+      fs: mkBtn(T.fs, 'FULL', '18px'),
+      trainer: mkBtn(T.trainer, 'TRAINER\nAUTO', '14px')
+    };
+    for (const k of ['dbg', 'fs', 'trainer']) this.ui[k].rect.setFillStyle(0xffffff, 0.1);
+    this.ui.attack.rect.setFillStyle(0xdff6ff, 0.2).setStrokeStyle(3, 0xdff6ff, 0.7);
+    this.ui.stanceTxt = this.add.text(this.vis.block.x + this.vis.block.w / 2, this.vis.block.y + this.vis.block.h - 18, '', {
+      fontFamily: 'monospace', fontSize: '16px', color: '#fff'
+    }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 1);
+
+    this.ui.hint = this.add.circle(S.hint.x, S.hint.y, S.radius, 0xffffff, 0.05).setStrokeStyle(2, 0xffffff, 0.22).setScrollFactor(0).setDepth(D);
+    this.ui.hintTxt = this.add.text(S.hint.x, S.hint.y, '< MOVE >', { fontFamily: 'monospace', fontSize: '16px', color: '#ffffff' })
+      .setOrigin(0.5).setAlpha(0.3).setScrollFactor(0).setDepth(D);
+    this.ui.base = this.add.circle(0, 0, S.radius, 0xffffff, 0.1).setStrokeStyle(3, 0xffffff, 0.5).setScrollFactor(0).setDepth(D).setVisible(false);
+    this.ui.knob = this.add.circle(0, 0, 30, 0xffffff, 0.45).setScrollFactor(0).setDepth(D + 1).setVisible(false);
+    const lbl = (t) => this.add.text(0, 0, t, { fontFamily: 'monospace', fontSize: '18px', color: '#fff' })
+      .setOrigin(0.5).setScrollFactor(0).setDepth(D + 1).setVisible(false);
+    this.ui.hi = lbl('HIGH'); this.ui.lo = lbl('LOW');
+    this.uiDbg = this.add.graphics().setScrollFactor(0).setDepth(D - 1);
+  }
+
+  buildCombatUI() {
+    this.hearts = [];
+    const n = CONFIG.combat.maxHp, x0 = 492, y = 30;
+    for (let i = 0; i < n; i++) {
+      this.hearts.push(this.add.rectangle(x0 + i * 28, y, 22, 22, 0xff4a5e).setStrokeStyle(2, 0xffffff, 0.8).setScrollFactor(0).setDepth(100));
+    }
+  }
+  refreshHearts() {
+    this.hearts.forEach((h, i) => h.setFillStyle(i < this.p.hp ? 0xff4a5e : 0x2a2a34).setStrokeStyle(2, 0xffffff, i < this.p.hp ? 0.8 : 0.3));
+  }
+
+  updateTouchUI() {
+    const C = CONFIG, S = C.touch.stick, st = this.stick, p = this.p, ui = this.ui, h = this.held;
+    const stanceColor = p.stance === 'low' ? C.colors.stanceLow : C.colors.stanceHigh;
+
+    ui.jump.rect.setFillStyle(0xffffff, h.jump ? 0.5 : 0.18);
+    ui.attack.rect.setFillStyle(0xdff6ff, p.atk.state !== 'idle' ? 0.55 : 0.2);
+    if (h.block) ui.block.rect.setFillStyle(stanceColor, 0.6); else ui.block.rect.setFillStyle(0xffffff, 0.18);
+    ui.stanceTxt.setText(h.block ? p.stance.toUpperCase() : '');
+    ui.block.txt.setY(this.vis.block.y + this.vis.block.h / 2 - (h.block ? 10 : 0));
+
+    const active = !!st.pointer;
+    ui.base.setVisible(active); ui.knob.setVisible(active);
+    ui.hint.setVisible(!active); ui.hintTxt.setVisible(!active);
+    const showLbl = active && h.block;
+    ui.hi.setVisible(showLbl); ui.lo.setVisible(showLbl);
+    if (active) {
+      ui.base.setPosition(st.ox, st.oy);
+      const d = Math.hypot(st.dx, st.dy), k = d > S.radius ? S.radius / d : 1;
+      ui.knob.setPosition(st.ox + st.dx * k, st.oy + st.dy * k);
+      ui.hi.setPosition(st.ox, st.oy - S.radius - 20).setAlpha(p.stance === 'high' ? 1 : 0.35);
+      ui.lo.setPosition(st.ox, st.oy + S.radius + 20).setAlpha(p.stance === 'low' ? 1 : 0.35);
+    }
+  }
+
+  /* ---------------- telegraph + trainer drawing ---------------- */
+  drawTrainer() {
+    const C = CONFIG, E = C.trainer, TG = E.telegraph, tr = this.trainer, gy = C.world.groundY, g = this.tg;
+    g.clear();
+    const f = tr.facing, x = tr.x, top = gy - E.h;
+
+    if (tr.state === 'windup' || tr.state === 'active') {
+      const col = attackColor(tr.attack), high = tr.attack === 'high', box = this.attackBox();
+      if (tr.state === 'windup') {
+        const elapsed = tr.windupTotal - tr.timer;
+        const solid = tr.timer * 1000 <= TG.solidLastMs;                      // last stretch = steady "NOW"
+        const prog = Math.min(1, elapsed / Math.max(0.001, tr.windupTotal));
+        const cueAlpha = solid ? 1 : TG.style === 'flash'
+          ? (Math.floor(elapsed * TG.flashHz * 2) % 2 === 0 ? 1 : 0.15)
+          : TG.minAlpha + (0.85 - TG.minAlpha) * prog;                      // steady: fades up, never blinks
+        if (TG.zonePreviewAlpha > 0) { g.fillStyle(col, TG.zonePreviewAlpha); g.fillRect(box.x, box.y, box.w, box.h); }
+        // CUE: HIGH = red bar over the head, LOW = yellow bar at the feet (colour AND position differ)
+        g.fillStyle(col, cueAlpha);
+        if (high) g.fillRect(x - E.w / 2 - 10, top - 20, E.w + 20, 14);
+        else g.fillRect(x - E.w / 2 - 16, gy - 12, E.w + 32, 12);
+        // arm: cocked overhead for HIGH, drawn back low for LOW
+        g.fillStyle(0xeeeeee, 1);
+        if (high) g.fillRect(x + f * (E.w / 2 + 6) - 6, top - 50, 12, 50);
+        else g.fillRect(f > 0 ? x - E.w / 2 - 44 : x + E.w / 2 + 4, gy - 22, 40, 10);
+      } else {
+        g.fillStyle(col, 0.85); g.fillRect(box.x, box.y, box.w, box.h);        // the swing itself
+        g.lineStyle(3, 0xffffff, 0.9); g.strokeRect(box.x, box.y, box.w, box.h);
+      }
+    } else if (tr.state === 'recovery') {
+      g.fillStyle(0x888888, 1); g.fillRect(x + f * (E.w / 2) - (f > 0 ? 0 : 12), gy - E.h * 0.45, 12, 34);   // arm lowered
+    } else if (tr.state === 'stunned') {
+      const t = this.time.now / 1000;
+      g.fillStyle(0xffe36a, 1);
+      for (let i = 0; i < 3; i++) g.fillRect(x + Math.cos(t * 7 + i * 2.1) * 20 - 3, top - 18 + Math.sin(t * 7 + i * 2.1) * 5, 6, 6);   // dizzy stars
+    }
+
+    // body colour (white flash when hit)
+    this.trainerRect.setFillStyle(tr.flash > 0 ? 0xffffff : C.colors.enemy[tr.state]);
+    this.trainerEye.setPosition(x + f * (E.w / 2 - 8), top + 16);
+
+    // health bar
+    const bw = 90, bx = x - bw / 2, by = top - 72, frac = tr.hp / E.maxHp;
+    const b = this.barG; b.clear();
+    b.fillStyle(0x000000, 0.7); b.fillRect(bx - 2, by - 2, bw + 4, 12);
+    b.fillStyle(frac > 0.35 ? 0x4adf7a : 0xffa13a, 1);   // green (never red: red means HIGH attack)
+    b.fillRect(bx, by, bw * frac, 8);
+  }
+
+  drawPlayerAttack() {
+    const a = this.p.atk, g = this.fx; g.clear();
+    if (a.state === 'idle') return;
+    const box = this.playerAttackBox();
+    if (a.state === 'windup') { g.fillStyle(0xffffff, 0.25); g.fillRect(this.p.facing > 0 ? box.x : box.x + box.w * 0.55, box.y, box.w * 0.45, box.h); }
+    else if (a.state === 'active') { g.fillStyle(0xffffff, 0.8); g.fillRect(box.x, box.y, box.w, box.h); }
+    else { g.fillStyle(0xffffff, 0.12); g.fillRect(this.p.facing > 0 ? box.x : box.x + box.w * 0.6, box.y, box.w * 0.4, box.h); }
+  }
+
+  /* ---------------- per-render-frame visuals ---------------- */
+  renderUpdate(time, delta) {
+    const C = CONFIG, p = this.p, pl = this.player, b = pl.body, cam = this.cameras.main, tr = this.trainer;
+
+    pl.setFillStyle(C.colors[p.state]);
+    const blink = p.invuln > 0 && Math.floor(p.invuln * 14) % 2 === 0;
+    pl.setAlpha(blink ? 0.35 : 1); this.nose.setAlpha(blink ? 0.35 : 1);
+    this.nose.setPosition(pl.x + p.facing * (C.player.w / 2 - 2), pl.y - C.player.h / 2 + 12);
+
+    if (p.blocking) {
+      const high = p.stance === 'high';
+      this.shield.setVisible(true)
+        .setSize(10, high ? 32 : 22)
+        .setFillStyle(high ? C.colors.stanceHigh : C.colors.stanceLow)
+        .setPosition(pl.x + p.facing * (C.player.w / 2 + 8), pl.y + (high ? -12 : 17));
+    } else this.shield.setVisible(false);
+
+    this.drawTrainer();
+    this.drawPlayerAttack();
+
+    const dt = Math.min(delta, 50) / 1000;
+    const target = -p.facing * C.camera.lookAhead;
+    cam.followOffset.x += (target - cam.followOffset.x) * (1 - Math.exp(-C.camera.lookAheadSpeed * dt));
+
+    this.updateTouchUI();
+
+    this.tickClock += delta;
+    if (this.tickClock >= 1000) { this.tickHz = Math.round(this.ticks * 1000 / this.tickClock); this.ticks = 0; this.tickClock = 0; }
+
+    if (!this.debugOn) return;
+    const g = this.dbg; g.clear();
+    g.lineStyle(2, p.grounded ? 0x00ff66 : 0xff3355, 1);
+    g.strokeRect(b.x, b.y, b.width, b.height);
+    g.fillStyle(0xffffff, 1); g.fillRect(b.center.x - 2, b.center.y - 2, 4, 4);
+    g.lineStyle(2, 0xffee00, 1); g.lineBetween(b.center.x, b.center.y, b.center.x + b.velocity.x * 0.1, b.center.y + b.velocity.y * 0.1);
+    g.lineStyle(1, 0xffee00, 0.9); g.lineBetween(0, C.world.groundY, C.world.width, C.world.groundY);
+    const bw = 40, bx = b.center.x - bw / 2, by = b.y - 14;
+    g.fillStyle(0x000000, 0.5); g.fillRect(bx, by, bw, 4); g.fillRect(bx, by + 6, bw, 4);
+    g.fillStyle(0x44ff88, 1); g.fillRect(bx, by, bw * p.coyote / (C.jump.coyoteMs / 1000), 4);
+    g.fillStyle(0x44ddff, 1); g.fillRect(bx, by + 6, bw * p.buffer / (C.jump.bufferMs / 1000), 4);
+    if (p.blocking) {
+      const s = this.shield; g.lineStyle(2, 0xffffff, 1); g.strokeRect(s.x - s.width / 2, s.y - s.height / 2, s.width, s.height);
+      const left = Math.max(0, 1 - p.guardAge / (C.combat.perfect.windowMs / 1000));
+      g.fillStyle(0x000000, 0.5); g.fillRect(bx, by - 6, bw, 4); g.fillStyle(0xff9d2e, 1); g.fillRect(bx, by - 6, bw * left, 4);
+    }
+    if (p.atk.state === 'active') { const pb = this.playerAttackBox(); g.lineStyle(2, 0xffffff, 1); g.strokeRect(pb.x, pb.y, pb.w, pb.h); }
+    const hb = this.hurtBox(); g.lineStyle(2, 0xff66cc, 1); g.strokeRect(hb.x, hb.y, hb.w, hb.h);
+    if (tr.state === 'windup' || tr.state === 'active') {
+      const bx2 = this.attackBox(); g.lineStyle(2, 0xffffff, tr.state === 'active' ? 1 : 0.5); g.strokeRect(bx2.x, bx2.y, bx2.w, bx2.h);
+    }
+
+    const u = this.uiDbg; u.clear();
+    const z = C.touch.stick.zone;
+    u.lineStyle(1, 0x66ccff, 0.5); u.strokeRect(z.x, z.y, z.w, z.h);
+    u.lineStyle(1, 0xff66cc, 0.8);
+    for (const k of ['jump', 'block', 'attack']) { const r = this.hit[k]; u.strokeRect(r.x, r.y, r.w, r.h); }
+
+    const down = this.input.manager.pointers.filter(q => q.isDown).length;
+    const ph = C.trainer.phases[this.curPhaseIdx()];
+    this.hud.setText([
+      `FPS ${Math.round(this.game.loop.actualFps)}  logic ${this.tickHz}Hz  touches ${down}`,
+      `${p.state}  facing ${p.facing > 0 ? '>' : '<'}  stance ${p.stance}  guard ${p.blocking ? Math.round(p.guardAge * 1000) + 'ms' : '-'}`,
+      `hp ${p.hp}/${C.combat.maxHp}  hurt ${p.hurt.toFixed(2)}  invuln ${p.invuln.toFixed(2)}  atk ${p.atk.state}`,
+      `trainer ${tr.state} ${tr.state === 'windup' || tr.state === 'active' ? tr.attack : ''} ${tr.timer.toFixed(2)}  hp ${tr.hp}/${C.trainer.maxHp}`,
+      `phase ${this.curPhaseIdx() + 1} "${ph.name}"  atk ${tr.atkIdx + 1}/${ph.attacks.length}  mode ${this.modeLabel()}`,
+      `last: ${this.lastResult}`
+    ]);
+  }
+
+  /* ---------------- debug ---------------- */
+  buildHud() {
+    this.dbg = this.add.graphics().setDepth(50);
+    this.hud = this.add.text(8, 6, '', { fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', backgroundColor: '#000000aa', padding: { x: 6, y: 4 } })
+      .setScrollFactor(0).setDepth(100);
+  }
+  toggleDebug() { this.debugOn = !this.debugOn; this.applyDebugVisibility(); }
+  applyDebugVisibility() {
+    this.dbg.setVisible(this.debugOn); this.hud.setVisible(this.debugOn); this.uiDbg.setVisible(this.debugOn);
+    if (!this.debugOn) { this.dbg.clear(); this.uiDbg.clear(); }
+  }
+}
+
+/* iOS/Android: kill scroll, pinch-zoom, double-tap zoom, context menu */
+['contextmenu', 'gesturestart', 'gesturechange', 'dblclick'].forEach(t => document.addEventListener(t, e => e.preventDefault(), { passive: false }));
+document.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+
+window.__game = new Phaser.Game({
+  type: Phaser.AUTO,
+  parent: document.body,
+  width: CONFIG.view.w,
+  height: CONFIG.view.h,
+  backgroundColor: CONFIG.colors.sky,
+  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  render: { roundPixels: true, antialias: false },
+  input: { activePointers: 3, touch: { capture: true } },
+  physics: { default: 'arcade', arcade: { gravity: { y: 0 }, fps: CONFIG.stepHz, fixedStep: true } },
+  scene: [GameScene]
+});
+</script>
+</body>
+</html>

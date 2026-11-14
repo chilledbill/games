@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<title>Guard - Stage 4: The Trainer</title>
+<title>Guard - Stage 5: Enemies</title>
 <style>
   html, body {
     margin: 0; height: 100%; background: #000; overflow: hidden;
@@ -33,20 +33,12 @@
    ===================================================================== */
 const CONFIG = {
   view:  { w: 960, h: 540 },
-  world: { width: 1700, groundY: 460, groundH: 80 },      // Stage 4: a small flat arena
+  world: { width: 1700, groundY: 460, groundH: 80 },      // one flat arena
   stepHz: 60,                                             // fixed gameplay/physics rate
 
   player: { w: 32, h: 56, startX: 260 },
 
-  move: {
-    maxSpeed:       340,
-    groundAccel:    2800,
-    groundFriction: 3200,
-    airAccel:       2000,
-    airFriction:     600,
-    turnBoost:       1.6
-  },
-
+  move: { maxSpeed: 340, groundAccel: 2800, groundFriction: 3200, airAccel: 2000, airFriction: 600, turnBoost: 1.6 },
   jump: { velocity: 820, cutFactor: 0.45, coyoteMs: 100, bufferMs: 100 },
   gravity: { rise: 2300, fallMult: 1.7, maxFall: 1100 },
   camera: { lerp: 0.12, lookAhead: 90, lookAheadSpeed: 3.0 },
@@ -54,71 +46,108 @@ const CONFIG = {
   /* ---- touch controls ---- */
   touch: {
     hitPad: 8,
-    stick: {
-      zone:    { x: 0, y: 90, w: 470, h: 450 },
-      hint:    { x: 150, y: 410 },
-      radius:  64,
-      deadX:   16,
-      stanceY: 30,
-      follow:  true
-    },
+    stick: { zone: { x: 0, y: 90, w: 470, h: 450 }, hint: { x: 150, y: 410 }, radius: 64, deadX: 16, stanceY: 30, follow: true },
     buttons: {
       jump:   { cx: 850, cy: 430, w: 124, h: 124 },
       block:  { cx: 676, cy: 404, w: 112, h: 112 },
-      attack: { cx: 800, cy: 262, w: 112, h: 112 }       // Stage 4: above-left of Jump, same thumb arc
+      attack: { cx: 800, cy: 262, w: 112, h: 112 }
     },
-    dbg:     { x: 868, y: 14, w: 78, h: 64 },
-    fs:      { x: 770, y: 14, w: 78, h: 64 },
-    trainer: { x: 352, y: 14, w: 116, h: 64 }            // TEMP test button: AUTO / practice one phase / passive
+    dbg:   { x: 868, y: 14, w: 78, h: 64 },
+    fs:    { x: 770, y: 14, w: 78, h: 64 },
+    snd:   { x: 664, y: 14, w: 78, h: 64 },
+    enemy: { x: 352, y: 14, w: 116, h: 64 }               // picks which enemy you fight
   },
 
-  block: { neutralStance: 'high' },                       // 'high' | 'low' | 'last'
+  block: { neutralStance: 'high' },
 
-  /* ---- Stage 3: combat ---- */
   combat: {
     maxHp: 5,
     block:   { pushback: 170, stunMs: 500,  requireFacing: true },
-    perfect: { windowMs: 100, stunMs: 1200, pushback: 60, healHp: 1 },   // guard raised <= windowMs before impact
+    perfect: { windowMs: 100, stunMs: 1200, pushback: 60, healHp: 1 },
     hurt:    { stunMs: 320, knockbackX: 320, knockbackY: 300, invulnMs: 1100 },
-    koInvulnMs: 2000
+    respawnInvulnMs: 1500
   },
 
-  /* ---- Stage 4: player's basic attack (the counter) ---- */
-  attack: {
-    startupMs: 70, activeMs: 110, recoveryMs: 220,        // windup / active / recovery
-    bufferMs: 120,                                        // press slightly early and it still fires
-    reach: 66, zone: [8, 52],                             // hitbox in front of you: [bottom, top] px above your feet
-    damage: 1,
-    stunnedMult: 3                                        // damage multiplier vs a STUNNED Trainer (the reward for blocking)
+  attack: {                                               // player's basic attack (the counter)
+    startupMs: 70, activeMs: 110, recoveryMs: 220, bufferMs: 120,
+    reach: 66, zone: [8, 52], damage: 1,
+    stunnedMult: 3                                        // damage multiplier vs a STUNNED or EXPOSED enemy
   },
 
-  /* ---- Stage 4: THE TRAINER ----
-     Telegraph per attack: windup -> (flash cue: RED bar over the head = HIGH, YELLOW bar at the feet = LOW)
-     -> active -> recovery. Phases run in order and loop. All times in ms. */
-  trainer: {
-    name: 'THE TRAINER',
-    x: 1150, w: 48, h: 80, maxHp: 24,
-    triggerRange: 340,                                    // only fights when you're this close
-    startDelayMs: 900, postStunIdleMs: 450,
-    defeatedResetMs: 2800,
-    speedScale: 1.0,                                      // global multiplier for windup/recovery/gaps (0.8 = faster, 1.3 = slower)
+  /* ---- feel ---- */
+  juice: {
+    hitstopFrames: { block: 2, perfect: 4, hurt: 3, enemyHit: 2, counter: 3, kill: 4 },     // freeze frames at 60 Hz
+    shake: {                                                                                // [durationMs, intensity]
+      block: [80, 0.003], perfect: [120, 0.006], hurt: [160, 0.009], enemyHit: [70, 0.002],
+      counter: [110, 0.005], kill: [220, 0.008], phase: [600, 0.010]
+    }
+  },
+  audio: { enabled: true, volume: 0.22 },
+
+  /* ---- enemies ---- */
+  enemyCommon: {
+    speedScale: 1.0,            // global: multiplies windup / recovery / gaps (0.8 = faster, 1.3 = slower)
+    minWindupMs: 380,           // windups never go below this (keeps every attack readable)
+    postStunIdleMs: 450,
+    arenaX: 1150,
+    nextEnemyDelayMs: 2400,     // after a kill, the next enemy in the run appears
     telegraph: {
-      flashHz: 9,                                         // cue blink rate during windup
-      solidLastMs: 120,                                   // cue turns SOLID this long before the hit = "block NOW"
-      zonePreviewAlpha: 0.14                              // faint preview of the hit zone (0 = off)
-    },
-    attacks: {                                            // zone = [bottom, top] px above the ground
-      high:        { reach: 110, zone: [28, 96], damage: 1 },
-      low:         { reach: 120, zone: [0, 26],  damage: 1 },
-      unblockable: { reach: 110, zone: [0, 120], damage: 1 }     // unused here, for Stage 5 enemies/boss
-    },
-    phases: [
-      { name: 'slow high',  attacks: ['high', 'high', 'high'],                          windupMs: 600, activeMs: 160, recoveryMs: 500, gapMs: 650, endPauseMs: 1500 },
-      { name: 'slow low',   attacks: ['low', 'low', 'low'],                             windupMs: 600, activeMs: 160, recoveryMs: 500, gapMs: 650, endPauseMs: 1500 },
-      { name: 'mixed',      attacks: ['high', 'low', 'high', 'low'],                    windupMs: 500, activeMs: 160, recoveryMs: 420, gapMs: 500, endPauseMs: 1500 },
-      { name: 'fast combo', attacks: ['high', 'low', 'low', 'high', 'low', 'high'],     windupMs: 400, activeMs: 140, recoveryMs: 260, gapMs: 140, endPauseMs: 2000 }
-    ]
+      style: 'steady',          // 'steady' = cue fades up, no blinking | 'flash' = blink
+      flashHz: 9, minAlpha: 0.4,
+      solidLastMs: 120,         // cue goes SOLID this long before the hit = "block NOW"
+      zonePreviewAlpha: 0.14
+    }
   },
+
+  attackTypes: {                                          // zone = [bottom, top] px above the ground
+    high:        { reach: 110, zone: [28, 96], damage: 1 },
+    low:         { reach: 120, zone: [0, 26],  damage: 1 },
+    unblockable: { reach: 110, zone: [0, 120], damage: 1 }      // purple: can't be blocked - back off out of reach
+  },
+
+  /* An attack entry is 'high' | 'low' | 'unblockable', or {t:'unblockable', windupMs:800} to override timing.
+     Scripts loop. exposeMs (boss only): after the combo the enemy is EXPOSED (big damage window). */
+  enemies: {
+    swinger: {                                            // HIGH-attack enemy
+      name: 'SWINGER', w: 44, h: 76, hp: 4, color: 0x9b5d5d, triggerRange: 360, startDelayMs: 900,
+      script: [
+        { attacks: ['high'], windupMs: 580, activeMs: 160, recoveryMs: 550, gapMs: 700, endPauseMs: 700 }
+      ]
+    },
+    sweeper: {                                            // LOW-attack enemy
+      name: 'SWEEPER', w: 44, h: 64, hp: 4, color: 0xa38a46, triggerRange: 360, startDelayMs: 900,
+      script: [
+        { attacks: ['low'], windupMs: 580, activeMs: 160, recoveryMs: 550, gapMs: 700, endPauseMs: 700 }
+      ]
+    },
+    duelist: {                                            // MIXED-attack enemy
+      name: 'DUELIST', w: 46, h: 80, hp: 8, color: 0x7a5a9b, triggerRange: 380, startDelayMs: 900,
+      script: [
+        { attacks: ['high', 'low'],        windupMs: 540, activeMs: 160, recoveryMs: 450, gapMs: 450, endPauseMs: 800 },
+        { attacks: ['low', 'high', 'low'], windupMs: 500, activeMs: 150, recoveryMs: 420, gapMs: 380, endPauseMs: 800 },
+        { attacks: ['high', 'high', 'low', 'low'], windupMs: 450, activeMs: 150, recoveryMs: 340, gapMs: 260, endPauseMs: 900 }
+      ]
+    },
+    warden: {                                             // BOSS: three phases, escalating speed + mix, one big punish window per combo
+      name: 'THE WARDEN', boss: true, w: 64, h: 104, hp: 60, color: 0x6a3040, reachBonus: 30,
+      triggerRange: 99999, startDelayMs: 1300, roarMs: 1100,
+      phases: [                                           // chosen by remaining HP (hpAbove = this phase runs while HP fraction is above it)
+        { hpAbove: 0.66, scripts: [
+          { attacks: ['high', 'low'],         windupMs: 560, activeMs: 170, recoveryMs: 450, gapMs: 450, endPauseMs: 500, exposeMs: 2400 },
+          { attacks: ['low', 'high', 'high'], windupMs: 540, activeMs: 170, recoveryMs: 450, gapMs: 420, endPauseMs: 500, exposeMs: 2400 }
+        ] },
+        { hpAbove: 0.33, scripts: [
+          { attacks: ['high', 'low', 'high', 'low'],                              windupMs: 470, activeMs: 160, recoveryMs: 380, gapMs: 300, endPauseMs: 500, exposeMs: 2000 },
+          { attacks: ['low', 'low', { t: 'unblockable', windupMs: 800 }],         windupMs: 470, activeMs: 160, recoveryMs: 380, gapMs: 300, endPauseMs: 500, exposeMs: 2000 }
+        ] },
+        { hpAbove: 0.0, scripts: [
+          { attacks: ['high', 'low', 'low', 'high', 'low'],                       windupMs: 400, activeMs: 150, recoveryMs: 280, gapMs: 180, endPauseMs: 450, exposeMs: 1600 },
+          { attacks: ['high', { t: 'unblockable', windupMs: 750 }, 'low', 'low', 'high'], windupMs: 400, activeMs: 150, recoveryMs: 280, gapMs: 180, endPauseMs: 450, exposeMs: 1600 }
+        ] }
+      ]
+    }
+  },
+  enemyOrder: ['swinger', 'sweeper', 'duelist', 'warden'],
 
   debug: { startOn: true },
 
@@ -129,7 +158,7 @@ const CONFIG = {
     stanceHigh: 0xff5a6a,           // red    = HIGH
     stanceLow:  0xffd34a,           // yellow = LOW
     unblockable: 0xc77dff,          // purple = UNBLOCKABLE
-    enemy: { idle: 0x9b5d5d, windup: 0xb07a3a, active: 0xd04a4a, recovery: 0x7a6a6a, stunned: 0x5aa0ff, defeated: 0x44444c }
+    enemy: { windup: 0xb07a3a, active: 0xd04a4a, recovery: 0x7a6a6a, stunned: 0x5aa0ff, exposed: 0x6fe8ff, dead: 0x44444c }
   }
 };
 
@@ -155,9 +184,11 @@ class GameScene extends Phaser.Scene {
     this.input.addPointer(2);
     if (this.input.mouse) this.input.mouse.disableContextMenu();
 
+    this.hitstopUntil = 0; this.deaths = 0; this.runStart = 0; this.nextTimer = null;
+    this.enemyIdx = 0; this.enemy = null;
+
     this.buildWorld();
     this.buildPlayer();
-    this.buildTrainer();
     this.buildInput();
     this.buildTouchUI();
     this.buildCombatUI();
@@ -171,8 +202,9 @@ class GameScene extends Phaser.Scene {
       state: 'idle', facing: 1, coyote: 0, buffer: 0, jumping: false, grounded: false,
       jumpHeldPrev: false, blocking: false, stance: C.block.neutralStance === 'low' ? 'low' : 'high',
       hp: C.combat.maxHp, hurt: 0, invuln: 0, guardAge: 0,
-      atk: { state: 'idle', timer: 0, hasHit: false }, atkBuffer: 0
+      atk: { state: 'idle', timer: 0, hit: new Set() }, atkBuffer: 0
     };
+    this.spawnEnemy(C.enemyOrder[0]);
     this.lastResult = '-';
     this.ticks = 0; this.tickHz = 0; this.tickClock = 0;
     this.physics.world.on('worldstep', this.tick, this);
@@ -208,7 +240,7 @@ class GameScene extends Phaser.Scene {
     g.fillStyle(C.colors.groundTop, 1); g.fillRect(0, gy, W, 6);
     g.fillStyle(C.colors.groundStripe, 1);
     for (let x = 0; x < W; x += 200) g.fillRect(x, gy + 6, 100, gh - 6);
-    g.fillStyle(C.colors.wall, 1);                      // arena end walls
+    g.fillStyle(C.colors.wall, 1);
     g.fillRect(0, 0, 18, gy); g.fillRect(W - 18, 0, 18, gy);
     g.fillStyle(C.colors.post, 1);
     for (let x = 250; x < W; x += 250) g.fillRect(x - 2, gy - 22, 4, 22);
@@ -224,166 +256,247 @@ class GameScene extends Phaser.Scene {
     this.physics.add.collider(this.player, this.ground);
     this.nose = this.add.rectangle(0, 0, 12, 8, 0xffffff).setDepth(6);
     this.shield = this.add.rectangle(0, 0, 10, 30, 0xffffff).setDepth(7).setVisible(false);
-    this.fx = this.add.graphics().setDepth(9);          // player attack visual
+    this.fx = this.add.graphics().setDepth(9);
   }
 
-  /* ---------------- THE TRAINER ---------------- */
-  buildTrainer() {
-    const C = CONFIG, E = C.trainer;
-    this.trainerRect = this.add.rectangle(E.x, C.world.groundY - E.h / 2, E.w, E.h, C.colors.enemy.idle).setDepth(4);
-    this.physics.add.existing(this.trainerRect, true);
-    this.physics.add.collider(this.player, this.trainerRect);
-    this.trainerEye = this.add.rectangle(0, 0, 10, 8, 0xffffff).setDepth(5);
-    this.tg = this.add.graphics().setDepth(4.5);        // telegraph / weapon drawing
-    this.barG = this.add.graphics().setDepth(8);        // health bar
-    this.barName = this.add.text(E.x, C.world.groundY - E.h - 86, E.name, { fontFamily: 'monospace', fontSize: '12px', color: '#cfd8ee' }).setOrigin(0.5).setDepth(8);
-    this.trainerModes = ['auto', 0, 1, 2, 3, 'off'];
-    this.trainerMode = 0;
-    this.trainer = {
-      x: E.x, facing: -1, state: 'idle', timer: E.startDelayMs / 1000, attack: 'high', hasHit: false,
-      hp: E.maxHp, phaseIdx: 0, atkIdx: 0, ph: E.phases[0], windupTotal: 0, nextGapMs: 0, flash: 0
+  /* ---------------- audio (WebAudio beeps) ---------------- */
+  audioInit() {
+    if (!this.actx) { try { this.actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { this.actx = null; } }
+    if (this.actx && this.actx.state === 'suspended') this.actx.resume();
+  }
+  tone(f, d, type = 'square', vol = 1, slide = 0, delay = 0) {
+    if (!CONFIG.audio.enabled || !this.actx) return;
+    try {
+      const t = this.actx.currentTime + delay, o = this.actx.createOscillator(), g = this.actx.createGain();
+      o.type = type; o.frequency.setValueAtTime(f, t);
+      if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(30, slide), t + d);
+      g.gain.setValueAtTime(CONFIG.audio.volume * vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + d);
+      o.connect(g); g.connect(this.actx.destination); o.start(t); o.stop(t + d + 0.02);
+    } catch (e) { /* audio is optional */ }
+  }
+  sfx(n) {
+    switch (n) {
+      case 'jump':    this.tone(330, 0.09, 'square', 0.5, 600); break;
+      case 'block':   this.tone(520, 0.06, 'triangle', 0.9); this.tone(780, 0.07, 'triangle', 0.7, 0, 0.04); break;
+      case 'perfect': this.tone(1200, 0.12, 'sine', 0.9); this.tone(1800, 0.16, 'sine', 0.8, 0, 0.06); break;
+      case 'hurt':    this.tone(180, 0.2, 'sawtooth', 0.9, 60); break;
+      case 'hit':     this.tone(300, 0.05, 'square', 0.7, 200); break;
+      case 'counter': this.tone(420, 0.06, 'square', 0.8, 220); this.tone(640, 0.09, 'square', 0.7, 0, 0.05); break;
+      case 'kill':    this.tone(500, 0.1, 'square', 0.8, 120); this.tone(260, 0.25, 'sawtooth', 0.7, 70, 0.08); break;
+      case 'expose':  this.tone(900, 0.1, 'sine', 0.7); this.tone(1200, 0.12, 'sine', 0.6, 0, 0.08); break;
+      case 'phase':   this.tone(110, 0.5, 'sawtooth', 1, 55); break;
+      case 'select':  this.tone(700, 0.05, 'square', 0.5); break;
+      case 'die':     this.tone(300, 0.4, 'sawtooth', 0.8, 70); break;
+    }
+  }
+  hitStop(frames) { this.hitstopUntil = Math.max(this.hitstopUntil, this.time.now + frames * 1000 / 60); }
+  shake(key) { const s = CONFIG.juice.shake[key]; if (s) this.cameras.main.shake(s[0], s[1]); }
+
+  /* ---------------- enemies (data driven) ---------------- */
+  spawnEnemy(key) {
+    const C = CONFIG, D = C.enemies[key], E = C.enemyCommon;
+    if (this.nextTimer) { this.nextTimer.remove(false); this.nextTimer = null; }
+    if (this.enemyCol) { this.enemyCol.destroy(); this.enemyCol = null; }
+    if (this.enemyRect) this.enemyRect.destroy();
+    this.enemyIdx = Math.max(0, C.enemyOrder.indexOf(key));
+    if (this.player && Math.abs(this.player.x - E.arenaX) < 110) this.player.body.reset(E.arenaX - 260, C.world.groundY - C.player.h / 2);
+    this.enemyRect = this.add.rectangle(E.arenaX, C.world.groundY - D.h / 2, D.w, D.h, D.color).setDepth(4).setAlpha(0);
+    this.physics.add.existing(this.enemyRect, true);
+    this.enemyCol = this.physics.add.collider(this.player, this.enemyRect);
+    this.tweens.add({ targets: this.enemyRect, alpha: 1, duration: 300 });
+    this.enemy = {
+      key, def: D, x: E.arenaX, hp: D.hp, maxHp: D.hp, state: 'idle', timer: D.startDelayMs / 1000, facing: -1,
+      scriptIdx: 0, atkIdx: 0, script: D.script ? D.script[0] : D.phases[0].scripts[0], attack: 'high', hasHit: false,
+      windupTotal: 0, nextGapMs: 0, flash: 0, phase: -1, comboDone: false
     };
+    if (this.ui && this.ui.enemy) this.ui.enemy.txt.setText('ENEMY\n' + D.name.replace('THE ', ''));
+    this.p && (this.p.atk.hit = new Set());
   }
 
-  modeLabel() {
-    const m = this.trainerModes[this.trainerMode];
-    return m === 'auto' ? 'AUTO' : m === 'off' ? 'PASSIVE' : 'P' + (m + 1) + ' ' + CONFIG.trainer.phases[m].name.toUpperCase();
-  }
-  cycleTrainer() {
-    this.trainerMode = (this.trainerMode + 1) % this.trainerModes.length;
-    const m = this.trainerModes[this.trainerMode], tr = this.trainer;
-    if (typeof m === 'number') { tr.phaseIdx = m; tr.atkIdx = 0; }
-    if (tr.state === 'idle') tr.timer = 0.6;
-    this.ui.trainer.txt.setText('TRAINER\n' + this.modeLabel().slice(0, 12));
-  }
-  curPhaseIdx() { const m = this.trainerModes[this.trainerMode]; return typeof m === 'number' ? m : this.trainer.phaseIdx; }
-
-  attackBox() {
-    const C = CONFIG, E = C.trainer, tr = this.trainer, A = E.attacks[tr.attack], gy = C.world.groundY;
-    const x0 = tr.facing > 0 ? tr.x + E.w / 2 : tr.x - E.w / 2 - A.reach;
-    return { x: x0, y: gy - A.zone[1], w: A.reach, h: A.zone[1] - A.zone[0] };
-  }
-  hurtBox() { const C = CONFIG, E = C.trainer; return { x: this.trainer.x - E.w / 2, y: C.world.groundY - E.h, w: E.w, h: E.h }; }
-
-  startAttack() {
-    const E = CONFIG.trainer, tr = this.trainer, S = E.speedScale;
-    const ph = E.phases[this.curPhaseIdx()];
-    tr.ph = ph; tr.attack = ph.attacks[tr.atkIdx];
-    tr.facing = (this.player.x < tr.x) ? -1 : 1;
-    tr.state = 'windup'; tr.windupTotal = ph.windupMs * S / 1000; tr.timer = tr.windupTotal; tr.hasHit = false;
+  cycleEnemy() {
+    const C = CONFIG;
+    this.audioInit(); this.sfx('select');
+    this.spawnEnemy(C.enemyOrder[(this.enemyIdx + 1) % C.enemyOrder.length]);
   }
 
-  advanceAttack() {                                       // an attack is finished (or was blocked): move the script on
-    const E = CONFIG.trainer, tr = this.trainer, ph = E.phases[this.curPhaseIdx()];
-    tr.atkIdx++;
-    if (tr.atkIdx >= ph.attacks.length) {
-      tr.atkIdx = 0; tr.nextGapMs = ph.endPauseMs;
-      if (this.trainerModes[this.trainerMode] === 'auto') tr.phaseIdx = (tr.phaseIdx + 1) % E.phases.length;
-    } else tr.nextGapMs = ph.gapMs;
+  attackBox(e) {
+    const C = CONFIG, D = e.def, A = C.attackTypes[e.attack], gy = C.world.groundY, reach = A.reach + (D.reachBonus || 0);
+    const x0 = e.facing > 0 ? e.x + D.w / 2 : e.x - D.w / 2 - reach;
+    return { x: x0, y: gy - A.zone[1], w: reach, h: A.zone[1] - A.zone[0] };
+  }
+  hurtBox(e) { const C = CONFIG; return { x: e.x - e.def.w / 2, y: C.world.groundY - e.def.h, w: e.def.w, h: e.def.h }; }
+
+  pickScripts(e) {
+    const D = e.def;
+    if (!D.phases) return { i: 0, scripts: D.script };
+    const frac = e.hp / e.maxHp;
+    let i = D.phases.findIndex(ph => frac > ph.hpAbove);
+    if (i < 0) i = D.phases.length - 1;
+    return { i, scripts: D.phases[i].scripts };
   }
 
-  tickTrainer(dt) {
-    const E = CONFIG.trainer, tr = this.trainer, p = this.p, S = E.speedScale;
-    tr.timer = Math.max(0, tr.timer - dt);
-    tr.flash = Math.max(0, tr.flash - dt);
-    const mode = this.trainerModes[this.trainerMode];
-    switch (tr.state) {
+  startAttack(e) {
+    const E = CONFIG.enemyCommon, ent = e.script.attacks[e.atkIdx];
+    e.attack = typeof ent === 'string' ? ent : ent.t;
+    const wMs = (typeof ent === 'object' && ent.windupMs) || e.script.windupMs;
+    e.facing = (this.player.x < e.x) ? -1 : 1;
+    e.state = 'windup'; e.windupTotal = Math.max(E.minWindupMs, wMs * E.speedScale) / 1000; e.timer = e.windupTotal; e.hasHit = false;
+  }
+
+  advanceAttack(e) {                                      // an attack finished (or got blocked): move the script on
+    e.atkIdx++;
+    if (e.atkIdx >= e.script.attacks.length) { e.atkIdx = 0; e.scriptIdx++; e.nextGapMs = e.script.endPauseMs; e.comboDone = true; }
+    else e.nextGapMs = e.script.gapMs;
+  }
+
+  tickEnemy(e, dt) {
+    const C = CONFIG, E = C.enemyCommon, D = e.def, p = this.p, S = E.speedScale;
+    e.timer = Math.max(0, e.timer - dt);
+    e.flash = Math.max(0, e.flash - dt);
+    switch (e.state) {
       case 'idle':
-        if (tr.timer <= 0 && mode !== 'off' && p.hurt <= 0 && Math.abs(this.player.x - tr.x) <= E.triggerRange) this.startAttack();
+        if (e.timer <= 0 && p.hurt <= 0 && Math.abs(this.player.x - e.x) <= D.triggerRange) {
+          if (e.atkIdx === 0) {                             // starting a new combo: pick script (boss: by phase)
+            const { i, scripts } = this.pickScripts(e);
+            if (D.phases && i !== e.phase) {
+              const first = e.phase < 0; e.phase = i; e.scriptIdx = 0;
+              if (!first) {                                  // phase change: the boss roars, then escalates
+                e.timer = D.roarMs / 1000; this.shake('phase'); this.sfx('phase');
+                this.spark(e.x, C.world.groundY - D.h / 2, 0xffffff, 18, 90);
+                break;
+              }
+            }
+            e.script = scripts[e.scriptIdx % scripts.length];
+          }
+          this.startAttack(e);
+        }
         break;
-      case 'windup':   if (tr.timer <= 0) { tr.state = 'active'; tr.timer = tr.ph.activeMs / 1000; tr.hasHit = false; } break;
-      case 'active':   if (tr.timer <= 0) { tr.state = 'recovery'; tr.timer = tr.ph.recoveryMs * S / 1000; } break;
-      case 'recovery': if (tr.timer <= 0) { this.advanceAttack(); tr.state = 'idle'; tr.timer = tr.nextGapMs * S / 1000; } break;
-      case 'stunned':  if (tr.timer <= 0) { tr.state = 'idle'; tr.timer = Math.max(tr.nextGapMs * S, E.postStunIdleMs) / 1000; } break;
-      case 'defeated': if (tr.timer <= 0) {
-        tr.hp = E.maxHp; tr.phaseIdx = 0; tr.atkIdx = 0; tr.state = 'idle'; tr.timer = E.startDelayMs / 1000;
-        if (typeof mode === 'number') tr.phaseIdx = mode;
-      } break;
+      case 'windup':   if (e.timer <= 0) { e.state = 'active'; e.timer = e.script.activeMs / 1000; e.hasHit = false; } break;
+      case 'active':   if (e.timer <= 0) { e.state = 'recovery'; e.timer = e.script.recoveryMs * S / 1000; } break;
+      case 'recovery':
+        if (e.timer <= 0) {
+          this.advanceAttack(e);
+          if (e.comboDone && e.script.exposeMs) {            // combo over: the clear punish window
+            e.comboDone = false; e.state = 'exposed'; e.timer = e.script.exposeMs / 1000; this.sfx('expose');
+          } else { e.comboDone = false; e.state = 'idle'; e.timer = e.nextGapMs * S / 1000; }
+        }
+        break;
+      case 'stunned':  if (e.timer <= 0) { e.state = 'idle'; e.timer = Math.max(e.nextGapMs * S, E.postStunIdleMs) / 1000; } break;
+      case 'exposed':  if (e.timer <= 0) { e.state = 'idle'; e.timer = e.nextGapMs * S / 1000; } break;
     }
   }
 
-  /* ---------------- trainer attack -> player ---------------- */
+  /* ---------------- enemy attack -> player ---------------- */
   resolveHits() {
-    const C = CONFIG, K = C.combat, tr = this.trainer, p = this.p, pl = this.player, b = pl.body;
-    if (tr.state !== 'active' || tr.hasHit || p.invuln > 0) return;
-    const box = this.attackBox();
+    const C = CONFIG, K = C.combat, e = this.enemy, p = this.p, pl = this.player, b = pl.body;
+    if (!e || e.state !== 'active' || e.hasHit || p.invuln > 0) return;
+    const box = this.attackBox(e);
     if (!overlap(box, { x: b.x, y: b.y, w: b.width, h: b.height })) return;
-    tr.hasHit = true;                                  // one hit per swing
+    e.hasHit = true;                                    // one hit per swing
 
-    const A = C.trainer.attacks[tr.attack];
-    const awayDir = (pl.x >= tr.x) ? 1 : -1;
-    const facingEnemy = Math.sign(tr.x - pl.x) === p.facing;
-    const correct = p.blocking && tr.attack !== 'unblockable' && p.stance === tr.attack && (facingEnemy || !K.block.requireFacing);
+    const A = C.attackTypes[e.attack];
+    const awayDir = (pl.x >= e.x) ? 1 : -1;
+    const facingEnemy = Math.sign(e.x - pl.x) === p.facing;
+    const correct = p.blocking && e.attack !== 'unblockable' && p.stance === e.attack && (facingEnemy || !K.block.requireFacing);
 
     if (correct) {
       const perfect = p.guardAge <= K.perfect.windowMs / 1000;
       const sx = pl.x + p.facing * (C.player.w / 2 + 14), sy = pl.y + (p.stance === 'high' ? -12 : 17);
       b.setVelocityX(awayDir * (perfect ? K.perfect.pushback : K.block.pushback));
-      tr.state = 'stunned'; tr.timer = (perfect ? K.perfect.stunMs : K.block.stunMs) / 1000;
-      this.advanceAttack();
+      e.state = 'stunned'; e.timer = (perfect ? K.perfect.stunMs : K.block.stunMs) / 1000;
+      this.advanceAttack(e); e.comboDone = false;
       if (perfect) {
         this.spark(sx, sy, 0x66f0ff, 16, 70); this.floatText(sx, sy - 24, 'PERFECT!', '#66f0ff');
         if (K.perfect.healHp > 0 && p.hp < K.maxHp) { p.hp = Math.min(K.maxHp, p.hp + K.perfect.healHp); this.refreshHearts(); this.floatText(pl.x, pl.y - 60, '+HP', '#7dff9a'); }
-      } else this.spark(sx, sy, 0xffffff, 9, 38);
-      this.lastResult = (perfect ? 'PERFECT' : 'BLOCK') + ' (' + tr.attack + ', guard ' + Math.round(p.guardAge * 1000) + 'ms)';
+        this.sfx('perfect'); this.hitStop(C.juice.hitstopFrames.perfect); this.shake('perfect');
+      } else {
+        this.spark(sx, sy, 0xffffff, 9, 38);
+        this.sfx('block'); this.hitStop(C.juice.hitstopFrames.block); this.shake('block');
+      }
+      this.lastResult = (perfect ? 'PERFECT' : 'BLOCK') + ' (' + e.attack + ', guard ' + Math.round(p.guardAge * 1000) + 'ms)';
     } else {
       const H = K.hurt;
-      const why = tr.attack === 'unblockable' ? 'unblockable' : (p.blocking ? (facingEnemy ? 'wrong stance' : 'facing away') : 'no block');
+      const why = e.attack === 'unblockable' ? 'unblockable' : (p.blocking ? (facingEnemy ? 'wrong stance' : 'facing away') : 'no block');
       p.hp -= A.damage; p.hurt = H.stunMs / 1000; p.invuln = H.invulnMs / 1000;
       p.jumping = false; p.grounded = false; p.blocking = false; p.buffer = 0; p.atk.state = 'idle'; p.atkBuffer = 0;
       b.setVelocity(awayDir * H.knockbackX, -H.knockbackY);
       this.spark(pl.x, pl.y - 10, 0xff4a4a, 12, 50); this.floatText(pl.x, pl.y - 50, '-' + A.damage, '#ff6a6a');
-      this.lastResult = 'HIT by ' + tr.attack + ' (' + why + ')';
-      if (p.hp <= 0) { p.hp = K.maxHp; p.invuln = K.koInvulnMs / 1000; this.toast('KO - HP reset'); }
+      this.sfx('hurt'); this.hitStop(C.juice.hitstopFrames.hurt); this.shake('hurt');
+      this.lastResult = 'HIT by ' + e.attack + ' (' + why + ')';
       this.refreshHearts();
+      if (p.hp <= 0) this.die();
     }
   }
 
-  /* ---------------- player attack -> trainer ---------------- */
+  die() {                                               // instant respawn: you restart the fight at full HP
+    const C = CONFIG, p = this.p;
+    this.deaths++; this.sfx('die');
+    this.player.body.reset(C.player.startX, C.world.groundY - C.player.h / 2);
+    Object.assign(p, { hp: C.combat.maxHp, hurt: 0, invuln: C.combat.respawnInvulnMs / 1000, blocking: false, jumping: false, buffer: 0, atkBuffer: 0, facing: 1 });
+    p.atk.state = 'idle';
+    this.cameras.main.fadeIn(250, 0, 0, 0);
+    this.spawnEnemy(this.enemy.key);
+    this.lastResult = 'DIED (deaths ' + this.deaths + ')';
+    this.refreshHearts();
+  }
+
+  /* ---------------- player attack -> enemy ---------------- */
   playerAttackBox() {
     const AT = CONFIG.attack, b = this.player.body, f = this.p.facing;
     return { x: f > 0 ? b.right : b.left - AT.reach, y: b.bottom - AT.zone[1], w: AT.reach, h: AT.zone[1] - AT.zone[0] };
   }
   resolvePlayerAttack() {
-    const C = CONFIG, AT = C.attack, a = this.p.atk, tr = this.trainer;
-    if (a.state !== 'active' || a.hasHit || tr.state === 'defeated') return;
-    if (!overlap(this.playerAttackBox(), this.hurtBox())) return;
-    a.hasHit = true;
-    const counter = tr.state === 'stunned';
+    const C = CONFIG, AT = C.attack, a = this.p.atk, e = this.enemy;
+    if (!e || a.state !== 'active' || e.state === 'dead' || a.hit.has(e)) return;
+    if (!overlap(this.playerAttackBox(), this.hurtBox(e))) return;
+    a.hit.add(e);
+    const counter = e.state === 'stunned' || e.state === 'exposed';
     const dmg = AT.damage * (counter ? AT.stunnedMult : 1);
-    tr.hp = Math.max(0, tr.hp - dmg); tr.flash = 0.09;
-    const y = C.world.groundY - C.trainer.h / 2;
-    this.spark(tr.x - this.p.facing * (C.trainer.w / 2), y, counter ? 0xfff2a0 : 0xffffff, counter ? 12 : 6, counter ? 56 : 30);
-    this.floatText(tr.x, C.world.groundY - C.trainer.h - 14, (counter ? 'COUNTER -' : '-') + dmg, counter ? '#ffe36a' : '#ffffff');
-    this.lastResult = (counter ? 'COUNTER ' : 'hit ') + dmg;
-    if (tr.hp <= 0) {
-      tr.state = 'defeated'; tr.timer = C.trainer.defeatedResetMs / 1000;
-      this.toast('The Trainer is down! Resetting...');
-    }
+    e.hp = Math.max(0, e.hp - dmg); e.flash = 0.09;
+    const y = C.world.groundY - e.def.h / 2;
+    this.spark(e.x - this.p.facing * (e.def.w / 2), y, counter ? 0xfff2a0 : 0xffffff, counter ? 12 : 6, counter ? 56 : 30);
+    this.floatText(e.x, C.world.groundY - e.def.h - 14, (counter ? 'COUNTER -' : '-') + dmg, counter ? '#ffe36a' : '#ffffff');
+    this.lastResult = (counter ? 'COUNTER ' : 'hit ') + dmg + ' (' + e.def.name + ' ' + e.hp + '/' + e.maxHp + ')';
+    if (e.hp <= 0) return this.killEnemy(e);
+    this.sfx(counter ? 'counter' : 'hit');
+    this.hitStop(counter ? C.juice.hitstopFrames.counter : C.juice.hitstopFrames.enemyHit);
+    this.shake(counter ? 'counter' : 'enemyHit');
+  }
+
+  killEnemy(e) {
+    const C = CONFIG;
+    e.state = 'dead';
+    this.sfx('kill'); this.hitStop(C.juice.hitstopFrames.kill); this.shake('kill');
+    this.spark(e.x, C.world.groundY - e.def.h / 2, 0xffffff, 22, 110);
+    if (this.enemyCol) { this.enemyCol.destroy(); this.enemyCol = null; }
+    this.tweens.add({ targets: this.enemyRect, alpha: 0, duration: 500 });
+    const next = C.enemyOrder[(this.enemyIdx + 1) % C.enemyOrder.length];
+    this.toast(e.def.name + ' defeated' + (e.key === 'warden' ? ' - run complete! (deaths ' + this.deaths + ')' : ''));
+    this.nextTimer = this.time.delayedCall(C.enemyCommon.nextEnemyDelayMs, () => { this.nextTimer = null; this.spawnEnemy(next); });
   }
 
   /* ---------------- input ---------------- */
   buildInput() {
     const kb = this.input.keyboard, T = CONFIG.touch, S = T.stick;
 
-    // keyboard: arrows/WASD move, Space jump, J block (hold), Up/W = high, Down/S = low while J held, K attack, T cycles trainer mode
+    // keyboard: arrows/WASD move, Space jump, J block (hold), Up/W = high, Down/S = low while J held, K attack, T next enemy, M mute
     this.keys = kb.addKeys({
       left: 'LEFT', right: 'RIGHT', up: 'UP', down: 'DOWN',
-      a: 'A', d: 'D', w: 'W', s: 'S', space: 'SPACE', j: 'J', k: 'K', t: 'T'
+      a: 'A', d: 'D', w: 'W', s: 'S', space: 'SPACE', j: 'J', k: 'K', t: 'T', m: 'M'
     });
     this.jumpLatch = false; this.atkLatch = false;
-    this.keys.space.on('down', () => { this.jumpLatch = true; });
-    this.keys.k.on('down', () => { this.atkLatch = true; });
-    this.keys.t.on('down', () => this.cycleTrainer());
+    this.keys.space.on('down', () => { this.audioInit(); this.jumpLatch = true; });
+    this.keys.k.on('down', () => { this.audioInit(); this.atkLatch = true; });
+    this.keys.t.on('down', () => this.cycleEnemy());
+    this.keys.m.on('down', () => this.toggleSound());
     [kb.addKey(113), kb.addKey(192)].forEach(k => k.on('down', () => this.toggleDebug()));   // F2, `
 
     const B = T.buttons;
     this.vis = { jump: rectOf(B.jump), block: rectOf(B.block), attack: rectOf(B.attack) };
     this.hit = {
       jump: rectOf(B.jump, T.hitPad), block: rectOf(B.block, T.hitPad), attack: rectOf(B.attack, T.hitPad),
-      dbg: T.dbg, fs: T.fs, trainer: T.trainer
+      dbg: T.dbg, fs: T.fs, snd: T.snd, enemy: T.enemy
     };
-
     const names = ['jump', 'block', 'attack'];
     for (const k of names) if (this.vis[k].w < 64 || this.vis[k].h < 64) console.warn(`[touch] ${k} button is under 64px`);
     for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++)
@@ -391,23 +504,29 @@ class GameScene extends Phaser.Scene {
 
     this.stick = { pointer: null, ox: 0, oy: 0, dx: 0, dy: 0 };
     this.input.on('pointerdown', p => {
+      this.audioInit();
       if (inRect(p, this.hit.jump)) this.jumpLatch = true;
       else if (inRect(p, this.hit.attack)) this.atkLatch = true;
       else if (inRect(p, this.hit.block)) { /* held state is polled */ }
       else if (inRect(p, this.hit.dbg)) this.toggleDebug();
       else if (inRect(p, this.hit.fs)) { /* handled on pointerup */ }
-      else if (inRect(p, this.hit.trainer)) this.cycleTrainer();
+      else if (inRect(p, this.hit.snd)) this.toggleSound();
+      else if (inRect(p, this.hit.enemy)) this.cycleEnemy();
       else if (!this.stick.pointer && inRect(p, S.zone)) {
         this.stick.pointer = p; this.stick.ox = p.x; this.stick.oy = p.y; this.stick.dx = 0; this.stick.dy = 0;
       }
     });
     this.held = { left: false, right: false, jump: false, block: false };
 
-    this.input.on('pointerup', p => { if (inRect(p, this.hit.fs)) this.toggleFullscreen(); });
+    this.input.on('pointerup', p => { this.audioInit(); if (inRect(p, this.hit.fs)) this.toggleFullscreen(); });
     this.scale.on('enterfullscreenfailed', () => this.toast('Fullscreen blocked by this page'));
     this.scale.on('enterfullscreenunsupported', () => this.toast('Fullscreen not supported here'));
   }
 
+  toggleSound() {
+    CONFIG.audio.enabled = !CONFIG.audio.enabled; this.audioInit();
+    this.ui.snd.txt.setText('SOUND\n' + (CONFIG.audio.enabled ? 'ON' : 'OFF'));
+  }
   toggleFullscreen() {
     try {
       if (this.scale.isFullscreen) this.scale.stopFullscreen();
@@ -415,13 +534,12 @@ class GameScene extends Phaser.Scene {
       else this.toast('Fullscreen not available here');
     } catch (e) { this.toast('Fullscreen blocked by this page'); }
   }
-
   toast(msg) {
     if (!this.toastTxt) this.toastTxt = this.add.text(CONFIG.view.w / 2, 100, '', { fontFamily: 'monospace', fontSize: '18px', color: '#fff', backgroundColor: '#000000cc', padding: { x: 10, y: 6 } })
       .setOrigin(0.5).setScrollFactor(0).setDepth(200);
     this.toastTxt.setText(msg).setAlpha(1).setVisible(true);
     this.tweens.killTweensOf(this.toastTxt);
-    this.tweens.add({ targets: this.toastTxt, alpha: 0, delay: 2000, duration: 400 });
+    this.tweens.add({ targets: this.toastTxt, alpha: 0, delay: 2200, duration: 400 });
   }
 
   updateStick() {
@@ -432,11 +550,7 @@ class GameScene extends Phaser.Scene {
     let dx = p.x - st.ox, dy = p.y - st.oy;
     if (S.follow) {
       const d = Math.hypot(dx, dy);
-      if (d > S.radius) {
-        const k = (d - S.radius) / d;
-        st.ox += dx * k; st.oy += dy * k;
-        dx = p.x - st.ox; dy = p.y - st.oy;
-      }
+      if (d > S.radius) { const k = (d - S.radius) / d; st.ox += dx * k; st.oy += dy * k; dx = p.x - st.ox; dy = p.y - st.oy; }
     }
     st.dx = dx; st.dy = dy;
   }
@@ -444,11 +558,9 @@ class GameScene extends Phaser.Scene {
   readInput() {
     const k = this.keys, S = CONFIG.touch.stick, st = this.stick;
     this.updateStick();
-
     let left = k.left.isDown || k.a.isDown, right = k.right.isDown || k.d.isDown;
     let up = k.up.isDown || k.w.isDown, down = k.down.isDown || k.s.isDown;
     let jump = k.space.isDown, block = k.j.isDown;
-
     if (st.pointer) {
       if (st.dx < -S.deadX) left = true;
       if (st.dx >  S.deadX) right = true;
@@ -461,11 +573,7 @@ class GameScene extends Phaser.Scene {
       if (inRect(p, this.hit.block)) block = true;
     }
     this.held.left = left; this.held.right = right; this.held.jump = jump; this.held.block = block;
-    return {
-      dir: (right ? 1 : 0) - (left ? 1 : 0),
-      jumpHeld: jump, block,
-      stanceIn: down ? 'low' : (up ? 'high' : null)
-    };
+    return { dir: (right ? 1 : 0) - (left ? 1 : 0), jumpHeld: jump, block, stanceIn: down ? 'low' : (up ? 'high' : null) };
   }
 
   /* ---------------- fixed-step gameplay ---------------- */
@@ -474,7 +582,7 @@ class GameScene extends Phaser.Scene {
     const inp = this.readInput();
     this.ticks++;
     this.tickPlayer(inp, dt);
-    this.tickTrainer(dt);
+    if (this.enemy && this.enemy.state !== 'dead') this.tickEnemy(this.enemy, dt);
     this.resolveHits();
     this.resolvePlayerAttack();
   }
@@ -495,21 +603,19 @@ class GameScene extends Phaser.Scene {
     p.atkBuffer = stunned ? 0 : (atkPressed ? AT.bufferMs / 1000 : Math.max(0, p.atkBuffer - dt));
     if (p.grounded && !stunned) p.jumping = false;
 
-    // attack state machine: idle -> windup -> active -> recovery -> idle  (hurt cancels it)
-    const a = p.atk;
+    const a = p.atk;                                      // attack state machine: idle -> windup -> active -> recovery
     a.timer = Math.max(0, a.timer - dt);
     if (stunned) a.state = 'idle';
-    if (a.state === 'windup' && a.timer <= 0) { a.state = 'active'; a.timer = AT.activeMs / 1000; a.hasHit = false; }
+    if (a.state === 'windup' && a.timer <= 0) { a.state = 'active'; a.timer = AT.activeMs / 1000; a.hit = new Set(); }
     else if (a.state === 'active' && a.timer <= 0) { a.state = 'recovery'; a.timer = AT.recoveryMs / 1000; }
     else if (a.state === 'recovery' && a.timer <= 0) a.state = 'idle';
 
-    if (inp.dir !== 0 && !stunned && a.state === 'idle') p.facing = inp.dir;     // turn before swinging
+    if (inp.dir !== 0 && !stunned && a.state === 'idle') p.facing = inp.dir;
     if (a.state === 'idle' && p.atkBuffer > 0 && p.grounded && !stunned) {
-      a.state = 'windup'; a.timer = AT.startupMs / 1000; a.hasHit = false; p.atkBuffer = 0;
+      a.state = 'windup'; a.timer = AT.startupMs / 1000; a.hit = new Set(); p.atkBuffer = 0;
     }
     const attacking = a.state !== 'idle';
 
-    // block: hold, ground only, not while hurt or attacking. Stance from stick/keys up-down.
     const wasBlocking = p.blocking, prevStance = p.stance;
     p.blocking = inp.block && p.grounded && !stunned && !attacking;
     if (p.blocking) {
@@ -523,8 +629,7 @@ class GameScene extends Phaser.Scene {
     let vx = b.velocity.x;
     if (dir !== 0) {
       const reversing = Math.sign(vx) === -dir;
-      const accel = (p.grounded ? M.groundAccel : M.airAccel) * (reversing ? M.turnBoost : 1);
-      vx += dir * accel * dt;
+      vx += dir * (p.grounded ? M.groundAccel : M.airAccel) * (reversing ? M.turnBoost : 1) * dt;
     } else {
       const dec = (p.grounded ? M.groundFriction : M.airFriction) * dt;
       vx = Math.abs(vx) <= dec ? 0 : vx - Math.sign(vx) * dec;
@@ -533,15 +638,13 @@ class GameScene extends Phaser.Scene {
 
     let vy = b.velocity.y;
     if (p.buffer > 0 && p.coyote > 0 && !p.blocking && !stunned && !attacking) {
-      vy = -J.velocity; p.buffer = 0; p.coyote = 0; p.jumping = true; p.grounded = false;
+      vy = -J.velocity; p.buffer = 0; p.coyote = 0; p.jumping = true; p.grounded = false; this.sfx('jump');
     }
     if (p.jumping && vy < 0 && !inp.jumpHeld) vy = Math.max(vy, -J.velocity * J.cutFactor);
     vy += G.rise * (vy > 0 ? G.fallMult : 1) * dt;
     vy = Math.min(vy, G.maxFall);
-
     b.setVelocity(vx, vy);
 
-    // player state: idle / run / jump / fall / block / attack / hurt
     if (stunned) p.state = 'hurt';
     else if (attacking) p.state = 'attack';
     else if (p.blocking) p.state = 'block';
@@ -580,9 +683,10 @@ class GameScene extends Phaser.Scene {
       attack: mkBtn(this.vis.attack, 'ATTACK', '20px'),
       dbg: mkBtn(T.dbg, 'DBG', '20px'),
       fs: mkBtn(T.fs, 'FULL', '18px'),
-      trainer: mkBtn(T.trainer, 'TRAINER\nAUTO', '14px')
+      snd: mkBtn(T.snd, 'SOUND\nON', '14px'),
+      enemy: mkBtn(T.enemy, 'ENEMY\nSWINGER', '14px')
     };
-    for (const k of ['dbg', 'fs', 'trainer']) this.ui[k].rect.setFillStyle(0xffffff, 0.1);
+    for (const k of ['dbg', 'fs', 'snd', 'enemy']) this.ui[k].rect.setFillStyle(0xffffff, 0.1);
     this.ui.attack.rect.setFillStyle(0xdff6ff, 0.2).setStrokeStyle(3, 0xdff6ff, 0.7);
     this.ui.stanceTxt = this.add.text(this.vis.block.x + this.vis.block.w / 2, this.vis.block.y + this.vis.block.h - 18, '', {
       fontFamily: 'monospace', fontSize: '16px', color: '#fff'
@@ -602,9 +706,10 @@ class GameScene extends Phaser.Scene {
   buildCombatUI() {
     this.hearts = [];
     const n = CONFIG.combat.maxHp, x0 = 492, y = 30;
-    for (let i = 0; i < n; i++) {
-      this.hearts.push(this.add.rectangle(x0 + i * 28, y, 22, 22, 0xff4a5e).setStrokeStyle(2, 0xffffff, 0.8).setScrollFactor(0).setDepth(100));
-    }
+    for (let i = 0; i < n; i++) this.hearts.push(this.add.rectangle(x0 + i * 28, y, 22, 22, 0xff4a5e).setStrokeStyle(2, 0xffffff, 0.8).setScrollFactor(0).setDepth(100));
+    this.bossG = this.add.graphics().setScrollFactor(0).setDepth(100);          // boss health bar (screen space)
+    this.bossName = this.add.text(540, 94, '', { fontFamily: 'monospace', fontSize: '13px', color: '#e8d9ee' }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
+    this.eg = this.add.graphics().setDepth(4.5);                                // enemy telegraph / bars (world space)
   }
   refreshHearts() {
     this.hearts.forEach((h, i) => h.setFillStyle(i < this.p.hp ? 0xff4a5e : 0x2a2a34).setStrokeStyle(2, 0xffffff, i < this.p.hp ? 0.8 : 0.3));
@@ -613,7 +718,6 @@ class GameScene extends Phaser.Scene {
   updateTouchUI() {
     const C = CONFIG, S = C.touch.stick, st = this.stick, p = this.p, ui = this.ui, h = this.held;
     const stanceColor = p.stance === 'low' ? C.colors.stanceLow : C.colors.stanceHigh;
-
     ui.jump.rect.setFillStyle(0xffffff, h.jump ? 0.5 : 0.18);
     ui.attack.rect.setFillStyle(0xdff6ff, p.atk.state !== 'idle' ? 0.55 : 0.2);
     if (h.block) ui.block.rect.setFillStyle(stanceColor, 0.6); else ui.block.rect.setFillStyle(0xffffff, 0.18);
@@ -634,49 +738,66 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  /* ---------------- telegraph + trainer drawing ---------------- */
-  drawTrainer() {
-    const C = CONFIG, E = C.trainer, TG = E.telegraph, tr = this.trainer, gy = C.world.groundY, g = this.tg;
+  /* ---------------- enemy drawing: body, telegraph, bars ---------------- */
+  drawEnemy() {
+    const C = CONFIG, TG = C.enemyCommon.telegraph, e = this.enemy, gy = C.world.groundY, g = this.eg, EC = C.colors.enemy;
     g.clear();
-    const f = tr.facing, x = tr.x, top = gy - E.h;
+    this.bossG.clear();
+    if (!e) return;
+    const D = e.def, f = e.facing, x = e.x, top = gy - D.h;
 
-    if (tr.state === 'windup' || tr.state === 'active') {
-      const col = attackColor(tr.attack), high = tr.attack === 'high', box = this.attackBox();
-      if (tr.state === 'windup') {
-        const elapsed = tr.windupTotal - tr.timer;
-        const solid = tr.timer * 1000 <= TG.solidLastMs;                      // last stretch = steady "NOW"
-        const on = solid || Math.floor(elapsed * TG.flashHz * 2) % 2 === 0;
-        if (TG.zonePreviewAlpha > 0) { g.fillStyle(col, TG.zonePreviewAlpha); g.fillRect(box.x, box.y, box.w, box.h); }
-        // CUE: HIGH = red bar over the head, LOW = yellow bar at the feet (colour AND position differ)
-        g.fillStyle(col, on ? 1 : 0.15);
-        if (high) g.fillRect(x - E.w / 2 - 10, top - 20, E.w + 20, 14);
-        else g.fillRect(x - E.w / 2 - 16, gy - 12, E.w + 32, 12);
-        // arm: cocked overhead for HIGH, drawn back low for LOW
+    this.enemyRect.setFillStyle(e.flash > 0 ? 0xffffff : (e.state === 'idle' ? D.color : EC[e.state]));
+    if (e.state === 'dead') { this.bossName.setText(''); return; }
+    g.fillStyle(0xffffff, 1); g.fillRect(x + f * (D.w / 2 - 9) - 5, top + 16, 10, 8);          // eye
+
+    if (e.state === 'windup' || e.state === 'active') {
+      const col = attackColor(e.attack), box = this.attackBox(e), type = e.attack;
+      if (e.state === 'windup') {
+        const elapsed = e.windupTotal - e.timer;
+        const solid = e.timer * 1000 <= TG.solidLastMs;
+        const prog = Math.min(1, elapsed / Math.max(0.001, e.windupTotal));
+        const a = solid ? 1 : TG.style === 'flash'
+          ? (Math.floor(elapsed * TG.flashHz * 2) % 2 === 0 ? 1 : 0.15)
+          : TG.minAlpha + (0.85 - TG.minAlpha) * prog;
+        if (TG.zonePreviewAlpha > 0) { g.fillStyle(col, type === 'unblockable' ? TG.zonePreviewAlpha * 1.6 : TG.zonePreviewAlpha); g.fillRect(box.x, box.y, box.w, box.h); }
+        // CUE: HIGH = bar over the head, LOW = bar at the feet, UNBLOCKABLE = both (purple)
+        g.fillStyle(col, a);
+        if (type !== 'low') g.fillRect(x - D.w / 2 - 10, top - 20, D.w + 20, 14);
+        if (type !== 'high') g.fillRect(x - D.w / 2 - 16, gy - 12, D.w + 32, 12);
         g.fillStyle(0xeeeeee, 1);
-        if (high) g.fillRect(x + f * (E.w / 2 + 6) - 6, top - 50, 12, 50);
-        else g.fillRect(f > 0 ? x - E.w / 2 - 44 : x + E.w / 2 + 4, gy - 22, 40, 10);
+        if (type === 'high') g.fillRect(x + f * (D.w / 2 + 6) - 6, top - 50, 12, 50);
+        else if (type === 'low') g.fillRect(f > 0 ? x - D.w / 2 - 44 : x + D.w / 2 + 4, gy - 22, 40, 10);
+        else g.fillRect(x + f * (D.w / 2 + 6) - 6, top - 60, 12, 60);
       } else {
-        g.fillStyle(col, 0.85); g.fillRect(box.x, box.y, box.w, box.h);        // the swing itself
+        g.fillStyle(col, 0.85); g.fillRect(box.x, box.y, box.w, box.h);
         g.lineStyle(3, 0xffffff, 0.9); g.strokeRect(box.x, box.y, box.w, box.h);
       }
-    } else if (tr.state === 'recovery') {
-      g.fillStyle(0x888888, 1); g.fillRect(x + f * (E.w / 2) - (f > 0 ? 0 : 12), gy - E.h * 0.45, 12, 34);   // arm lowered
-    } else if (tr.state === 'stunned') {
+    } else if (e.state === 'recovery') {
+      g.fillStyle(0x888888, 1); g.fillRect(x + f * (D.w / 2) - (f > 0 ? 0 : 12), gy - D.h * 0.45, 12, 34);
+    } else if (e.state === 'stunned' || e.state === 'exposed') {
       const t = this.time.now / 1000;
       g.fillStyle(0xffe36a, 1);
-      for (let i = 0; i < 3; i++) g.fillRect(x + Math.cos(t * 7 + i * 2.1) * 20 - 3, top - 18 + Math.sin(t * 7 + i * 2.1) * 5, 6, 6);   // dizzy stars
+      for (let i = 0; i < 3; i++) g.fillRect(x + Math.cos(t * 7 + i * 2.1) * 22 - 3, top - 18 + Math.sin(t * 7 + i * 2.1) * 5, 6, 6);
+      if (e.state === 'exposed') {                                                      // the big punish window: glowing outline
+        g.lineStyle(4, 0x6fe8ff, 0.55 + 0.45 * Math.sin(t * 8)); g.strokeRect(x - D.w / 2 - 4, top - 4, D.w + 8, D.h + 4);
+      }
     }
 
-    // body colour (white flash when hit)
-    this.trainerRect.setFillStyle(tr.flash > 0 ? 0xffffff : C.colors.enemy[tr.state]);
-    this.trainerEye.setPosition(x + f * (E.w / 2 - 8), top + 16);
-
-    // health bar
-    const bw = 90, bx = x - bw / 2, by = top - 72, frac = tr.hp / E.maxHp;
-    const b = this.barG; b.clear();
-    b.fillStyle(0x000000, 0.7); b.fillRect(bx - 2, by - 2, bw + 4, 12);
-    b.fillStyle(frac > 0.35 ? 0x4adf7a : 0xffa13a, 1);   // green (never red: red means HIGH attack)
-    b.fillRect(bx, by, bw * frac, 8);
+    // health: small bar over the head, or the big boss bar at the top of the screen
+    const frac = e.hp / e.maxHp, col = frac > 0.35 ? 0x4adf7a : 0xffa13a;
+    if (D.boss) {
+      const bw = 360, bx = 360, by = 104;
+      this.bossG.fillStyle(0x000000, 0.7); this.bossG.fillRect(bx - 3, by - 3, bw + 6, 14);
+      this.bossG.fillStyle(col, 1); this.bossG.fillRect(bx, by, bw * frac, 8);
+      this.bossG.fillStyle(0xffffff, 0.5);                                              // phase ticks at 66% and 33%
+      for (const m of [0.66, 0.33]) this.bossG.fillRect(bx + bw * m - 1, by - 3, 2, 14);
+      this.bossName.setText(D.name + (e.state === 'exposed' ? '  - EXPOSED!' : ''));
+    } else {
+      this.bossName.setText('');
+      const bw = 56, bx = x - bw / 2, by = top - 30;
+      g.fillStyle(0x000000, 0.7); g.fillRect(bx - 2, by - 2, bw + 4, 10);
+      g.fillStyle(col, 1); g.fillRect(bx, by, bw * frac, 6);                            // green (never red: red means HIGH attack)
+    }
   }
 
   drawPlayerAttack() {
@@ -690,7 +811,9 @@ class GameScene extends Phaser.Scene {
 
   /* ---------------- per-render-frame visuals ---------------- */
   renderUpdate(time, delta) {
-    const C = CONFIG, p = this.p, pl = this.player, b = pl.body, cam = this.cameras.main, tr = this.trainer;
+    const C = CONFIG, p = this.p, pl = this.player, b = pl.body, cam = this.cameras.main, e = this.enemy;
+
+    this.physics.world.isPaused = this.time.now < this.hitstopUntil;                // hit-stop freezes the simulation
 
     pl.setFillStyle(C.colors[p.state]);
     const blink = p.invuln > 0 && Math.floor(p.invuln * 14) % 2 === 0;
@@ -699,19 +822,16 @@ class GameScene extends Phaser.Scene {
 
     if (p.blocking) {
       const high = p.stance === 'high';
-      this.shield.setVisible(true)
-        .setSize(10, high ? 32 : 22)
+      this.shield.setVisible(true).setSize(10, high ? 32 : 22)
         .setFillStyle(high ? C.colors.stanceHigh : C.colors.stanceLow)
         .setPosition(pl.x + p.facing * (C.player.w / 2 + 8), pl.y + (high ? -12 : 17));
     } else this.shield.setVisible(false);
 
-    this.drawTrainer();
+    this.drawEnemy();
     this.drawPlayerAttack();
 
     const dt = Math.min(delta, 50) / 1000;
-    const target = -p.facing * C.camera.lookAhead;
-    cam.followOffset.x += (target - cam.followOffset.x) * (1 - Math.exp(-C.camera.lookAheadSpeed * dt));
-
+    cam.followOffset.x += (-p.facing * C.camera.lookAhead - cam.followOffset.x) * (1 - Math.exp(-C.camera.lookAheadSpeed * dt));
     this.updateTouchUI();
 
     this.tickClock += delta;
@@ -719,8 +839,7 @@ class GameScene extends Phaser.Scene {
 
     if (!this.debugOn) return;
     const g = this.dbg; g.clear();
-    g.lineStyle(2, p.grounded ? 0x00ff66 : 0xff3355, 1);
-    g.strokeRect(b.x, b.y, b.width, b.height);
+    g.lineStyle(2, p.grounded ? 0x00ff66 : 0xff3355, 1); g.strokeRect(b.x, b.y, b.width, b.height);
     g.fillStyle(0xffffff, 1); g.fillRect(b.center.x - 2, b.center.y - 2, 4, 4);
     g.lineStyle(2, 0xffee00, 1); g.lineBetween(b.center.x, b.center.y, b.center.x + b.velocity.x * 0.1, b.center.y + b.velocity.y * 0.1);
     g.lineStyle(1, 0xffee00, 0.9); g.lineBetween(0, C.world.groundY, C.world.width, C.world.groundY);
@@ -734,9 +853,9 @@ class GameScene extends Phaser.Scene {
       g.fillStyle(0x000000, 0.5); g.fillRect(bx, by - 6, bw, 4); g.fillStyle(0xff9d2e, 1); g.fillRect(bx, by - 6, bw * left, 4);
     }
     if (p.atk.state === 'active') { const pb = this.playerAttackBox(); g.lineStyle(2, 0xffffff, 1); g.strokeRect(pb.x, pb.y, pb.w, pb.h); }
-    const hb = this.hurtBox(); g.lineStyle(2, 0xff66cc, 1); g.strokeRect(hb.x, hb.y, hb.w, hb.h);
-    if (tr.state === 'windup' || tr.state === 'active') {
-      const bx2 = this.attackBox(); g.lineStyle(2, 0xffffff, tr.state === 'active' ? 1 : 0.5); g.strokeRect(bx2.x, bx2.y, bx2.w, bx2.h);
+    if (e && e.state !== 'dead') {
+      const hb = this.hurtBox(e); g.lineStyle(2, 0xff66cc, 1); g.strokeRect(hb.x, hb.y, hb.w, hb.h);
+      if (e.state === 'windup' || e.state === 'active') { const ab = this.attackBox(e); g.lineStyle(2, 0xffffff, e.state === 'active' ? 1 : 0.5); g.strokeRect(ab.x, ab.y, ab.w, ab.h); }
     }
 
     const u = this.uiDbg; u.clear();
@@ -746,13 +865,13 @@ class GameScene extends Phaser.Scene {
     for (const k of ['jump', 'block', 'attack']) { const r = this.hit[k]; u.strokeRect(r.x, r.y, r.w, r.h); }
 
     const down = this.input.manager.pointers.filter(q => q.isDown).length;
-    const ph = C.trainer.phases[this.curPhaseIdx()];
     this.hud.setText([
-      `FPS ${Math.round(this.game.loop.actualFps)}  logic ${this.tickHz}Hz  touches ${down}`,
-      `${p.state}  facing ${p.facing > 0 ? '>' : '<'}  stance ${p.stance}  guard ${p.blocking ? Math.round(p.guardAge * 1000) + 'ms' : '-'}`,
-      `hp ${p.hp}/${C.combat.maxHp}  hurt ${p.hurt.toFixed(2)}  invuln ${p.invuln.toFixed(2)}  atk ${p.atk.state}`,
-      `trainer ${tr.state} ${tr.state === 'windup' || tr.state === 'active' ? tr.attack : ''} ${tr.timer.toFixed(2)}  hp ${tr.hp}/${C.trainer.maxHp}`,
-      `phase ${this.curPhaseIdx() + 1} "${ph.name}"  atk ${tr.atkIdx + 1}/${ph.attacks.length}  mode ${this.modeLabel()}`,
+      `FPS ${Math.round(this.game.loop.actualFps)}  logic ${this.tickHz}Hz  touch ${down}`,
+      `${p.state} ${p.facing > 0 ? '>' : '<'} stance ${p.stance} guard ${p.blocking ? Math.round(p.guardAge * 1000) + 'ms' : '-'}`,
+      `hp ${p.hp}/${C.combat.maxHp}  hurt ${p.hurt.toFixed(1)}  inv ${Math.min(99, p.invuln).toFixed(1)}`,
+      `atk ${p.atk.state}  deaths ${this.deaths}`,
+      e ? `${e.def.name.replace('THE ', '')} ${e.state} ${e.state === 'windup' || e.state === 'active' ? e.attack : ''} ${e.timer.toFixed(2)}` : '-',
+      e ? `hp ${e.hp}/${e.maxHp}  phase ${e.phase + 1}  combo ${e.atkIdx + 1}/${e.script.attacks.length}` : '-',
       `last: ${this.lastResult}`
     ]);
   }
