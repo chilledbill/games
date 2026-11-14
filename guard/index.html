@@ -38,7 +38,8 @@ const CONFIG = {
 
   player: { w: 32, h: 56, startX: 260 },
 
-  move: { maxSpeed: 340, groundAccel: 2800, groundFriction: 3200, airAccel: 2000, airFriction: 600, turnBoost: 1.6 },
+  move: { maxSpeed: 340, groundAccel: 2800, groundFriction: 3200, airAccel: 2000, airFriction: 600, turnBoost: 3.5 },
+  autoFace: { mode: 'block', range: 520 },                // face the enemy automatically: 'block' = while guarding and when attacking | 'always' = whenever you aren't steering | 'off'
   jump: { velocity: 820, cutFactor: 0.45, coyoteMs: 100, bufferMs: 100 },
   gravity: { rise: 2300, fallMult: 1.7, maxFall: 1100 },
   camera: { lerp: 0.12, lookAhead: 90, lookAheadSpeed: 3.0 },
@@ -646,6 +647,12 @@ class GameScene extends Phaser.Scene {
       if (!wasBlocking || p.stance !== prevStance) p.guardAge = 0; else p.guardAge += dt;
     } else p.guardAge = 0;
 
+    const AF = C.autoFace, en = this.enemy;
+    if (AF.mode !== 'off' && en && en.state !== 'dead' && !stunned && Math.abs(en.x - this.player.x) < AF.range) {
+      const toward = Math.sign(en.x - this.player.x) || p.facing;
+      const justAttacked = a.state === 'windup' && a.timer >= AT.startupMs / 1000 - dt * 1.5;
+      if (p.blocking || (justAttacked && inp.dir === 0) || (AF.mode === 'always' && inp.dir === 0 && a.state === 'idle')) p.facing = toward;
+    }
     const dir = (p.blocking || stunned || attacking) ? 0 : inp.dir;
 
     let vx = b.velocity.x;
