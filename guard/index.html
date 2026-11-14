@@ -46,6 +46,8 @@ const CONFIG = {
   /* ---- touch controls ---- */
   touch: {
     hitPad: 8,
+    scheme: 'dpad',                                       // 'dpad' = four arrow buttons | 'stick' = floating left/right stick
+    dpad: { size: 76, gap: 20, cx: 160, cy: 392 },        // arrows: Left/Right move, Up = HIGH stance, Down = LOW stance (while Block held)
     stick: { zone: { x: 0, y: 90, w: 470, h: 450 }, hint: { x: 150, y: 410 }, radius: 64, deadX: 16, stanceY: 30, follow: true },
     buttons: {
       jump:   { cx: 850, cy: 430, w: 124, h: 124 },
@@ -497,6 +499,15 @@ class GameScene extends Phaser.Scene {
       jump: rectOf(B.jump, T.hitPad), block: rectOf(B.block, T.hitPad), attack: rectOf(B.attack, T.hitPad),
       dbg: T.dbg, fs: T.fs, snd: T.snd, enemy: T.enemy
     };
+    const PD = T.dpad, half = PD.size / 2, off = PD.size + PD.gap;
+    const mkPad = (cx, cy) => ({ x: cx - half, y: cy - half, w: PD.size, h: PD.size });
+    this.padVis = { left: mkPad(PD.cx - off, PD.cy), right: mkPad(PD.cx + off, PD.cy), up: mkPad(PD.cx, PD.cy - off), down: mkPad(PD.cx, PD.cy + off) };
+    this.padHit = {};
+    for (const k in this.padVis) { const r = this.padVis[k]; this.padHit[k] = { x: r.x - T.hitPad, y: r.y - T.hitPad, w: r.w + T.hitPad * 2, h: r.h + T.hitPad * 2 }; }
+    const pk = ['left', 'right', 'up', 'down'];
+    for (const k of pk) if (this.padVis[k].w < 64) console.warn(`[touch] dpad ${k} is under 64px`);
+    for (let i = 0; i < pk.length; i++) for (let j = i + 1; j < pk.length; j++)
+      if (rectGap(this.padVis[pk[i]], this.padVis[pk[j]]) < 20) console.warn(`[touch] dpad ${pk[i]}/${pk[j]} gap is under 20px`);
     const names = ['jump', 'block', 'attack'];
     for (const k of names) if (this.vis[k].w < 64 || this.vis[k].h < 64) console.warn(`[touch] ${k} button is under 64px`);
     for (let i = 0; i < names.length; i++) for (let j = i + 1; j < names.length; j++)
@@ -512,11 +523,11 @@ class GameScene extends Phaser.Scene {
       else if (inRect(p, this.hit.fs)) { /* handled on pointerup */ }
       else if (inRect(p, this.hit.snd)) this.toggleSound();
       else if (inRect(p, this.hit.enemy)) this.cycleEnemy();
-      else if (!this.stick.pointer && inRect(p, S.zone)) {
+      else if (T.scheme === 'stick' && !this.stick.pointer && inRect(p, S.zone)) {
         this.stick.pointer = p; this.stick.ox = p.x; this.stick.oy = p.y; this.stick.dx = 0; this.stick.dy = 0;
       }
     });
-    this.held = { left: false, right: false, jump: false, block: false };
+    this.held = { left: false, right: false, up: false, down: false, jump: false, block: false };
 
     this.input.on('pointerup', p => { this.audioInit(); if (inRect(p, this.hit.fs)) this.toggleFullscreen(); });
     this.scale.on('enterfullscreenfailed', () => this.toast('Fullscreen blocked by this page'));
@@ -567,12 +578,19 @@ class GameScene extends Phaser.Scene {
       if (st.dy < -S.stanceY) up = true;
       if (st.dy >  S.stanceY) down = true;
     }
+    const dpad = CONFIG.touch.scheme === 'dpad';
     for (const p of this.input.manager.pointers) {
       if (!p.isDown || p === st.pointer) continue;
       if (inRect(p, this.hit.jump)) jump = true;
       if (inRect(p, this.hit.block)) block = true;
+      if (dpad) {                                         // every finger is polled each tick, so sliding between arrows works
+        if (inRect(p, this.padHit.left)) left = true;
+        if (inRect(p, this.padHit.right)) right = true;
+        if (inRect(p, this.padHit.up)) up = true;
+        if (inRect(p, this.padHit.down)) down = true;
+      }
     }
-    this.held.left = left; this.held.right = right; this.held.jump = jump; this.held.block = block;
+    this.held.left = left; this.held.right = right; this.held.up = up; this.held.down = down; this.held.jump = jump; this.held.block = block;
     return { dir: (right ? 1 : 0) - (left ? 1 : 0), jumpHeld: jump, block, stanceIn: down ? 'low' : (up ? 'high' : null) };
   }
 
@@ -692,6 +710,16 @@ class GameScene extends Phaser.Scene {
       fontFamily: 'monospace', fontSize: '16px', color: '#fff'
     }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 1);
 
+    this.ui.pad = {};
+    for (const k in this.padVis) {
+      const r = this.padVis[k];
+      this.ui.pad[k] = this.add.rectangle(r.x + r.w / 2, r.y + r.h / 2, r.w, r.h, 0xffffff, 0.18)
+        .setStrokeStyle(3, 0xffffff, 0.6).setScrollFactor(0).setDepth(D).setVisible(T.scheme === 'dpad');
+    }
+    this.ui.padG = this.add.graphics().setScrollFactor(0).setDepth(D + 1);
+    const padLbl = (k, t) => this.add.text(this.padVis[k].x + this.padVis[k].w / 2, this.padVis[k].y + this.padVis[k].h - 12, t, { fontFamily: 'monospace', fontSize: '12px', color: '#fff' })
+      .setOrigin(0.5).setScrollFactor(0).setDepth(D + 2).setVisible(false);
+    this.ui.padHi = padLbl('up', 'HIGH'); this.ui.padLo = padLbl('down', 'LOW');
     this.ui.hint = this.add.circle(S.hint.x, S.hint.y, S.radius, 0xffffff, 0.05).setStrokeStyle(2, 0xffffff, 0.22).setScrollFactor(0).setDepth(D);
     this.ui.hintTxt = this.add.text(S.hint.x, S.hint.y, '< MOVE >', { fontFamily: 'monospace', fontSize: '16px', color: '#ffffff' })
       .setOrigin(0.5).setAlpha(0.3).setScrollFactor(0).setDepth(D);
@@ -723,6 +751,25 @@ class GameScene extends Phaser.Scene {
     if (h.block) ui.block.rect.setFillStyle(stanceColor, 0.6); else ui.block.rect.setFillStyle(0xffffff, 0.18);
     ui.stanceTxt.setText(h.block ? p.stance.toUpperCase() : '');
     ui.block.txt.setY(this.vis.block.y + this.vis.block.h / 2 - (h.block ? 10 : 0));
+
+    if (C.touch.scheme === 'dpad') {
+      ui.hint.setVisible(false); ui.hintTxt.setVisible(false); ui.base.setVisible(false); ui.knob.setVisible(false); ui.hi.setVisible(false); ui.lo.setVisible(false);
+      for (const k of ['left', 'right', 'up', 'down']) {
+        let col = 0xffffff, a = h[k] ? 0.5 : 0.18;
+        if (h.block && k === 'up') { col = C.colors.stanceHigh; a = p.stance === 'high' ? 0.7 : 0.3; }       // while blocking, up/down show the stance colours
+        if (h.block && k === 'down') { col = C.colors.stanceLow; a = p.stance === 'low' ? 0.7 : 0.3; }
+        ui.pad[k].setFillStyle(col, a);
+      }
+      ui.padHi.setVisible(h.block); ui.padLo.setVisible(h.block);
+      const g = ui.padG; g.clear();
+      const tri = (k, dx, dy) => {                        // arrow glyphs drawn as triangles (no font dependency)
+        const r = this.padVis[k], cx = r.x + r.w / 2, cy = r.y + r.h / 2 - (h.block && (k === 'up' || k === 'down') ? 5 : 0), s = 16;
+        g.fillStyle(0xffffff, h[k] ? 1 : 0.8);
+        g.fillTriangle(cx + dx * s, cy + dy * s, cx - dy * s - dx * s, cy + dx * s - dy * s, cx + dy * s - dx * s, cy - dx * s - dy * s);
+      };
+      tri('left', -1, 0); tri('right', 1, 0); tri('up', 0, -1); tri('down', 0, 1);
+      return;
+    }
 
     const active = !!st.pointer;
     ui.base.setVisible(active); ui.knob.setVisible(active);
@@ -859,9 +906,9 @@ class GameScene extends Phaser.Scene {
     }
 
     const u = this.uiDbg; u.clear();
-    const z = C.touch.stick.zone;
-    u.lineStyle(1, 0x66ccff, 0.5); u.strokeRect(z.x, z.y, z.w, z.h);
+    if (C.touch.scheme === 'stick') { const z = C.touch.stick.zone; u.lineStyle(1, 0x66ccff, 0.5); u.strokeRect(z.x, z.y, z.w, z.h); }
     u.lineStyle(1, 0xff66cc, 0.8);
+    if (C.touch.scheme === 'dpad') for (const k in this.padHit) { const r = this.padHit[k]; u.strokeRect(r.x, r.y, r.w, r.h); }
     for (const k of ['jump', 'block', 'attack']) { const r = this.hit[k]; u.strokeRect(r.x, r.y, r.w, r.h); }
 
     const down = this.input.manager.pointers.filter(q => q.isDown).length;
