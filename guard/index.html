@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<title>Platformer - Stage 2: Touch Controls</title>
+<title>Guard - Stage 3: High / Low Block</title>
 <style>
   html, body {
     margin: 0; height: 100%; background: #000; overflow: hidden;
@@ -47,46 +47,53 @@ const CONFIG = {
     turnBoost:       1.6
   },
 
-  jump: {
-    velocity:    820,
-    cutFactor:   0.45,
-    coyoteMs:    100,
-    bufferMs:    100
-  },
-
-  gravity: {
-    rise:     2300,
-    fallMult: 1.7,
-    maxFall:  1100
-  },
-
-  camera: {
-    lerp:           0.12,
-    lookAhead:      90,
-    lookAheadSpeed: 3.0
-  },
+  jump: { velocity: 820, cutFactor: 0.45, coyoteMs: 100, bufferMs: 100 },
+  gravity: { rise: 2300, fallMult: 1.7, maxFall: 1100 },
+  camera: { lerp: 0.12, lookAhead: 90, lookAheadSpeed: 3.0 },
 
   /* ---- Stage 2: touch controls ---- */
   touch: {
-    hitPad: 8,                      // extra px of hit area around each button (visual stays same)
+    hitPad: 8,
     stick: {
-      zone:    { x: 0, y: 70, w: 470, h: 470 },   // touching anywhere in here spawns the stick
-      hint:    { x: 150, y: 410 },                // faint ring shown while no thumb is down
-      radius:  64,                                // knob travel; origin follows the thumb beyond this
-      deadX:   16,                                // px left/right before running starts
-      stanceY: 30,                                // px up/down (while Block is held) to pick stance
-      follow:  true                               // true = origin drags with thumb (fast reversals)
+      zone:    { x: 0, y: 90, w: 470, h: 450 },
+      hint:    { x: 150, y: 410 },
+      radius:  64,
+      deadX:   16,
+      stanceY: 30,
+      follow:  true
     },
-    buttons: {                                    // centre + size; min 64px, keep 20px+ gaps
+    buttons: {
       jump:  { cx: 850, cy: 430, w: 124, h: 124 },
       block: { cx: 676, cy: 404, w: 112, h: 112 }
     },
-    dbg: { x: 868, y: 14, w: 78, h: 64 },
-    fs:  { x: 770, y: 14, w: 78, h: 64 }       // fullscreen toggle
+    dbg:   { x: 868, y: 14, w: 78, h: 64 },
+    fs:    { x: 770, y: 14, w: 78, h: 64 },
+    dummy: { x: 352, y: 14, w: 116, h: 64 }     // TEMP test button: cycles what the dummy throws
   },
 
-  block: {
-    neutralStance: 'high'           // stance when Block is held with stick centred: 'high' | 'low' | 'last'
+  block: { neutralStance: 'high' },             // 'high' | 'low' | 'last'
+
+  /* ---- Stage 3: combat ---- */
+  combat: {
+    maxHp: 5,
+    block:   { pushback: 170, stunMs: 500,  requireFacing: true },   // correct block: you slide back, attacker is stunned
+    perfect: { windowMs: 100, stunMs: 1200, pushback: 60, healHp: 1 }, // guard raised <= windowMs before impact
+    hurt:    { stunMs: 320, knockbackX: 320, knockbackY: 300, invulnMs: 1100 },
+    koInvulnMs: 2000                             // after HP hits 0 (HP resets for now; real death comes in Stage 5)
+  },
+
+  /* TEST DUMMY (Stage 4 replaces it with The Trainer + proper telegraphs).
+     zone = [bottom, top] height of the hitbox above the ground, in px. */
+  dummy: {
+    x: 760, w: 44, h: 76,
+    triggerRange: 320,                          // only attacks if you're this close
+    idleMs: 1100, postStunIdleMs: 500,
+    pattern: ['high', 'low', 'unblockable'],    // used in AUTO mode
+    attacks: {
+      high:        { windupMs: 500, activeMs: 160, recoveryMs: 550, reach: 100, zone: [28, 96],  damage: 1 },
+      low:         { windupMs: 500, activeMs: 160, recoveryMs: 550, reach: 100, zone: [0, 26],   damage: 1 },
+      unblockable: { windupMs: 650, activeMs: 160, recoveryMs: 650, reach: 110, zone: [0, 120],  damage: 1 }
+    }
   },
 
   debug: { startOn: true },
@@ -94,9 +101,11 @@ const CONFIG = {
   colors: {
     sky: '#16213a', far: 0x1f2d4a, near: 0x2a4066, ground: 0x34503a, groundTop: 0x4f7a56,
     groundStripe: 0x2e4834, post: 0xe8d28a,
-    idle: 0x4aa3ff, run: 0x41d98a, jump: 0xffd34a, fall: 0xff7a4a, block: 0x7a8cff,
-    stanceHigh: 0xff5a6a,           // red = HIGH  (will match the enemy's high telegraph)
-    stanceLow:  0xffd34a            // yellow = LOW (will match the enemy's low telegraph)
+    idle: 0x4aa3ff, run: 0x41d98a, jump: 0xffd34a, fall: 0xff7a4a, block: 0x7a8cff, hurt: 0xff9a9a,
+    stanceHigh: 0xff5a6a,           // red    = HIGH
+    stanceLow:  0xffd34a,           // yellow = LOW
+    unblockable: 0xc77dff,          // purple = UNBLOCKABLE
+    enemy: { idle: 0x9b5d5d, windup: 0xc98a2a, active: 0xff4040, recovery: 0x7a6a6a, stunned: 0x5aa0ff }
   }
 };
 
@@ -109,6 +118,8 @@ const rectGap = (a, b) => {
   const dy = Math.max(0, a.y - (b.y + b.h), b.y - (a.y + a.h));
   return Math.hypot(dx, dy);
 };
+const overlap = (a, b) => a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+const attackColor = (h) => h === 'high' ? CONFIG.colors.stanceHigh : h === 'low' ? CONFIG.colors.stanceLow : CONFIG.colors.unblockable;
 
 class GameScene extends Phaser.Scene {
   constructor() { super('Game'); }
@@ -117,13 +128,15 @@ class GameScene extends Phaser.Scene {
     const C = CONFIG;
     this.cameras.main.setBackgroundColor(C.colors.sky);
     this.physics.world.setBounds(0, 0, C.world.width, C.view.h);
-    this.input.addPointer(2);                       // 4 simultaneous pointers total
+    this.input.addPointer(2);
     if (this.input.mouse) this.input.mouse.disableContextMenu();
 
     this.buildWorld();
     this.buildPlayer();
+    this.buildEnemy();
     this.buildInput();
     this.buildTouchUI();
+    this.buildCombatUI();
     this.buildHud();
 
     const cam = this.cameras.main;
@@ -132,21 +145,23 @@ class GameScene extends Phaser.Scene {
 
     this.p = {
       state: 'idle', facing: 1, coyote: 0, buffer: 0, jumping: false, grounded: false,
-      jumpHeldPrev: false, blocking: false, stance: C.block.neutralStance === 'low' ? 'low' : 'high'
+      jumpHeldPrev: false, blocking: false, stance: C.block.neutralStance === 'low' ? 'low' : 'high',
+      hp: C.combat.maxHp, hurt: 0, invuln: 0, guardAge: 0
     };
+    this.lastResult = '-';
     this.ticks = 0; this.tickHz = 0; this.tickClock = 0;
     this.physics.world.on('worldstep', this.tick, this);
     this.events.on(Phaser.Scenes.Events.POST_UPDATE, this.renderUpdate, this);
 
     this.debugOn = C.debug.startOn;
     this.applyDebugVisibility();
+    this.refreshHearts();
     window.__scene = this;
   }
 
   /* ---------------- world ---------------- */
   buildWorld() {
     const C = CONFIG, W = C.world.width, gy = C.world.groundY, gh = C.world.groundH;
-
     const layer = (factor, color, minH, maxH, minW, maxW, seed) => {
       const g = this.add.graphics().setScrollFactor(factor).setDepth(0);
       g.fillStyle(color, 1);
@@ -183,49 +198,135 @@ class GameScene extends Phaser.Scene {
     b.setCollideWorldBounds(true);
     b.setAllowGravity(false);
     this.physics.add.collider(this.player, this.ground);
-    this.nose = this.add.rectangle(0, 0, 12, 8, 0xffffff).setDepth(6);            // facing marker
-    this.shield = this.add.rectangle(0, 0, 10, 30, 0xffffff).setDepth(7).setVisible(false); // placeholder stance shield
+    this.nose = this.add.rectangle(0, 0, 12, 8, 0xffffff).setDepth(6);
+    this.shield = this.add.rectangle(0, 0, 10, 30, 0xffffff).setDepth(7).setVisible(false);
+  }
+
+  /* ---------------- enemy (test dummy) ---------------- */
+  buildEnemy() {
+    const C = CONFIG, E = C.dummy;
+    this.enemyRect = this.add.rectangle(E.x, C.world.groundY - E.h / 2, E.w, E.h, C.colors.enemy.idle).setDepth(4);
+    this.physics.add.existing(this.enemyRect, true);
+    this.physics.add.collider(this.player, this.enemyRect);
+    this.enemyEye = this.add.rectangle(0, 0, 10, 8, 0xffffff).setDepth(5);
+    this.enemyLabel = this.add.text(E.x, C.world.groundY - E.h - 22, '', { fontFamily: 'monospace', fontSize: '16px', color: '#9fd0ff' }).setOrigin(0.5).setDepth(8);
+    this.cue = this.add.graphics().setDepth(3);        // placeholder attack cue (Stage 4 builds real telegraphs)
+    this.dummyModes = ['auto', 'high', 'low', 'unblockable', 'off'];
+    this.dummyMode = 0;
+    this.enemy = { x: E.x, facing: -1, state: 'idle', timer: E.idleMs / 1000, attack: 'high', hasHit: false, patIdx: 0 };
+  }
+
+  attackBox() {
+    const C = CONFIG, E = C.dummy, e = this.enemy, A = E.attacks[e.attack], gy = C.world.groundY;
+    const x0 = e.facing > 0 ? e.x + E.w / 2 : e.x - E.w / 2 - A.reach;
+    return { x: x0, y: gy - A.zone[1], w: A.reach, h: A.zone[1] - A.zone[0] };
+  }
+
+  startAttack(mode) {
+    const E = CONFIG.dummy, e = this.enemy;
+    e.attack = mode === 'auto' ? E.pattern[e.patIdx++ % E.pattern.length] : mode;
+    e.facing = (this.player.x < e.x) ? -1 : 1;
+    e.state = 'windup'; e.timer = E.attacks[e.attack].windupMs / 1000; e.hasHit = false;
+  }
+
+  tickEnemy(dt) {
+    const E = CONFIG.dummy, e = this.enemy, p = this.p;
+    e.timer = Math.max(0, e.timer - dt);
+    const mode = this.dummyModes[this.dummyMode];
+    const A = E.attacks[e.attack];
+    switch (e.state) {
+      case 'idle':
+        if (e.timer <= 0 && mode !== 'off' && p.hurt <= 0 && Math.abs(this.player.x - e.x) <= E.triggerRange) this.startAttack(mode);
+        break;
+      case 'windup':   if (e.timer <= 0) { e.state = 'active'; e.timer = A.activeMs / 1000; e.hasHit = false; } break;
+      case 'active':   if (e.timer <= 0) { e.state = 'recovery'; e.timer = A.recoveryMs / 1000; } break;
+      case 'recovery': if (e.timer <= 0) { e.state = 'idle'; e.timer = E.idleMs / 1000; } break;
+      case 'stunned':  if (e.timer <= 0) { e.state = 'idle'; e.timer = E.postStunIdleMs / 1000; } break;
+    }
+  }
+
+  /* ---------------- hit resolution ---------------- */
+  resolveHits() {
+    const C = CONFIG, K = C.combat, e = this.enemy, p = this.p, pl = this.player, b = pl.body;
+    if (e.state !== 'active' || e.hasHit || p.invuln > 0) return;
+    const box = this.attackBox();
+    if (!overlap(box, { x: b.x, y: b.y, w: b.width, h: b.height })) return;
+    e.hasHit = true;                                  // one hit per swing
+
+    const A = C.dummy.attacks[e.attack];
+    const awayDir = (pl.x >= e.x) ? 1 : -1;           // direction from enemy to player
+    const facingEnemy = Math.sign(e.x - pl.x) === p.facing;
+    const correct = p.blocking && e.attack !== 'unblockable' && p.stance === e.attack && (facingEnemy || !K.block.requireFacing);
+
+    if (correct) {
+      const perfect = p.guardAge <= K.perfect.windowMs / 1000;
+      const sx = pl.x + p.facing * (C.player.w / 2 + 14), sy = pl.y + (p.stance === 'high' ? -12 : 17);
+      b.setVelocityX(awayDir * (perfect ? K.perfect.pushback : K.block.pushback));
+      e.state = 'stunned'; e.timer = (perfect ? K.perfect.stunMs : K.block.stunMs) / 1000;
+      if (perfect) {
+        this.spark(sx, sy, 0x66f0ff, 16, 70); this.floatText(sx, sy - 24, 'PERFECT!', '#66f0ff');
+        if (K.perfect.healHp > 0 && p.hp < K.maxHp) { p.hp = Math.min(K.maxHp, p.hp + K.perfect.healHp); this.refreshHearts(); this.floatText(pl.x, pl.y - 60, '+HP', '#7dff9a'); }
+      } else {
+        this.spark(sx, sy, 0xffffff, 9, 38);
+      }
+      this.lastResult = (perfect ? 'PERFECT' : 'BLOCK') + ' (' + e.attack + ', guard ' + Math.round(p.guardAge * 1000) + 'ms)';
+    } else {
+      const H = K.hurt;
+      const why = e.attack === 'unblockable' ? 'unblockable' : (p.blocking ? (facingEnemy ? 'wrong stance' : 'facing away') : 'no block');
+      p.hp -= A.damage; p.hurt = H.stunMs / 1000; p.invuln = H.invulnMs / 1000;
+      p.jumping = false; p.grounded = false; p.blocking = false; p.buffer = 0;
+      b.setVelocity(awayDir * H.knockbackX, -H.knockbackY);
+      this.spark(pl.x, pl.y - 10, 0xff4a4a, 12, 50); this.floatText(pl.x, pl.y - 50, '-' + A.damage, '#ff6a6a');
+      this.lastResult = 'HIT by ' + e.attack + ' (' + why + ')';
+      if (p.hp <= 0) {                                // placeholder KO: refill (Stage 5 adds respawn)
+        p.hp = K.maxHp; p.invuln = K.koInvulnMs / 1000; this.toast('KO - HP reset');
+      }
+      this.refreshHearts();
+    }
   }
 
   /* ---------------- input ---------------- */
   buildInput() {
     const kb = this.input.keyboard, T = CONFIG.touch, S = T.stick;
 
-    // keyboard: arrows/WASD move, Space jump, J block (hold), Up/W = high stance, Down/S = low stance while J held, K reserved for attack
+    // keyboard: arrows/WASD move, Space jump, J block (hold), Up/W = high stance, Down/S = low stance while J held, K attack (Stage 4), T cycles dummy
     this.keys = kb.addKeys({
       left: 'LEFT', right: 'RIGHT', up: 'UP', down: 'DOWN',
-      a: 'A', d: 'D', w: 'W', s: 'S', space: 'SPACE', j: 'J', k: 'K'
+      a: 'A', d: 'D', w: 'W', s: 'S', space: 'SPACE', j: 'J', k: 'K', t: 'T'
     });
     this.jumpLatch = false;
     this.keys.space.on('down', () => { this.jumpLatch = true; });
+    this.keys.t.on('down', () => this.cycleDummy());
     [kb.addKey(113), kb.addKey(192)].forEach(k => k.on('down', () => this.toggleDebug()));   // F2, `
 
-    // screen-space rects (hit rects are padded so thumbs are forgiven)
     const B = T.buttons;
     this.vis = { jump: rectOf(B.jump), block: rectOf(B.block) };
-    this.hit = { jump: rectOf(B.jump, T.hitPad), block: rectOf(B.block, T.hitPad), dbg: T.dbg, fs: T.fs };
+    this.hit = { jump: rectOf(B.jump, T.hitPad), block: rectOf(B.block, T.hitPad), dbg: T.dbg, fs: T.fs, dummy: T.dummy };
 
-    // dev sanity check: minimum size and spacing rules
     for (const k of ['jump', 'block']) if (this.vis[k].w < 64 || this.vis[k].h < 64) console.warn(`[touch] ${k} button is under 64px`);
     if (rectGap(this.vis.jump, this.vis.block) < 20) console.warn('[touch] Jump/Block gap is under 20px');
 
-    // floating stick state
     this.stick = { pointer: null, ox: 0, oy: 0, dx: 0, dy: 0 };
     this.input.on('pointerdown', p => {
       if (inRect(p, this.hit.jump)) this.jumpLatch = true;
       else if (inRect(p, this.hit.block)) { /* held state is polled */ }
       else if (inRect(p, this.hit.dbg)) this.toggleDebug();
-      else if (inRect(p, this.hit.fs)) { /* handled on pointerup (browsers need a completed tap) */ }
+      else if (inRect(p, this.hit.fs)) { /* handled on pointerup */ }
+      else if (inRect(p, this.hit.dummy)) this.cycleDummy();
       else if (!this.stick.pointer && inRect(p, S.zone)) {
         this.stick.pointer = p; this.stick.ox = p.x; this.stick.oy = p.y; this.stick.dx = 0; this.stick.dy = 0;
       }
     });
     this.held = { left: false, right: false, jump: false, block: false };
 
-    // fullscreen: must run from a completed tap (pointerup), and may be refused by the host page
     this.input.on('pointerup', p => { if (inRect(p, this.hit.fs)) this.toggleFullscreen(); });
     this.scale.on('enterfullscreenfailed', () => this.toast('Fullscreen blocked by this page'));
     this.scale.on('enterfullscreenunsupported', () => this.toast('Fullscreen not supported here'));
+  }
+
+  cycleDummy() {
+    this.dummyMode = (this.dummyMode + 1) % this.dummyModes.length;
+    this.ui.dummy.txt.setText('DUMMY\n' + this.dummyModes[this.dummyMode].toUpperCase());
   }
 
   toggleFullscreen() {
@@ -237,7 +338,7 @@ class GameScene extends Phaser.Scene {
   }
 
   toast(msg) {
-    if (!this.toastTxt) this.toastTxt = this.add.text(CONFIG.view.w / 2, 90, '', { fontFamily: 'monospace', fontSize: '18px', color: '#fff', backgroundColor: '#000000cc', padding: { x: 10, y: 6 } })
+    if (!this.toastTxt) this.toastTxt = this.add.text(CONFIG.view.w / 2, 100, '', { fontFamily: 'monospace', fontSize: '18px', color: '#fff', backgroundColor: '#000000cc', padding: { x: 10, y: 6 } })
       .setOrigin(0.5).setScrollFactor(0).setDepth(200);
     this.toastTxt.setText(msg).setAlpha(1).setVisible(true);
     this.tweens.killTweensOf(this.toastTxt);
@@ -250,7 +351,7 @@ class GameScene extends Phaser.Scene {
     if (!st.pointer) { st.dx = 0; st.dy = 0; return; }
     const p = st.pointer;
     let dx = p.x - st.ox, dy = p.y - st.oy;
-    if (S.follow) {                                  // drag the origin along so reversing direction is instant
+    if (S.follow) {
       const d = Math.hypot(dx, dy);
       if (d > S.radius) {
         const k = (d - S.radius) / d;
@@ -275,7 +376,7 @@ class GameScene extends Phaser.Scene {
       if (st.dy < -S.stanceY) up = true;
       if (st.dy >  S.stanceY) down = true;
     }
-    for (const p of this.input.manager.pointers) {   // poll every other finger each tick: robust multi-touch
+    for (const p of this.input.manager.pointers) {
       if (!p.isDown || p === st.pointer) continue;
       if (inRect(p, this.hit.jump)) jump = true;
       if (inRect(p, this.hit.block)) block = true;
@@ -290,29 +391,40 @@ class GameScene extends Phaser.Scene {
 
   /* ---------------- fixed-step gameplay ---------------- */
   tick() {
-    const C = CONFIG, M = C.move, J = C.jump, G = C.gravity, p = this.p;
-    const dt = 1 / C.stepHz;
-    const b = this.player.body;
+    const dt = 1 / CONFIG.stepHz;
     const inp = this.readInput();
+    this.ticks++;
+    this.tickPlayer(inp, dt);
+    this.tickEnemy(dt);
+    this.resolveHits();
+  }
+
+  tickPlayer(inp, dt) {
+    const C = CONFIG, M = C.move, J = C.jump, G = C.gravity, p = this.p, b = this.player.body;
     const jumpPressed = this.jumpLatch || (inp.jumpHeld && !p.jumpHeldPrev);
     this.jumpLatch = false; p.jumpHeldPrev = inp.jumpHeld;
 
-    this.ticks++;
     p.grounded = b.blocked.down;
-    p.coyote = p.grounded ? J.coyoteMs / 1000 : Math.max(0, p.coyote - dt);
-    p.buffer = jumpPressed ? J.bufferMs / 1000 : Math.max(0, p.buffer - dt);
-    if (p.grounded) p.jumping = false;
+    p.hurt = Math.max(0, p.hurt - dt);
+    p.invuln = Math.max(0, p.invuln - dt);
+    const stunned = p.hurt > 0;
 
-    // block: hold, ground only. Stance comes from stick/keys up-down. (Real block rules arrive in Stage 3.)
-    p.blocking = inp.block && p.grounded;
+    p.coyote = p.grounded ? J.coyoteMs / 1000 : Math.max(0, p.coyote - dt);
+    p.buffer = stunned ? 0 : (jumpPressed ? J.bufferMs / 1000 : Math.max(0, p.buffer - dt));
+    if (p.grounded && !stunned) p.jumping = false;
+
+    // block: hold, ground only, not while hurt. Stance from stick/keys up-down.
+    const wasBlocking = p.blocking, prevStance = p.stance;
+    p.blocking = inp.block && p.grounded && !stunned;
     if (p.blocking) {
       if (inp.stanceIn) p.stance = inp.stanceIn;
       else if (C.block.neutralStance !== 'last') p.stance = C.block.neutralStance;
-    }
-    const dir = p.blocking ? 0 : inp.dir;           // can't move while blocking
-    if (inp.dir !== 0) p.facing = inp.dir;          // ...but you can still turn to face a threat
+      if (!wasBlocking || p.stance !== prevStance) p.guardAge = 0; else p.guardAge += dt;   // time since guard raised / stance switched
+    } else p.guardAge = 0;
 
-    // horizontal
+    const dir = (p.blocking || stunned) ? 0 : inp.dir;
+    if (inp.dir !== 0 && !stunned) p.facing = inp.dir;
+
     let vx = b.velocity.x;
     if (dir !== 0) {
       const reversing = Math.sign(vx) === -dir;
@@ -324,9 +436,8 @@ class GameScene extends Phaser.Scene {
     }
     vx = Phaser.Math.Clamp(vx, -M.maxSpeed, M.maxSpeed);
 
-    // vertical
     let vy = b.velocity.y;
-    if (p.buffer > 0 && p.coyote > 0 && !p.blocking) {
+    if (p.buffer > 0 && p.coyote > 0 && !p.blocking && !stunned) {
       vy = -J.velocity; p.buffer = 0; p.coyote = 0; p.jumping = true; p.grounded = false;
     }
     if (p.jumping && vy < 0 && !inp.jumpHeld) vy = Math.max(vy, -J.velocity * J.cutFactor);
@@ -335,22 +446,35 @@ class GameScene extends Phaser.Scene {
 
     b.setVelocity(vx, vy);
 
-    // locomotion state machine
-    if (p.blocking) p.state = 'block';
+    // player state machine: idle / run / jump / fall / block / hurt
+    if (stunned) p.state = 'hurt';
+    else if (p.blocking) p.state = 'block';
     else if (!p.grounded && vy < 0) p.state = 'jump';
     else if (!p.grounded) p.state = 'fall';
     else p.state = Math.abs(vx) > 20 ? 'run' : 'idle';
-    this.player.setFillStyle(C.colors[p.state]);
   }
 
-  /* ---------------- touch UI visuals ---------------- */
+  /* ---------------- effects ---------------- */
+  spark(x, y, color, n, dist) {
+    for (let i = 0; i < n; i++) {
+      const r = this.add.rectangle(x, y, 5, 5, color).setDepth(60);
+      const a = Math.random() * Math.PI * 2, d = dist * (0.5 + Math.random() * 0.5);
+      this.tweens.add({ targets: r, x: x + Math.cos(a) * d, y: y + Math.sin(a) * d, alpha: 0, duration: 260, onComplete: () => r.destroy() });
+    }
+  }
+  floatText(x, y, str, color) {
+    const t = this.add.text(x, y, str, { fontFamily: 'monospace', fontSize: '20px', fontStyle: 'bold', color }).setOrigin(0.5).setDepth(61);
+    this.tweens.add({ targets: t, y: y - 36, alpha: 0, duration: 800, onComplete: () => t.destroy() });
+  }
+
+  /* ---------------- UI ---------------- */
   buildTouchUI() {
     const T = CONFIG.touch, S = T.stick;
     const D = 100;
     const mkBtn = (r, label, size) => {
       const rect = this.add.rectangle(r.x + r.w / 2, r.y + r.h / 2, r.w, r.h, 0xffffff, 0.18)
         .setStrokeStyle(3, 0xffffff, 0.6).setScrollFactor(0).setDepth(D);
-      const txt = this.add.text(r.x + r.w / 2, r.y + r.h / 2, label, { fontFamily: 'monospace', fontSize: size, color: '#fff' })
+      const txt = this.add.text(r.x + r.w / 2, r.y + r.h / 2, label, { fontFamily: 'monospace', fontSize: size, color: '#fff', align: 'center' })
         .setOrigin(0.5).setScrollFactor(0).setDepth(D + 1);
       return { rect, txt };
     };
@@ -358,15 +482,16 @@ class GameScene extends Phaser.Scene {
       jump: mkBtn(this.vis.jump, 'JUMP', '24px'),
       block: mkBtn(this.vis.block, 'BLOCK', '22px'),
       dbg: mkBtn(T.dbg, 'DBG', '20px'),
-      fs: mkBtn(T.fs, 'FULL', '18px')
+      fs: mkBtn(T.fs, 'FULL', '18px'),
+      dummy: mkBtn(T.dummy, 'DUMMY\nAUTO', '16px')
     };
-    this.ui.fs.rect.setFillStyle(0xffffff, 0.1);
     this.ui.dbg.rect.setFillStyle(0xffffff, 0.1);
+    this.ui.fs.rect.setFillStyle(0xffffff, 0.1);
+    this.ui.dummy.rect.setFillStyle(0xffffff, 0.1);
     this.ui.stanceTxt = this.add.text(this.vis.block.x + this.vis.block.w / 2, this.vis.block.y + this.vis.block.h - 18, '', {
       fontFamily: 'monospace', fontSize: '16px', color: '#fff'
     }).setOrigin(0.5).setScrollFactor(0).setDepth(D + 1);
 
-    // floating stick
     this.ui.hint = this.add.circle(S.hint.x, S.hint.y, S.radius, 0xffffff, 0.05).setStrokeStyle(2, 0xffffff, 0.22).setScrollFactor(0).setDepth(D);
     this.ui.hintTxt = this.add.text(S.hint.x, S.hint.y, '< MOVE >', { fontFamily: 'monospace', fontSize: '16px', color: '#ffffff' })
       .setOrigin(0.5).setAlpha(0.3).setScrollFactor(0).setDepth(D);
@@ -376,6 +501,17 @@ class GameScene extends Phaser.Scene {
       .setOrigin(0.5).setScrollFactor(0).setDepth(D + 1).setVisible(false);
     this.ui.hi = lbl('HIGH'); this.ui.lo = lbl('LOW');
     this.uiDbg = this.add.graphics().setScrollFactor(0).setDepth(D - 1);
+  }
+
+  buildCombatUI() {
+    this.hearts = [];
+    const n = CONFIG.combat.maxHp, x0 = 492, y = 30;
+    for (let i = 0; i < n; i++) {
+      this.hearts.push(this.add.rectangle(x0 + i * 28, y, 22, 22, 0xff4a5e).setStrokeStyle(2, 0xffffff, 0.8).setScrollFactor(0).setDepth(100));
+    }
+  }
+  refreshHearts() {
+    this.hearts.forEach((h, i) => h.setFillStyle(i < this.p.hp ? 0xff4a5e : 0x2a2a34).setStrokeStyle(2, 0xffffff, i < this.p.hp ? 0.8 : 0.3));
   }
 
   updateTouchUI() {
@@ -403,8 +539,12 @@ class GameScene extends Phaser.Scene {
 
   /* ---------------- per-render-frame visuals ---------------- */
   renderUpdate(time, delta) {
-    const C = CONFIG, p = this.p, pl = this.player, b = pl.body, cam = this.cameras.main;
+    const C = CONFIG, p = this.p, pl = this.player, b = pl.body, cam = this.cameras.main, e = this.enemy, EC = C.colors.enemy;
 
+    // player
+    pl.setFillStyle(C.colors[p.state]);
+    const blink = p.invuln > 0 && Math.floor(p.invuln * 14) % 2 === 0;
+    pl.setAlpha(blink ? 0.35 : 1); this.nose.setAlpha(blink ? 0.35 : 1);
     this.nose.setPosition(pl.x + p.facing * (C.player.w / 2 - 2), pl.y - C.player.h / 2 + 12);
 
     // stance shield: HIGH guards head/torso, LOW guards legs
@@ -416,6 +556,21 @@ class GameScene extends Phaser.Scene {
         .setPosition(pl.x + p.facing * (C.player.w / 2 + 8), pl.y + (high ? -12 : 17));
     } else this.shield.setVisible(false);
 
+    // enemy
+    this.enemyRect.setFillStyle(EC[e.state]);
+    this.enemyEye.setPosition(e.x + e.facing * (C.dummy.w / 2 - 6), C.world.groundY - C.dummy.h + 14);
+    this.enemyLabel.setText(e.state === 'stunned' ? 'STUNNED' : '');
+    const cg = this.cue; cg.clear();
+    if (e.state === 'windup' || e.state === 'active') {          // placeholder cue: the attack zone itself
+      const box = this.attackBox(), col = attackColor(e.attack);
+      if (e.state === 'windup') {
+        const flash = Math.floor(e.timer * 16) % 2 === 0;
+        cg.lineStyle(3, col, flash ? 1 : 0.45); cg.strokeRect(box.x, box.y, box.w, box.h);
+        cg.fillStyle(col, 0.14); cg.fillRect(box.x, box.y, box.w, box.h);
+      } else { cg.fillStyle(col, 0.7); cg.fillRect(box.x, box.y, box.w, box.h); }
+    }
+
+    // camera look-ahead
     const dt = Math.min(delta, 50) / 1000;
     const target = -p.facing * C.camera.lookAhead;
     cam.followOffset.x += (target - cam.followOffset.x) * (1 - Math.exp(-C.camera.lookAheadSpeed * dt));
@@ -436,11 +591,18 @@ class GameScene extends Phaser.Scene {
     g.fillStyle(0x000000, 0.5); g.fillRect(bx, by, bw, 4); g.fillRect(bx, by + 6, bw, 4);
     g.fillStyle(0x44ff88, 1); g.fillRect(bx, by, bw * p.coyote / (C.jump.coyoteMs / 1000), 4);
     g.fillStyle(0x44ddff, 1); g.fillRect(bx, by + 6, bw * p.buffer / (C.jump.bufferMs / 1000), 4);
-    if (p.blocking) {                                // shield hitbox
+    if (p.blocking) {
       const s = this.shield; g.lineStyle(2, 0xffffff, 1); g.strokeRect(s.x - s.width / 2, s.y - s.height / 2, s.width, s.height);
+      // perfect-window bar (orange): how much of the perfect window is left since guard raised
+      const left = Math.max(0, 1 - p.guardAge / (C.combat.perfect.windowMs / 1000));
+      g.fillStyle(0x000000, 0.5); g.fillRect(bx, by - 6, bw, 4); g.fillStyle(0xff9d2e, 1); g.fillRect(bx, by - 6, bw * left, 4);
+    }
+    // enemy hurtbox + attack hitbox
+    g.lineStyle(2, 0xff66cc, 1); g.strokeRect(e.x - C.dummy.w / 2, C.world.groundY - C.dummy.h, C.dummy.w, C.dummy.h);
+    if (e.state === 'windup' || e.state === 'active') {
+      const bx2 = this.attackBox(); g.lineStyle(2, 0xffffff, e.state === 'active' ? 1 : 0.5); g.strokeRect(bx2.x, bx2.y, bx2.w, bx2.h);
     }
 
-    // touch hit areas (screen space)
     const u = this.uiDbg; u.clear();
     const z = C.touch.stick.zone;
     u.lineStyle(1, 0x66ccff, 0.5); u.strokeRect(z.x, z.y, z.w, z.h);
@@ -449,19 +611,19 @@ class GameScene extends Phaser.Scene {
 
     const down = this.input.manager.pointers.filter(q => q.isDown).length;
     this.hud.setText([
-      `FPS ${Math.round(this.game.loop.actualFps)}   logic ${this.tickHz} Hz   touches ${down}`,
-      `state ${p.state}   facing ${p.facing > 0 ? '>' : '<'}   ground ${p.grounded ? 'Y' : 'n'}`,
-      `pos ${Math.round(b.x)},${Math.round(b.y)}   vel ${Math.round(b.velocity.x)},${Math.round(b.velocity.y)}`,
-      `coyote ${Math.round(p.coyote * 1000)}ms   buffer ${Math.round(p.buffer * 1000)}ms`,
-      `held L${this.held.left ? 1 : 0} R${this.held.right ? 1 : 0} J${this.held.jump ? 1 : 0} B${this.held.block ? 1 : 0}   stance ${p.stance}`,
-      `stick ${this.stick.pointer ? Math.round(this.stick.dx) + ',' + Math.round(this.stick.dy) : '-'}`
+      `FPS ${Math.round(this.game.loop.actualFps)}  logic ${this.tickHz}Hz  touches ${down}`,
+      `${p.state}  facing ${p.facing > 0 ? '>' : '<'}  ground ${p.grounded ? 'Y' : 'n'}  stance ${p.stance}`,
+      `hp ${p.hp}/${C.combat.maxHp}  hurt ${p.hurt.toFixed(2)}  invuln ${p.invuln.toFixed(2)}`,
+      `guardAge ${p.blocking ? Math.round(p.guardAge * 1000) + 'ms' : '-'}  (perfect <= ${C.combat.perfect.windowMs}ms)`,
+      `dummy ${this.dummyModes[this.dummyMode]}: ${e.state} ${e.state !== 'idle' ? e.attack : ''} ${e.timer.toFixed(2)}`,
+      `last: ${this.lastResult}`
     ]);
   }
 
   /* ---------------- debug ---------------- */
   buildHud() {
     this.dbg = this.add.graphics().setDepth(50);
-    this.hud = this.add.text(8, 6, '', { fontFamily: 'monospace', fontSize: '14px', color: '#ffffff', backgroundColor: '#000000aa', padding: { x: 6, y: 4 } })
+    this.hud = this.add.text(8, 6, '', { fontFamily: 'monospace', fontSize: '13px', color: '#ffffff', backgroundColor: '#000000aa', padding: { x: 6, y: 4 } })
       .setScrollFactor(0).setDepth(100);
   }
   toggleDebug() { this.debugOn = !this.debugOn; this.applyDebugVisibility(); }
