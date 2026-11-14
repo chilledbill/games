@@ -103,7 +103,9 @@ const CONFIG = {
     defeatedResetMs: 2800,
     speedScale: 1.0,                                      // global multiplier for windup/recovery/gaps (0.8 = faster, 1.3 = slower)
     telegraph: {
-      flashHz: 9,                                         // cue blink rate during windup
+      style: 'steady',                                    // 'steady' = no blinking, cue brightens toward the hit | 'flash' = blink
+      flashHz: 9,                                         // blink rate (only used when style is 'flash')
+      minAlpha: 0.4,                                      // steady style: cue brightness at the start of the windup
       solidLastMs: 120,                                   // cue turns SOLID this long before the hit = "block NOW"
       zonePreviewAlpha: 0.14                              // faint preview of the hit zone (0 = off)
     },
@@ -645,10 +647,13 @@ class GameScene extends Phaser.Scene {
       if (tr.state === 'windup') {
         const elapsed = tr.windupTotal - tr.timer;
         const solid = tr.timer * 1000 <= TG.solidLastMs;                      // last stretch = steady "NOW"
-        const on = solid || Math.floor(elapsed * TG.flashHz * 2) % 2 === 0;
+        const prog = Math.min(1, elapsed / Math.max(0.001, tr.windupTotal));
+        const cueAlpha = solid ? 1 : TG.style === 'flash'
+          ? (Math.floor(elapsed * TG.flashHz * 2) % 2 === 0 ? 1 : 0.15)
+          : TG.minAlpha + (0.85 - TG.minAlpha) * prog;                      // steady: fades up, never blinks
         if (TG.zonePreviewAlpha > 0) { g.fillStyle(col, TG.zonePreviewAlpha); g.fillRect(box.x, box.y, box.w, box.h); }
         // CUE: HIGH = red bar over the head, LOW = yellow bar at the feet (colour AND position differ)
-        g.fillStyle(col, on ? 1 : 0.15);
+        g.fillStyle(col, cueAlpha);
         if (high) g.fillRect(x - E.w / 2 - 10, top - 20, E.w + 20, 14);
         else g.fillRect(x - E.w / 2 - 16, gy - 12, E.w + 32, 12);
         // arm: cocked overhead for HIGH, drawn back low for LOW
