@@ -86,6 +86,13 @@ const CONFIG = {
     respawnInvulnMs: 1500
   },
 
+  projectile: {                                           // bolts and orbs (ranged enemies). y = height of the centre above the ground, w/h = size
+    high:        { y: 46, w: 34, h: 12 },                // chest height: a jump can clear it, a block of the HIGH stance stops it
+    low:         { y: 9,  w: 34, h: 14 },                // along the ground: JUMP it, or block LOW
+    unblockable: { y: 32, w: 24, h: 24 },                // orb: not blockable. Slash it, or jump it
+    reflectDamage: 1, reflectSpeedMult: 1.5, perfectReflects: true
+  },
+
   poise: {                                                // enemy guard meter, in pips. A SHORTCUT to burst damage, never a gate: normal hits still hurt
     defaultPips: 3,                                       // per-enemy override: poise: N in the enemy def
     chip: { block: 0.4, perfect: 1, counter: 1, hit: 0.25 },   // pips removed by: correct block, perfect block, a hit on a stunned enemy, a normal hit (x hit damage). A clash always breaks.
@@ -178,6 +185,22 @@ const CONFIG = {
         { attacks: ['low', { t: 'low', fake: true, fakeAt: 0.55 }, { t: 'high', windupMs: 760 }, { t: 'low', fake: true }, 'low'], windupMs: 520, activeMs: 160, recoveryMs: 400, gapMs: 280, endPauseMs: 800, fakeRecoveryMs: 260 }
       ]
     },
+    archer: {                                             // RANGED: keeps its distance and shoots bolts. HIGH/LOW bolts: block the right stance, or jump a low one.
+      name: 'ARCHER', w: 38, h: 68, hp: 4, color: 0x4a8a6a, triggerRange: 950, startDelayMs: 900, spawnX: 1250,   // PERFECT-block a bolt to reflect it back (hurts + chips the Archer's guard)
+      ranged: { minRange: 300, maxRange: 470, speed: 190, projSpeed: 540 },
+      script: [
+        { attacks: ['high', 'low'],         windupMs: 620, activeMs: 60, recoveryMs: 500, gapMs: 520, endPauseMs: 1000 },
+        { attacks: ['low', 'low', 'high'],  windupMs: 540, activeMs: 60, recoveryMs: 420, gapMs: 420, endPauseMs: 1100 }
+      ]
+    },
+    caster: {                                             // RANGED: slow purple orbs you cannot block. Slash them out of the air, or jump them.
+      name: 'CASTER', w: 38, h: 72, hp: 5, color: 0x6a4a9a, triggerRange: 950, startDelayMs: 900, spawnX: 1420,
+      ranged: { minRange: 340, maxRange: 520, speed: 170, projSpeed: 250 },
+      script: [
+        { attacks: ['unblockable'],                   windupMs: 800, activeMs: 60, recoveryMs: 600, gapMs: 600, endPauseMs: 1100 },
+        { attacks: ['unblockable', 'unblockable'],    windupMs: 700, activeMs: 60, recoveryMs: 500, gapMs: 500, endPauseMs: 1200 }
+      ]
+    },
     duelist: {                                            // MIXED-attack enemy
       name: 'DUELIST', w: 46, h: 80, hp: 8, color: 0x7a5a9b, triggerRange: 380, startDelayMs: 900, spawnX: 1340,
       script: [
@@ -205,14 +228,14 @@ const CONFIG = {
       ]
     }
   },
-  enemyOrder: ['swinger', 'sweeper', 'rusher', 'feinter', 'duelist', 'warden'],
+  enemyOrder: ['swinger', 'sweeper', 'rusher', 'feinter', 'archer', 'caster', 'duelist', 'warden'],
 
   debug: { startOn: true },
 
   art: {                                                 // sprite art (set sprites:false to get the old rectangles back)
     sprites: true, charH: 36, frameW: 112, frameH: 96, footY: 85,   // charH = knight height inside a frame; footY = feet row inside a frame
     runSpeed: 230, idleFps: 10, walkFps: 10, runFps: 14, blockFlashMs: 300,
-    tint: { swinger: 0xffa8a8, sweeper: 0xa8ffbc, duelist: 0xffe494, warden: 0xcaa6ff, rusher: 0xffbe7a, feinter: 0xff9fe6 }     // enemies are the same knight, tinted
+    tint: { swinger: 0xffa8a8, sweeper: 0xa8ffbc, duelist: 0xffe494, warden: 0xcaa6ff, rusher: 0xffbe7a, feinter: 0xff9fe6, archer: 0xd8ff7a, caster: 0xb8a0ff }     // enemies are the same knight, tinted
   },
 
   colors: {
@@ -363,6 +386,7 @@ class GameScene extends Phaser.Scene {
       case 'hurt':    this.tone(180, 0.2, 'sawtooth', 0.9, 60); break;
       case 'clash':   this.tone(1000, 0.09, 'square', 0.9, 300); this.tone(1600, 0.18, 'sine', 0.8, 0, 0.05); this.tone(90, 0.3, 'sawtooth', 0.8, 40, 0.02); break;
       case 'break':   this.tone(160, 0.3, 'sawtooth', 0.9, 40); this.tone(700, 0.12, 'square', 0.8, 1400, 0.05); this.tone(1400, 0.15, 'sine', 0.6, 0, 0.12); break;
+      case 'shoot':   this.tone(700, 0.08, 'triangle', 0.4, 300); break;
       case 'swing':   this.tone(260 + this.p.cur * 70, 0.07, 'sawtooth', 0.25, 120); break;
       case 'hit':     this.tone(300, 0.05, 'square', 0.7, 200); break;
       case 'counter': this.tone(420, 0.06, 'square', 0.8, 220); this.tone(640, 0.09, 'square', 0.7, 0, 0.05); break;
@@ -380,6 +404,7 @@ class GameScene extends Phaser.Scene {
   spawnEnemy(key) {
     const C = CONFIG, D = C.enemies[key], E = C.enemyCommon;
     if (this.nextTimer) { this.nextTimer.remove(false); this.nextTimer = null; }
+    this.proj = [];
     if (this.enemyCol) { this.enemyCol.destroy(); this.enemyCol = null; }
     if (this.enemyRect) this.enemyRect.destroy();
     this.enemyIdx = Math.max(0, C.enemyOrder.indexOf(key));
@@ -411,6 +436,72 @@ class GameScene extends Phaser.Scene {
     const x0 = e.facing > 0 ? e.x + D.w / 2 : e.x - D.w / 2 - reach;
     return { x: x0, y: gy - A.zone[1], w: reach, h: A.zone[1] - A.zone[0] };
   }
+  fireProjectile(e) {
+    const C = CONFIG, P = C.projectile[e.attack], D = e.def, f = e.facing;
+    this.proj.push({ type: e.attack, x: e.x + f * (D.w / 2 + 10), y: C.world.groundY - P.y, w: P.w, h: P.h, vx: f * D.ranged.projSpeed, reflected: false, dead: false, age: 0 });
+    this.sfx('shoot');
+  }
+
+  hurtPlayer(dmg, awayDir, why) {                         // the same hurt response melee hits use
+    const C = CONFIG, K = C.combat, H = K.hurt, p = this.p, pl = this.player, b = pl.body;
+    p.hp -= dmg; p.hurt = H.stunMs / 1000; p.invuln = H.invulnMs / 1000;
+    p.jumping = false; p.grounded = false; p.blocking = false; p.buffer = 0; p.atk.state = 'idle'; p.atkBuffer = 0;
+    b.setVelocity(awayDir * H.knockbackX, -H.knockbackY);
+    this.spark(pl.x, pl.y - 10, 0xff4a4a, 12, 50); this.floatText(pl.x, pl.y - 50, '-' + dmg, '#ff6a6a');
+    this.sfx('hurt'); this.hitStop(C.juice.hitstopFrames.hurt); this.shake('hurt');
+    this.lastResult = 'HIT by ' + why;
+    this.refreshHearts();
+    if (p.hp <= 0) this.die();
+  }
+
+  tickProjectiles(dt) {
+    const C = CONFIG, K = C.combat, PC = C.projectile, p = this.p, pl = this.player, b = pl.body, e = this.enemy;
+    if (!this.proj.length) return;
+    const pb = { x: b.x, y: b.y, w: b.width, h: b.height };
+    const ab = p.atk.state === 'active' ? this.playerAttackBox() : null;
+    for (const q of this.proj) {
+      q.x += q.vx * dt; q.age += dt;
+      const box = { x: q.x - q.w / 2, y: q.y - q.h / 2, w: q.w, h: q.h };
+      if (q.x < -60 || q.x > C.world.width + 60 || q.age > 6) { q.dead = true; continue; }
+      if (q.reflected) {                                   // sent back by a perfect block: hurts the shooter
+        if (e && e.state !== 'dead' && overlap(box, this.hurtBox(e))) {
+          q.dead = true; e.hp -= PC.reflectDamage; e.flash = 0.12;
+          this.spark(q.x, q.y, 0x66f0ff, 14, 60); this.floatText(e.x, C.world.groundY - e.def.h - 20, 'REFLECTED!', '#66f0ff');
+          this.sfx('counter'); this.hitStop(C.juice.hitstopFrames.counter);
+          this.lastResult = 'REFLECT ' + e.def.name + ' ' + e.hp + '/' + e.maxHp;
+          if (e.hp <= 0) this.killEnemy(e); else this.chipPoise(e, C.poise.chip.perfect);
+        }
+        continue;
+      }
+      if (ab && overlap(box, ab)) {                        // slash it out of the air
+        q.dead = true; this.spark(q.x, q.y, 0xffffff, 10, 50); this.floatText(q.x, q.y - 22, 'DEFLECT', '#ffffff'); this.sfx('block');
+        this.lastResult = 'DEFLECT ' + q.type; continue;
+      }
+      if (p.invuln > 0 || !overlap(box, pb)) continue;
+      const fromDir = q.vx > 0 ? -1 : 1, awayDir = -fromDir;                 // fromDir: side the projectile came from, relative to the player
+      const facingIt = p.facing === fromDir;
+      if (p.blocking && q.type !== 'unblockable' && p.stance === q.type && (facingIt || !K.block.requireFacing)) {
+        q.dead = true;
+        const perfect = p.guardAge <= K.perfect.windowMs / 1000 && PC.perfectReflects;
+        p.blockFlash = C.art.blockFlashMs / 1000;
+        if (perfect) {
+          const nq = { type: q.type, x: pl.x + p.facing * 30, y: q.y, w: q.w, h: q.h, vx: -q.vx * PC.reflectSpeedMult, reflected: true, dead: false, age: 0 };
+          this.proj.push(nq);
+          this.spark(q.x, q.y, 0x66f0ff, 16, 70); this.floatText(pl.x, pl.y - 60, 'PERFECT!', '#66f0ff'); this.sfx('perfect'); this.hitStop(C.juice.hitstopFrames.perfect);
+          this.lastResult = 'PERFECT block of a ' + q.type + ' shot: reflected';
+        } else {
+          this.spark(q.x, q.y, 0xffffff, 9, 38); this.sfx('block'); this.hitStop(C.juice.hitstopFrames.block); this.shake('block');
+          this.lastResult = 'BLOCK shot (' + q.type + ')';
+        }
+        continue;
+      }
+      q.dead = true;
+      const why = q.type === 'unblockable' ? 'orb (unblockable)' : (p.blocking ? (facingIt ? 'wrong stance (shot)' : 'facing away (shot)') : 'shot (no block)');
+      this.hurtPlayer(C.attackTypes[q.type].damage, awayDir, why);
+    }
+    this.proj = this.proj.filter(q => !q.dead);
+  }
+
   hurtBox(e) { const C = CONFIG; return { x: e.x - e.def.w / 2, y: C.world.groundY - e.def.h, w: e.def.w, h: e.def.h }; }
 
   pickScripts(e) {
@@ -454,7 +545,12 @@ class GameScene extends Phaser.Scene {
           if (e.retreatLeft > 0) { const st = M.retreatSpeed * dt; this.moveEnemy(e, -toward * st); e.retreatLeft -= st; e.moving = 2; e.facing = toward; }
           else if (dist > M.engage && dist <= D.triggerRange) { const st = Math.min(M.speed * dt, dist - M.engage); this.moveEnemy(e, toward * st); e.moving = 1; e.facing = toward; }
         }
-        const inRange = M ? dist <= M.engage + 24 && e.retreatLeft <= 0 : dist <= D.triggerRange;
+        const R = D.ranged;
+        if (R) {                                           // archers keep their distance: back off when you get close, step up when you are far
+          if (dist < R.minRange) { this.moveEnemy(e, -toward * R.speed * dt); e.moving = 2; e.facing = toward; }
+          else if (dist > R.maxRange && dist <= D.triggerRange) { this.moveEnemy(e, toward * R.speed * dt); e.moving = 1; e.facing = toward; }
+        }
+        const inRange = R ? dist <= R.maxRange + 40 : M ? dist <= M.engage + 24 && e.retreatLeft <= 0 : dist <= D.triggerRange;
         if (e.timer <= 0 && p.hurt <= 0 && inRange) {
           if (e.atkIdx === 0) {                             // starting a new combo: pick script (boss: by phase)
             const { i, scripts } = this.pickScripts(e);
@@ -478,7 +574,7 @@ class GameScene extends Phaser.Scene {
           e.fake = true; e.state = 'recovery'; e.timer = (e.script.fakeRecoveryMs || 260) / 1000;
           break;
         }
-        if (e.timer <= 0) { e.state = 'active'; e.timer = e.script.activeMs / 1000; e.hasHit = false; }
+        if (e.timer <= 0) { e.state = 'active'; e.timer = e.script.activeMs / 1000; e.hasHit = false; if (D.ranged) this.fireProjectile(e); }
         break;
       }
       case 'active':   if (e.timer <= 0) { e.state = 'recovery'; e.timer = e.script.recoveryMs * S / 1000; } break;
@@ -500,7 +596,7 @@ class GameScene extends Phaser.Scene {
   /* ---------------- enemy attack -> player ---------------- */
   resolveHits() {
     const C = CONFIG, K = C.combat, e = this.enemy, p = this.p, pl = this.player, b = pl.body;
-    if (!e || e.state !== 'active' || e.hasHit || p.invuln > 0) return;
+    if (!e || e.state !== 'active' || e.hasHit || p.invuln > 0 || e.def.ranged) return;
     const box = this.attackBox(e);
     if (!overlap(box, { x: b.x, y: b.y, w: b.width, h: b.height })) return;
     e.hasHit = true;                                    // one hit per swing
@@ -557,7 +653,7 @@ class GameScene extends Phaser.Scene {
     this.deaths++; this.sfx('die');
     this.player.body.reset(C.player.startX, C.world.groundY - C.player.h / 2);
     Object.assign(p, { hp: C.combat.maxHp, hurt: 0, invuln: C.combat.respawnInvulnMs / 1000, blocking: false, jumping: false, buffer: 0, atkBuffer: 0, facing: 1 });
-    p.atk.state = 'idle';
+    p.atk.state = 'idle'; this.proj = [];
     this.cameras.main.fadeIn(250, 0, 0, 0);
     this.spawnEnemy(this.enemy.key);
     this.lastResult = 'DIED (deaths ' + this.deaths + ')';
@@ -733,6 +829,7 @@ class GameScene extends Phaser.Scene {
     if (this.enemy && this.enemy.state !== 'dead') this.tickEnemy(this.enemy, dt);
     this.resolveHits();
     this.resolvePlayerAttack();
+    this.tickProjectiles(dt);
   }
 
   tickPlayer(inp, dt) {
@@ -1094,7 +1191,7 @@ class GameScene extends Phaser.Scene {
           else g.fillRect(x + f * (D.w / 2 + 6) - 6, top - 60, 12, 60);
         }
       } else {
-        if (!art || this.debugOn) { g.fillStyle(col, 0.85); g.fillRect(box.x, box.y, box.w, box.h); g.lineStyle(3, 0xffffff, 0.9); g.strokeRect(box.x, box.y, box.w, box.h); }
+        if (!D.ranged && (!art || this.debugOn)) { g.fillStyle(col, 0.85); g.fillRect(box.x, box.y, box.w, box.h); g.lineStyle(3, 0xffffff, 0.9); g.strokeRect(box.x, box.y, box.w, box.h); }
       }
     } else if (e.state === 'recovery') {
       if (!art) { g.fillStyle(0x888888, 1); g.fillRect(x + f * (D.w / 2) - (f > 0 ? 0 : 12), gy - D.h * 0.45, 12, 34); }
@@ -1132,6 +1229,20 @@ class GameScene extends Phaser.Scene {
     g.fillStyle(broken ? 0x6fe8ff : 0xd6e8ff, broken ? 0.5 + 0.5 * Math.sin(this.animT * 18) : 1); g.fillRect(x, y, w * (broken ? 1 : e.poise / e.maxPoise), h);
     g.fillStyle(0x000000, 0.85);
     for (let i = 1; i < e.maxPoise; i++) g.fillRect(x + w * i / e.maxPoise - 1, y - 1, 2, h + 2);      // pip dividers
+  }
+
+  drawProjectiles() {
+    if (!this.projG) this.projG = this.add.graphics().setDepth(7);
+    const g = this.projG, C = CONFIG.colors; g.clear();
+    for (const q of this.proj || []) {
+      const col = q.reflected ? 0x6fe8ff : q.type === 'high' ? C.stanceHigh : q.type === 'low' ? C.stanceLow : C.unblockable, dir = Math.sign(q.vx);
+      if (q.type === 'unblockable') { g.fillStyle(col, 0.35); g.fillCircle(q.x, q.y, q.w * 0.95); g.fillStyle(col, 1); g.fillCircle(q.x, q.y, q.w / 2); g.fillStyle(0xffffff, 0.9); g.fillCircle(q.x, q.y, q.w / 5); }
+      else {
+        g.fillStyle(col, 0.3); g.fillRect(dir > 0 ? q.x - q.w * 1.6 : q.x + q.w / 2, q.y - q.h / 2, q.w * 1.1, q.h);          // trail
+        g.fillStyle(col, 1); g.fillRect(q.x - q.w / 2, q.y - q.h / 2, q.w, q.h);
+        g.fillStyle(0xffffff, 1); g.fillRect(dir > 0 ? q.x + q.w / 2 - 8 : q.x - q.w / 2, q.y - q.h / 2, 8, q.h);          // tip
+      }
+    }
   }
 
   pose(spr, key, f) {                                      // show frame f of sheet `key` (clamped)
@@ -1218,6 +1329,7 @@ class GameScene extends Phaser.Scene {
 
     this.drawEnemy();
     this.drawPlayerAttack();
+    this.drawProjectiles();
     if (art) this.updateSprites(delta);
 
     const dt = Math.min(delta, 50) / 1000;
