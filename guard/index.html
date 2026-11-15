@@ -90,7 +90,8 @@ const CONFIG = {
     high:        { y: 46, w: 34, h: 12 },                // chest height: a jump can clear it, a block of the HIGH stance stops it
     low:         { y: 9,  w: 34, h: 14 },                // along the ground: JUMP it, or block LOW
     unblockable: { y: 32, w: 24, h: 24 },                // orb: not blockable. Slash it, or jump it
-    reflectDamage: 1, reflectSpeedMult: 1.5, perfectReflects: true
+    reflectDamage: { high: 1, low: 1, unblockable: 2 }, reflectSpeedMult: 1.5, perfectReflects: true,
+    slashReflects: ['unblockable']                         // slashing these sends them back at the enemy (the rest are just destroyed)
   },
 
   poise: {                                                // enemy guard meter, in pips. A SHORTCUT to burst damage, never a gate: normal hits still hurt
@@ -135,7 +136,7 @@ const CONFIG = {
 
   /* ---- enemies ---- */
   enemyCommon: {
-    spawnJitter: 90,                                      // px of random offset around each enemy's spawnX
+    spawnJitter: 90, partnerGapPx: 300,                   // a wave's 2nd enemy stands this far behind the 1st (never on the same spot)                                      // px of random offset around each enemy's spawnX
     speedScale: 1.0,            // global: multiplies windup / recovery / gaps (0.8 = faster, 1.3 = slower)
     minWindupMs: 380,           // windups never go below this (keeps every attack readable)
     postStunIdleMs: 450,
@@ -228,7 +229,11 @@ const CONFIG = {
       ]
     }
   },
-  enemyOrder: ['swinger', 'sweeper', 'rusher', 'feinter', 'archer', 'caster', 'duelist', 'warden'],
+  waves: [                                                // each wave is who is on screen together (list melee first). ENEMY button steps through them; clearing a wave starts the next
+    ['swinger'], ['sweeper'], ['rusher'], ['feinter'], ['archer'], ['caster'],
+    ['swinger', 'archer'], ['sweeper', 'caster'], ['feinter', 'archer'], ['duelist', 'caster'],
+    ['duelist'], ['warden']
+  ],
 
   debug: { startOn: true },
 
@@ -287,7 +292,7 @@ class GameScene extends Phaser.Scene {
     this.editing = false; this.editSel = 'jump'; this.dragging = false;
     this.loadLayout();
     this.hitstopUntil = 0; this.deaths = 0; this.runStart = 0; this.nextTimer = null;
-    this.enemyIdx = 0; this.enemy = null;
+    this.waveIdx = 0; this.enemy = null; this.enemies = [];
 
     this.buildWorld();
     this.buildPlayer();
@@ -306,7 +311,7 @@ class GameScene extends Phaser.Scene {
       hp: C.combat.maxHp, hurt: 0, invuln: 0, guardAge: 0,
       atk: { state: 'idle', timer: 0, hit: new Set() }, atkBuffer: 0, blockFlash: 0, cur: 0, chainT: 0, swingAge: 99, idleFor: 99, clashOk: false
     };
-    this.spawnEnemy(C.enemyOrder[0]);
+    this.spawnWave(0);
     this.lastResult = '-';
     this.ticks = 0; this.tickHz = 0; this.tickClock = 0;
     this.physics.world.on('worldstep', this.tick, this);
@@ -401,34 +406,55 @@ class GameScene extends Phaser.Scene {
   shake(key) { const s = CONFIG.juice.shake[key]; if (s) this.cameras.main.shake(s[0], s[1]); }
 
   /* ---------------- enemies (data driven) ---------------- */
-  spawnEnemy(key) {
-    const C = CONFIG, D = C.enemies[key], E = C.enemyCommon;
+  bind(e) { this.enemy = e; this.enemyRect = e.rect; this.eSpr = e.spr; this.enemyCol = e.col; }   // point the single-enemy helpers at e
+  nearestEnemy() {
+    let best = null, bd = 1e9;
+    for (const e of this.enemies) { if (e.state === 'dead') continue; const d = Math.abs(e.x - this.player.x); if (d < bd) { bd = d; best = e; } }
+    return best || this.enemies[this.enemies.length - 1] || null;
+  }
+  spawnEnemy(key) {                                       // one enemy, as its own wave (handy for testing)
+    const i = CONFIG.waves.findIndex(w => w.length === 1 && w[0] === key);
+    this.spawnWave(i >= 0 ? i : this.waveIdx, [key]);
+  }
+  spawnWave(idx, keys) {
+    const C = CONFIG, E = C.enemyCommon;
+    this.waveIdx = idx; keys = keys || C.waves[idx];
     if (this.nextTimer) { this.nextTimer.remove(false); this.nextTimer = null; }
     this.proj = [];
-    if (this.enemyCol) { this.enemyCol.destroy(); this.enemyCol = null; }
-    if (this.enemyRect) this.enemyRect.destroy();
-    this.enemyIdx = Math.max(0, C.enemyOrder.indexOf(key));
-    const sx = Phaser.Math.Clamp((D.spawnX || E.arenaX) + (Math.random() * 2 - 1) * E.spawnJitter, 300, C.world.width - 150);   // each type has its own spot, +- a little
-    if (this.player && Math.abs(this.player.x - sx) < 110) this.player.body.reset(sx - 260, C.world.groundY - C.player.h / 2);
-    if (this.eSpr) { this.eSpr.destroy(); this.eSpr = null; }
-    if (C.art.sprites) this.eSpr = this.add.sprite(sx, C.world.groundY, 's_idle', 0).setOrigin(0.5, C.art.footY / C.art.frameH).setScale(D.h / C.art.charH).setDepth(4);
-    this.enemyRect = this.add.rectangle(sx, C.world.groundY - D.h / 2, D.w, D.h, D.color).setDepth(4).setAlpha(0);
-    this.physics.add.existing(this.enemyRect, true);
-    this.enemyCol = this.physics.add.collider(this.player, this.enemyRect);
-    this.tweens.add({ targets: this.enemyRect, alpha: 1, duration: 300 });
-    this.enemy = {
-      key, def: D, x: sx, moving: 0, retreatLeft: 0, fake: false, hp: D.hp, maxHp: D.hp, state: 'idle', timer: D.startDelayMs / 1000, facing: -1,
+    for (const o of this.enemies) { if (o.col) o.col.destroy(); if (o.rect) o.rect.destroy(); if (o.spr) o.spr.destroy(); }
+    this.enemies = [];
+    let prevX = null;
+    keys.forEach((key, i) => {
+      const D = C.enemies[key];
+      let sx = (D.spawnX || E.arenaX) + (Math.random() * 2 - 1) * E.spawnJitter;
+      if (i > 0) sx = Math.max(sx, prevX + E.partnerGapPx);                                 // never on the same spot
+      sx = Phaser.Math.Clamp(sx, 300, C.world.width - 150); prevX = sx;
+      this.enemies.push(this.makeEnemy(key, sx));
+    });
+    const first = this.enemies[0];
+    if (this.player && Math.abs(this.player.x - first.x) < 110) this.player.body.reset(first.x - 260, C.world.groundY - C.player.h / 2);
+    this.enemy = this.nearestEnemy(); this.bind(this.enemy);
+    if (this.ui && this.ui.enemy) this.ui.enemy.txt.setText('ENEMY\n' + (keys.length > 1 ? keys.map(k => C.enemies[k].name.slice(0, 4)).join('+') : C.enemies[keys[0]].name.replace('THE ', '')));
+    this.p && (this.p.atk.hit = new Set());
+  }
+  makeEnemy(key, sx) {
+    const C = CONFIG, D = C.enemies[key];
+    const spr = C.art.sprites ? this.add.sprite(sx, C.world.groundY, 's_idle', 0).setOrigin(0.5, C.art.footY / C.art.frameH).setScale(D.h / C.art.charH).setDepth(4) : null;
+    const rect = this.add.rectangle(sx, C.world.groundY - D.h / 2, D.w, D.h, D.color).setDepth(4).setAlpha(0);
+    this.physics.add.existing(rect, true);
+    const col = this.physics.add.collider(this.player, rect);
+    this.tweens.add({ targets: rect, alpha: 1, duration: 300 });
+    return {
+      key, def: D, x: sx, rect, spr, col, moving: 0, retreatLeft: 0, fake: false, hp: D.hp, maxHp: D.hp, state: 'idle', timer: D.startDelayMs / 1000, facing: -1,
       scriptIdx: 0, atkIdx: 0, script: D.script ? D.script[0] : D.phases[0].scripts[0], attack: 'high', hasHit: false,
       windupTotal: 0, nextGapMs: 0, flash: 0, phase: -1, comboDone: false, deadT: 0, poise: D.poise || C.poise.defaultPips, maxPoise: D.poise || C.poise.defaultPips, poiseT: 0
     };
-    if (this.ui && this.ui.enemy) this.ui.enemy.txt.setText('ENEMY\n' + D.name.replace('THE ', ''));
-    this.p && (this.p.atk.hit = new Set());
   }
 
   cycleEnemy() {
     const C = CONFIG;
     this.audioInit(); this.sfx('select');
-    this.spawnEnemy(C.enemyOrder[(this.enemyIdx + 1) % C.enemyOrder.length]);
+    this.spawnWave((this.waveIdx + 1) % C.waves.length);
   }
 
   attackBox(e) {
@@ -438,7 +464,7 @@ class GameScene extends Phaser.Scene {
   }
   fireProjectile(e) {
     const C = CONFIG, P = C.projectile[e.attack], D = e.def, f = e.facing;
-    this.proj.push({ type: e.attack, x: e.x + f * (D.w / 2 + 10), y: C.world.groundY - P.y, w: P.w, h: P.h, vx: f * D.ranged.projSpeed, reflected: false, dead: false, age: 0 });
+    this.proj.push({ type: e.attack, x: e.x + f * (D.w / 2 + 10), y: C.world.groundY - P.y, w: P.w, h: P.h, vx: f * D.ranged.projSpeed, reflected: false, dead: false, age: 0, owner: e });
     this.sfx('shoot');
   }
 
@@ -455,7 +481,7 @@ class GameScene extends Phaser.Scene {
   }
 
   tickProjectiles(dt) {
-    const C = CONFIG, K = C.combat, PC = C.projectile, p = this.p, pl = this.player, b = pl.body, e = this.enemy;
+    const C = CONFIG, K = C.combat, PC = C.projectile, p = this.p, pl = this.player, b = pl.body;
     if (!this.proj.length) return;
     const pb = { x: b.x, y: b.y, w: b.width, h: b.height };
     const ab = p.atk.state === 'active' ? this.playerAttackBox() : null;
@@ -463,17 +489,24 @@ class GameScene extends Phaser.Scene {
       q.x += q.vx * dt; q.age += dt;
       const box = { x: q.x - q.w / 2, y: q.y - q.h / 2, w: q.w, h: q.h };
       if (q.x < -60 || q.x > C.world.width + 60 || q.age > 6) { q.dead = true; continue; }
-      if (q.reflected) {                                   // sent back by a perfect block: hurts the shooter
-        if (e && e.state !== 'dead' && overlap(box, this.hurtBox(e))) {
-          q.dead = true; e.hp -= PC.reflectDamage; e.flash = 0.12;
-          this.spark(q.x, q.y, 0x66f0ff, 14, 60); this.floatText(e.x, C.world.groundY - e.def.h - 20, 'REFLECTED!', '#66f0ff');
+      if (q.reflected) {                                   // sent back (perfect block or a slash): hurts whoever it reaches
+        for (const e of this.enemies) {
+          if (e.state === 'dead' || (q.owner && q.owner.state !== 'dead' && e !== q.owner) || !overlap(box, this.hurtBox(e))) continue;   // it only hurts the one who shot it
+          q.dead = true; const dmg = PC.reflectDamage[q.type] || 1; e.hp = Math.max(0, e.hp - dmg); e.flash = 0.12;
+          this.spark(q.x, q.y, 0x66f0ff, 14, 60); this.floatText(e.x, C.world.groundY - e.def.h - 20, 'REFLECTED -' + dmg, '#66f0ff');
           this.sfx('counter'); this.hitStop(C.juice.hitstopFrames.counter);
           this.lastResult = 'REFLECT ' + e.def.name + ' ' + e.hp + '/' + e.maxHp;
           if (e.hp <= 0) this.killEnemy(e); else this.chipPoise(e, C.poise.chip.perfect);
+          break;
         }
         continue;
       }
       if (ab && overlap(box, ab)) {                        // slash it out of the air
+        if (PC.slashReflects.includes(q.type)) {           // magic: knock it straight back at the enemy
+          q.reflected = true; q.age = 0; q.vx = -q.vx * PC.reflectSpeedMult; q.x += Math.sign(q.vx) * 8;
+          this.spark(q.x, q.y, 0x66f0ff, 14, 60); this.floatText(q.x, q.y - 24, 'DEFLECT!', '#66f0ff'); this.sfx('perfect'); this.hitStop(3);
+          this.lastResult = 'DEFLECT ' + q.type + ': sent back'; continue;
+        }
         q.dead = true; this.spark(q.x, q.y, 0xffffff, 10, 50); this.floatText(q.x, q.y - 22, 'DEFLECT', '#ffffff'); this.sfx('block');
         this.lastResult = 'DEFLECT ' + q.type; continue;
       }
@@ -485,7 +518,7 @@ class GameScene extends Phaser.Scene {
         const perfect = p.guardAge <= K.perfect.windowMs / 1000 && PC.perfectReflects;
         p.blockFlash = C.art.blockFlashMs / 1000;
         if (perfect) {
-          const nq = { type: q.type, x: pl.x + p.facing * 30, y: q.y, w: q.w, h: q.h, vx: -q.vx * PC.reflectSpeedMult, reflected: true, dead: false, age: 0 };
+          const nq = { type: q.type, x: pl.x + p.facing * 30, y: q.y, w: q.w, h: q.h, vx: -q.vx * PC.reflectSpeedMult, reflected: true, dead: false, age: 0, owner: q.owner };
           this.proj.push(nq);
           this.spark(q.x, q.y, 0x66f0ff, 16, 70); this.floatText(pl.x, pl.y - 60, 'PERFECT!', '#66f0ff'); this.sfx('perfect'); this.hitStop(C.juice.hitstopFrames.perfect);
           this.lastResult = 'PERFECT block of a ' + q.type + ' shot: reflected';
@@ -529,7 +562,7 @@ class GameScene extends Phaser.Scene {
 
   moveEnemy(e, dx) {
     e.x = Phaser.Math.Clamp(e.x + dx, 140, CONFIG.world.width - 140);
-    this.enemyRect.x = e.x; this.enemyRect.body.updateFromGameObject();
+    e.rect.x = e.x; e.rect.body.updateFromGameObject();
   }
 
   tickEnemy(e, dt) {
@@ -655,7 +688,7 @@ class GameScene extends Phaser.Scene {
     Object.assign(p, { hp: C.combat.maxHp, hurt: 0, invuln: C.combat.respawnInvulnMs / 1000, blocking: false, jumping: false, buffer: 0, atkBuffer: 0, facing: 1 });
     p.atk.state = 'idle'; this.proj = [];
     this.cameras.main.fadeIn(250, 0, 0, 0);
-    this.spawnEnemy(this.enemy.key);
+    this.spawnWave(this.waveIdx);
     this.lastResult = 'DIED (deaths ' + this.deaths + ')';
     this.refreshHearts();
   }
@@ -705,11 +738,13 @@ class GameScene extends Phaser.Scene {
     e.state = 'dead'; e.deadT = this.animT;
     this.sfx('kill'); this.hitStop(C.juice.hitstopFrames.kill); this.shake('kill');
     this.spark(e.x, C.world.groundY - e.def.h / 2, 0xffffff, 22, 110);
-    if (this.enemyCol) { this.enemyCol.destroy(); this.enemyCol = null; }
-    this.tweens.add({ targets: this.enemyRect, alpha: 0, duration: 500, delay: C.art.sprites ? 700 : 0 });
-    const next = C.enemyOrder[(this.enemyIdx + 1) % C.enemyOrder.length];
-    this.toast(e.def.name + ' defeated' + (e.key === 'warden' ? ' - run complete! (deaths ' + this.deaths + ')' : ''));
-    this.nextTimer = this.time.delayedCall(C.enemyCommon.nextEnemyDelayMs, () => { this.nextTimer = null; this.spawnEnemy(next); });
+    if (e.col) { e.col.destroy(); e.col = null; }
+    this.tweens.add({ targets: e.rect, alpha: 0, duration: 500, delay: C.art.sprites ? 700 : 0 });
+    this.enemy = this.nearestEnemy();
+    if (this.enemies.some(o => o.state !== 'dead')) { this.toast(e.def.name + ' defeated'); return; }          // others are still standing
+    const last = this.waveIdx === C.waves.length - 1, next = (this.waveIdx + 1) % C.waves.length;
+    this.toast(e.def.name + ' defeated' + (last ? ' - run complete! (deaths ' + this.deaths + ')' : ''));
+    this.nextTimer = this.time.delayedCall(C.enemyCommon.nextEnemyDelayMs, () => { this.nextTimer = null; this.spawnWave(next); });
   }
 
   /* ---------------- input ---------------- */
@@ -826,9 +861,11 @@ class GameScene extends Phaser.Scene {
     const inp = this.readInput();
     this.ticks++;
     this.tickPlayer(inp, dt);
-    if (this.enemy && this.enemy.state !== 'dead') this.tickEnemy(this.enemy, dt);
-    this.resolveHits();
-    this.resolvePlayerAttack();
+    const list = this.enemies.slice();
+    for (const e of list) if (e.state !== 'dead' && this.enemies.includes(e)) this.tickEnemy(e, dt);
+    for (const e of list) if (this.enemies.includes(e)) { this.bind(e); this.resolveHits(); }
+    for (const e of list) if (this.enemies.includes(e)) { this.bind(e); this.resolvePlayerAttack(); }
+    if (this.enemies.length) this.bind(this.nearestEnemy());
     this.tickProjectiles(dt);
   }
 
@@ -1159,15 +1196,18 @@ class GameScene extends Phaser.Scene {
 
   /* ---------------- enemy drawing: body, telegraph, bars ---------------- */
   drawEnemy() {
+    this.eg.clear(); this.bossG.clear(); this.bossName.setText('');
+    for (const e of this.enemies) { this.bind(e); this.drawEnemyOne(); }
+    if (this.enemies.length) this.bind(this.nearestEnemy());
+  }
+  drawEnemyOne() {
     const C = CONFIG, TG = C.enemyCommon.telegraph, e = this.enemy, gy = C.world.groundY, g = this.eg, EC = C.colors.enemy;
-    g.clear();
-    this.bossG.clear();
     if (!e) return;
     const D = e.def, f = e.facing, x = e.x, top = gy - D.h;
 
     const art = C.art.sprites;
     this.enemyRect.setFillStyle(e.flash > 0 ? 0xffffff : (e.state === 'idle' ? D.color : EC[e.state]), art ? (this.debugOn ? 0.3 : 0) : 1);
-    if (e.state === 'dead') { this.bossName.setText(''); return; }
+    if (e.state === 'dead') return;
     if (!art) { g.fillStyle(0xffffff, 1); g.fillRect(x + f * (D.w / 2 - 9) - 5, top + 16, 10, 8); }          // eye
 
     if (e.state === 'windup' || e.state === 'active') {
@@ -1215,7 +1255,6 @@ class GameScene extends Phaser.Scene {
       this.drawPoise(this.bossG, e, bx, by + 14, bw, 6);
       this.bossName.setText(D.name + (e.state === 'exposed' ? '  - EXPOSED!' : ''));
     } else {
-      this.bossName.setText('');
       const bw = 56, bx = x - bw / 2, by = top - 30;
       g.fillStyle(0x000000, 0.7); g.fillRect(bx - 2, by - 2, bw + 4, 10);
       g.fillStyle(col, 1); g.fillRect(bx, by, bw * frac, 6);                            // green (never red: red means HIGH attack)
@@ -1278,8 +1317,11 @@ class GameScene extends Phaser.Scene {
     this.pose(this.pSpr, key, f);
     this.pSpr.setPosition(pl.x, pl.y + C.player.h / 2 + 1).setFlipX(p.facing < 0).setAlpha(p.invuln > 0 && Math.floor(p.invuln * 14) % 2 === 0 ? 0.35 : 1);
 
-    const s = this.eSpr;
-    if (!s || !e) return;
+    for (const en of this.enemies) this.updateEnemySprite(en);
+  }
+  updateEnemySprite(e) {
+    const C = CONFIG, A = C.art, gy = C.world.groundY, t = this.animT, s = e.spr;
+    if (!s) return;
     const D = e.def, SK = { high: 'a1', low: 'a2', unblockable: 'a3' };
     let ek = 'idle', ef = (t * A.idleFps + e.x * 0.01) % SHEETS.idle[1], tint = A.tint[e.key] || 0xffffff;
     switch (e.state) {
@@ -1292,7 +1334,7 @@ class GameScene extends Phaser.Scene {
       case 'dead': ek = 'death'; ef = (t - e.deadT) / 0.06; break;
     }
     this.pose(s, ek, ef);
-    s.setPosition(e.x, gy + 1).setFlipX(e.facing < 0).setAlpha(this.enemyRect.alpha);
+    s.setPosition(e.x, gy + 1).setFlipX(e.facing < 0).setAlpha(e.rect.alpha);
     if (e.flash > 0) s.setTintFill(0xffffff); else s.setTint(tint);
   }
 
