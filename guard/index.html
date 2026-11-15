@@ -86,6 +86,13 @@ const CONFIG = {
     respawnInvulnMs: 1500
   },
 
+  poise: {                                                // enemy guard meter, in pips. A SHORTCUT to burst damage, never a gate: normal hits still hurt
+    defaultPips: 3,                                       // per-enemy override: poise: N in the enemy def
+    chip: { block: 0.4, perfect: 1, counter: 1, hit: 0.25 },   // pips removed by: correct block, perfect block, a hit on a stunned enemy, a normal hit (x hit damage). A clash always breaks.
+    breakMs: 1100,                                        // broken = EXPOSED this long (x3 damage), then the bar refills
+    regenDelayMs: 2000, regenPerSec: 2                    // no poise damage for this long -> the bar refills fast, so hanging back is punished, attacking never is
+  },
+
   clash: {                                                // swing Attack just as an enemy strike lands: the swords clash, the whole screen slows, the enemy is staggered
     windowMs: 90,                                         // your swing must have started this recently before the strike lands (smaller = harder)
     minIdleMs: 280,                                       // anti-mash: you must have been out of a swing this long before the clashing swing started
@@ -164,7 +171,7 @@ const CONFIG = {
       ]
     },
     warden: {                                             // BOSS: three phases, escalating speed + mix, one big punish window per combo
-      name: 'THE WARDEN', boss: true, w: 64, h: 104, hp: 60, color: 0x6a3040, reachBonus: 30,
+      name: 'THE WARDEN', boss: true, poise: 6, w: 64, h: 104, hp: 60, color: 0x6a3040, reachBonus: 30,
       triggerRange: 99999, startDelayMs: 1300, roarMs: 1100,
       phases: [                                           // chosen by remaining HP (hpAbove = this phase runs while HP fraction is above it)
         { hpAbove: 0.66, scripts: [
@@ -339,6 +346,7 @@ class GameScene extends Phaser.Scene {
       case 'perfect': this.tone(1200, 0.12, 'sine', 0.9); this.tone(1800, 0.16, 'sine', 0.8, 0, 0.06); break;
       case 'hurt':    this.tone(180, 0.2, 'sawtooth', 0.9, 60); break;
       case 'clash':   this.tone(1000, 0.09, 'square', 0.9, 300); this.tone(1600, 0.18, 'sine', 0.8, 0, 0.05); this.tone(90, 0.3, 'sawtooth', 0.8, 40, 0.02); break;
+      case 'break':   this.tone(160, 0.3, 'sawtooth', 0.9, 40); this.tone(700, 0.12, 'square', 0.8, 1400, 0.05); this.tone(1400, 0.15, 'sine', 0.6, 0, 0.12); break;
       case 'swing':   this.tone(260 + this.p.cur * 70, 0.07, 'sawtooth', 0.25, 120); break;
       case 'hit':     this.tone(300, 0.05, 'square', 0.7, 200); break;
       case 'counter': this.tone(420, 0.06, 'square', 0.8, 220); this.tone(640, 0.09, 'square', 0.7, 0, 0.05); break;
@@ -369,7 +377,7 @@ class GameScene extends Phaser.Scene {
     this.enemy = {
       key, def: D, x: E.arenaX, hp: D.hp, maxHp: D.hp, state: 'idle', timer: D.startDelayMs / 1000, facing: -1,
       scriptIdx: 0, atkIdx: 0, script: D.script ? D.script[0] : D.phases[0].scripts[0], attack: 'high', hasHit: false,
-      windupTotal: 0, nextGapMs: 0, flash: 0, phase: -1, comboDone: false, deadT: 0
+      windupTotal: 0, nextGapMs: 0, flash: 0, phase: -1, comboDone: false, deadT: 0, poise: D.poise || C.poise.defaultPips, maxPoise: D.poise || C.poise.defaultPips, poiseT: 0
     };
     if (this.ui && this.ui.enemy) this.ui.enemy.txt.setText('ENEMY\n' + D.name.replace('THE ', ''));
     this.p && (this.p.atk.hit = new Set());
@@ -415,13 +423,15 @@ class GameScene extends Phaser.Scene {
     const C = CONFIG, E = C.enemyCommon, D = e.def, p = this.p, S = E.speedScale;
     e.timer = Math.max(0, e.timer - dt);
     e.flash = Math.max(0, e.flash - dt);
+    e.poiseT += dt;
+    if (e.state !== 'exposed' && e.state !== 'dead' && e.poiseT >= C.poise.regenDelayMs / 1000) e.poise = Math.min(e.maxPoise, e.poise + C.poise.regenPerSec * dt);
     switch (e.state) {
       case 'idle':
         if (e.timer <= 0 && p.hurt <= 0 && Math.abs(this.player.x - e.x) <= D.triggerRange) {
           if (e.atkIdx === 0) {                             // starting a new combo: pick script (boss: by phase)
             const { i, scripts } = this.pickScripts(e);
             if (D.phases && i !== e.phase) {
-              const first = e.phase < 0; e.phase = i; e.scriptIdx = 0;
+              const first = e.phase < 0; e.phase = i; e.scriptIdx = 0; e.poise = e.maxPoise;
               if (!first) {                                  // phase change: the boss roars, then escalates
                 e.timer = D.roarMs / 1000; this.shake('phase'); this.sfx('phase');
                 this.spark(e.x, C.world.groundY - D.h / 2, 0xffffff, 18, 90);
@@ -444,7 +454,7 @@ class GameScene extends Phaser.Scene {
         }
         break;
       case 'stunned':  if (e.timer <= 0) { e.state = 'idle'; e.timer = Math.max(e.nextGapMs * S, E.postStunIdleMs) / 1000; } break;
-      case 'exposed':  if (e.timer <= 0) { e.state = 'idle'; e.timer = e.nextGapMs * S / 1000; } break;
+      case 'exposed':  if (e.timer <= 0) { e.state = 'idle'; e.timer = e.nextGapMs * S / 1000; e.poise = e.maxPoise; e.poiseT = 0; } break;
     }
   }
 
@@ -468,6 +478,7 @@ class GameScene extends Phaser.Scene {
       this.spark(mx, my, 0xfff2a0, 22, 90); this.spark(mx, my, 0xffffff, 12, 50); this.floatText(mx, my - 40, 'CLASH!', '#ffe36a');
       this.sfx('clash'); this.hitStop(KC.hitstopFrames); this.shake('perfect'); this.cameras.main.flash(140, 255, 245, 200);
       this.lastResult = 'CLASH (' + e.attack + ', swing ' + Math.round(p.swingAge * 1000) + 'ms)';
+      this.breakPoise(e);                                 // a clash always breaks the guard
       return;
     }
     const correct = p.blocking && e.attack !== 'unblockable' && p.stance === e.attack && (facingEnemy || !K.block.requireFacing);
@@ -487,6 +498,7 @@ class GameScene extends Phaser.Scene {
         this.sfx('block'); this.hitStop(C.juice.hitstopFrames.block); this.shake('block');
       }
       this.lastResult = (perfect ? 'PERFECT' : 'BLOCK') + ' (' + e.attack + ', guard ' + Math.round(p.guardAge * 1000) + 'ms)';
+      this.chipPoise(e, perfect ? C.poise.chip.perfect : C.poise.chip.block);
     } else {
       const H = K.hurt;
       const why = e.attack === 'unblockable' ? 'unblockable' : (p.blocking ? (facingEnemy ? 'wrong stance' : 'facing away') : 'no block');
@@ -532,9 +544,25 @@ class GameScene extends Phaser.Scene {
     this.floatText(e.x, C.world.groundY - e.def.h - 14, (counter ? 'COUNTER -' : '-') + dmg, counter ? '#ffe36a' : '#ffffff');
     this.lastResult = (counter ? 'COUNTER ' : 'hit ') + dmg + ' (' + e.def.name + ' ' + e.hp + '/' + e.maxHp + ')';
     if (e.hp <= 0) return this.killEnemy(e);
+    this.chipPoise(e, counter ? C.poise.chip.counter : C.poise.chip.hit * AT.damage);
     this.sfx(counter ? 'counter' : 'hit');
     this.hitStop((counter ? C.juice.hitstopFrames.counter : C.juice.hitstopFrames.enemyHit) + (this.p.cur === 2 ? 2 : 0));
     this.shake(counter ? 'counter' : 'enemyHit');
+  }
+
+  chipPoise(e, amount) {                                  // take pips off the enemy's guard; the last pip breaks it
+    if (!e || e.state === 'dead' || e.state === 'exposed' || amount <= 0) return;
+    e.poise = Math.max(0, e.poise - amount); e.poiseT = 0;
+    if (e.poise <= 0) this.breakPoise(e);
+  }
+  breakPoise(e) {
+    const C = CONFIG, y = C.world.groundY - e.def.h;
+    if (e.state === 'windup' || e.state === 'active' || e.state === 'recovery') { e.atkIdx = 0; e.comboDone = false; e.nextGapMs = 500; }   // a broken enemy loses its string
+    e.state = 'exposed'; e.timer = C.poise.breakMs / 1000; e.poise = 0; e.flash = 0.12;
+    this.floatText(e.x, y - 34, 'GUARD BREAK!', '#9ff0ff');
+    this.spark(e.x, C.world.groundY - e.def.h / 2, 0x9ff0ff, 20, 100);
+    this.sfx('break'); this.hitStop(5); this.shake('perfect');
+    this.lastResult = 'GUARD BREAK (' + e.def.name + ')';
   }
 
   killEnemy(e) {
@@ -1048,13 +1076,23 @@ class GameScene extends Phaser.Scene {
       this.bossG.fillStyle(col, 1); this.bossG.fillRect(bx, by, bw * frac, 8);
       this.bossG.fillStyle(0xffffff, 0.5);                                              // phase ticks at 66% and 33%
       for (const m of [0.66, 0.33]) this.bossG.fillRect(bx + bw * m - 1, by - 3, 2, 14);
+      this.drawPoise(this.bossG, e, bx, by + 14, bw, 6);
       this.bossName.setText(D.name + (e.state === 'exposed' ? '  - EXPOSED!' : ''));
     } else {
       this.bossName.setText('');
       const bw = 56, bx = x - bw / 2, by = top - 30;
       g.fillStyle(0x000000, 0.7); g.fillRect(bx - 2, by - 2, bw + 4, 10);
       g.fillStyle(col, 1); g.fillRect(bx, by, bw * frac, 6);                            // green (never red: red means HIGH attack)
+      this.drawPoise(g, e, bx, by + 9, bw, 4);
     }
+  }
+
+  drawPoise(g, e, x, y, w, h) {                            // guard meter: pale-blue pips (not red/yellow, those are attack cues)
+    const broken = e.state === 'exposed' || e.poise <= 0;
+    g.fillStyle(0x000000, 0.7); g.fillRect(x - 2, y - 2, w + 4, h + 4);
+    g.fillStyle(broken ? 0x6fe8ff : 0xd6e8ff, broken ? 0.5 + 0.5 * Math.sin(this.animT * 18) : 1); g.fillRect(x, y, w * (broken ? 1 : e.poise / e.maxPoise), h);
+    g.fillStyle(0x000000, 0.85);
+    for (let i = 1; i < e.maxPoise; i++) g.fillRect(x + w * i / e.maxPoise - 1, y - 1, 2, h + 2);      // pip dividers
   }
 
   pose(spr, key, f) {                                      // show frame f of sheet `key` (clamped)
@@ -1184,7 +1222,7 @@ class GameScene extends Phaser.Scene {
       `hp ${p.hp}/${C.combat.maxHp}  hurt ${p.hurt.toFixed(1)}  inv ${Math.min(99, p.invuln).toFixed(1)}`,
       `atk ${p.atk.state}  deaths ${this.deaths}`,
       e ? `${e.def.name.replace('THE ', '')} ${e.state} ${e.state === 'windup' || e.state === 'active' ? e.attack : ''} ${e.timer.toFixed(2)}` : '-',
-      e ? `hp ${e.hp}/${e.maxHp}  phase ${e.phase + 1}  combo ${e.atkIdx + 1}/${e.script.attacks.length}` : '-',
+      e ? `hp ${e.hp}/${e.maxHp} poise ${e.poise.toFixed(1)}  phase ${e.phase + 1}  combo ${e.atkIdx + 1}/${e.script.attacks.length}` : '-',
       `last: ${this.lastResult}`
     ]);
   }
