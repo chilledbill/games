@@ -128,6 +128,7 @@ const CONFIG = {
 
   /* ---- enemies ---- */
   enemyCommon: {
+    spawnJitter: 90,                                      // px of random offset around each enemy's spawnX
     speedScale: 1.0,            // global: multiplies windup / recovery / gaps (0.8 = faster, 1.3 = slower)
     minWindupMs: 380,           // windups never go below this (keeps every attack readable)
     postStunIdleMs: 450,
@@ -151,19 +152,34 @@ const CONFIG = {
      Scripts loop. exposeMs (boss only): after the combo the enemy is EXPOSED (big damage window). */
   enemies: {
     swinger: {                                            // HIGH-attack enemy
-      name: 'SWINGER', w: 44, h: 76, hp: 4, color: 0x9b5d5d, triggerRange: 360, startDelayMs: 900,
+      name: 'SWINGER', w: 44, h: 76, hp: 4, color: 0x9b5d5d, triggerRange: 360, startDelayMs: 900, spawnX: 1150,
       script: [
         { attacks: ['high'], windupMs: 580, activeMs: 160, recoveryMs: 550, gapMs: 700, endPauseMs: 700 }
       ]
     },
     sweeper: {                                            // LOW-attack enemy
-      name: 'SWEEPER', w: 44, h: 64, hp: 4, color: 0xa38a46, triggerRange: 360, startDelayMs: 900,
+      name: 'SWEEPER', w: 44, h: 64, hp: 4, color: 0xa38a46, triggerRange: 360, startDelayMs: 900, spawnX: 800,
       script: [
         { attacks: ['low'], windupMs: 580, activeMs: 160, recoveryMs: 550, gapMs: 700, endPauseMs: 700 }
       ]
     },
+    rusher: {                                             // HIT-AND-RUN: charges in from far away, strikes fast, then backs off. You have to chase the counter
+      name: 'RUSHER', w: 40, h: 70, hp: 4, color: 0xa86a2a, triggerRange: 1500, startDelayMs: 700, spawnX: 1500,
+      move: { speed: 330, engage: 100, retreatPx: 230, retreatSpeed: 230 },
+      script: [
+        { attacks: ['low', 'high'], windupMs: 440, activeMs: 150, recoveryMs: 380, gapMs: 260, endPauseMs: 500 },
+        { attacks: ['high', 'high', 'low'], windupMs: 400, activeMs: 150, recoveryMs: 340, gapMs: 220, endPauseMs: 500 }
+      ]
+    },
+    feinter: {                                            // FAKES: some wind-ups are bluffs that pull back without swinging. Reading them (or punishing the pull-back) is the skill
+      name: 'FEINTER', w: 44, h: 74, hp: 6, color: 0x9a4a8a, triggerRange: 420, startDelayMs: 900, spawnX: 960,
+      script: [
+        { attacks: [{ t: 'high', fake: true }, 'low', 'high'], windupMs: 540, activeMs: 160, recoveryMs: 420, gapMs: 300, endPauseMs: 800, fakeRecoveryMs: 280 },
+        { attacks: ['low', { t: 'low', fake: true, fakeAt: 0.55 }, { t: 'high', windupMs: 760 }, { t: 'low', fake: true }, 'low'], windupMs: 520, activeMs: 160, recoveryMs: 400, gapMs: 280, endPauseMs: 800, fakeRecoveryMs: 260 }
+      ]
+    },
     duelist: {                                            // MIXED-attack enemy
-      name: 'DUELIST', w: 46, h: 80, hp: 8, color: 0x7a5a9b, triggerRange: 380, startDelayMs: 900,
+      name: 'DUELIST', w: 46, h: 80, hp: 8, color: 0x7a5a9b, triggerRange: 380, startDelayMs: 900, spawnX: 1340,
       script: [
         { attacks: ['high', 'low'],        windupMs: 540, activeMs: 160, recoveryMs: 450, gapMs: 450, endPauseMs: 800 },
         { attacks: ['low', 'high', 'low'], windupMs: 500, activeMs: 150, recoveryMs: 420, gapMs: 380, endPauseMs: 800 },
@@ -172,7 +188,7 @@ const CONFIG = {
     },
     warden: {                                             // BOSS: three phases, escalating speed + mix, one big punish window per combo
       name: 'THE WARDEN', boss: true, poise: 6, w: 64, h: 104, hp: 60, color: 0x6a3040, reachBonus: 30,
-      triggerRange: 99999, startDelayMs: 1300, roarMs: 1100,
+      triggerRange: 99999, startDelayMs: 1300, roarMs: 1100, spawnX: 1450,
       phases: [                                           // chosen by remaining HP (hpAbove = this phase runs while HP fraction is above it)
         { hpAbove: 0.66, scripts: [
           { attacks: ['high', 'low'],         windupMs: 560, activeMs: 170, recoveryMs: 450, gapMs: 450, endPauseMs: 500, exposeMs: 2400 },
@@ -189,14 +205,14 @@ const CONFIG = {
       ]
     }
   },
-  enemyOrder: ['swinger', 'sweeper', 'duelist', 'warden'],
+  enemyOrder: ['swinger', 'sweeper', 'rusher', 'feinter', 'duelist', 'warden'],
 
   debug: { startOn: true },
 
   art: {                                                 // sprite art (set sprites:false to get the old rectangles back)
     sprites: true, charH: 36, frameW: 112, frameH: 96, footY: 85,   // charH = knight height inside a frame; footY = feet row inside a frame
     runSpeed: 230, idleFps: 10, walkFps: 10, runFps: 14, blockFlashMs: 300,
-    tint: { swinger: 0xffa8a8, sweeper: 0xa8ffbc, duelist: 0xffe494, warden: 0xcaa6ff }     // enemies are the same knight, tinted
+    tint: { swinger: 0xffa8a8, sweeper: 0xa8ffbc, duelist: 0xffe494, warden: 0xcaa6ff, rusher: 0xffbe7a, feinter: 0xff9fe6 }     // enemies are the same knight, tinted
   },
 
   colors: {
@@ -367,15 +383,16 @@ class GameScene extends Phaser.Scene {
     if (this.enemyCol) { this.enemyCol.destroy(); this.enemyCol = null; }
     if (this.enemyRect) this.enemyRect.destroy();
     this.enemyIdx = Math.max(0, C.enemyOrder.indexOf(key));
-    if (this.player && Math.abs(this.player.x - E.arenaX) < 110) this.player.body.reset(E.arenaX - 260, C.world.groundY - C.player.h / 2);
+    const sx = Phaser.Math.Clamp((D.spawnX || E.arenaX) + (Math.random() * 2 - 1) * E.spawnJitter, 300, C.world.width - 150);   // each type has its own spot, +- a little
+    if (this.player && Math.abs(this.player.x - sx) < 110) this.player.body.reset(sx - 260, C.world.groundY - C.player.h / 2);
     if (this.eSpr) { this.eSpr.destroy(); this.eSpr = null; }
-    if (C.art.sprites) this.eSpr = this.add.sprite(E.arenaX, C.world.groundY, 's_idle', 0).setOrigin(0.5, C.art.footY / C.art.frameH).setScale(D.h / C.art.charH).setDepth(4);
-    this.enemyRect = this.add.rectangle(E.arenaX, C.world.groundY - D.h / 2, D.w, D.h, D.color).setDepth(4).setAlpha(0);
+    if (C.art.sprites) this.eSpr = this.add.sprite(sx, C.world.groundY, 's_idle', 0).setOrigin(0.5, C.art.footY / C.art.frameH).setScale(D.h / C.art.charH).setDepth(4);
+    this.enemyRect = this.add.rectangle(sx, C.world.groundY - D.h / 2, D.w, D.h, D.color).setDepth(4).setAlpha(0);
     this.physics.add.existing(this.enemyRect, true);
     this.enemyCol = this.physics.add.collider(this.player, this.enemyRect);
     this.tweens.add({ targets: this.enemyRect, alpha: 1, duration: 300 });
     this.enemy = {
-      key, def: D, x: E.arenaX, hp: D.hp, maxHp: D.hp, state: 'idle', timer: D.startDelayMs / 1000, facing: -1,
+      key, def: D, x: sx, moving: 0, retreatLeft: 0, fake: false, hp: D.hp, maxHp: D.hp, state: 'idle', timer: D.startDelayMs / 1000, facing: -1,
       scriptIdx: 0, atkIdx: 0, script: D.script ? D.script[0] : D.phases[0].scripts[0], attack: 'high', hasHit: false,
       windupTotal: 0, nextGapMs: 0, flash: 0, phase: -1, comboDone: false, deadT: 0, poise: D.poise || C.poise.defaultPips, maxPoise: D.poise || C.poise.defaultPips, poiseT: 0
     };
@@ -410,7 +427,7 @@ class GameScene extends Phaser.Scene {
     e.attack = typeof ent === 'string' ? ent : ent.t;
     const wMs = (typeof ent === 'object' && ent.windupMs) || e.script.windupMs;
     e.facing = (this.player.x < e.x) ? -1 : 1;
-    e.state = 'windup'; e.windupTotal = Math.max(E.minWindupMs, wMs * E.speedScale) / 1000; e.timer = e.windupTotal; e.hasHit = false;
+    e.fake = false; e.state = 'windup'; e.windupTotal = Math.max(E.minWindupMs, wMs * E.speedScale) / 1000; e.timer = e.windupTotal; e.hasHit = false;
   }
 
   advanceAttack(e) {                                      // an attack finished (or got blocked): move the script on
@@ -419,15 +436,26 @@ class GameScene extends Phaser.Scene {
     else e.nextGapMs = e.script.gapMs;
   }
 
+  moveEnemy(e, dx) {
+    e.x = Phaser.Math.Clamp(e.x + dx, 140, CONFIG.world.width - 140);
+    this.enemyRect.x = e.x; this.enemyRect.body.updateFromGameObject();
+  }
+
   tickEnemy(e, dt) {
     const C = CONFIG, E = C.enemyCommon, D = e.def, p = this.p, S = E.speedScale;
     e.timer = Math.max(0, e.timer - dt);
-    e.flash = Math.max(0, e.flash - dt);
+    e.flash = Math.max(0, e.flash - dt); e.moving = 0;
     e.poiseT += dt;
     if (e.state !== 'exposed' && e.state !== 'dead' && e.poiseT >= C.poise.regenDelayMs / 1000) e.poise = Math.min(e.maxPoise, e.poise + C.poise.regenPerSec * dt);
     switch (e.state) {
-      case 'idle':
-        if (e.timer <= 0 && p.hurt <= 0 && Math.abs(this.player.x - e.x) <= D.triggerRange) {
+      case 'idle': {
+        const dist = Math.abs(this.player.x - e.x), M = D.move, toward = Math.sign(this.player.x - e.x) || e.facing;
+        if (M) {                                           // movers: charge in until in striking range, back off after a combo
+          if (e.retreatLeft > 0) { const st = M.retreatSpeed * dt; this.moveEnemy(e, -toward * st); e.retreatLeft -= st; e.moving = 2; e.facing = toward; }
+          else if (dist > M.engage && dist <= D.triggerRange) { const st = Math.min(M.speed * dt, dist - M.engage); this.moveEnemy(e, toward * st); e.moving = 1; e.facing = toward; }
+        }
+        const inRange = M ? dist <= M.engage + 24 && e.retreatLeft <= 0 : dist <= D.triggerRange;
+        if (e.timer <= 0 && p.hurt <= 0 && inRange) {
           if (e.atkIdx === 0) {                             // starting a new combo: pick script (boss: by phase)
             const { i, scripts } = this.pickScripts(e);
             if (D.phases && i !== e.phase) {
@@ -443,11 +471,22 @@ class GameScene extends Phaser.Scene {
           this.startAttack(e);
         }
         break;
-      case 'windup':   if (e.timer <= 0) { e.state = 'active'; e.timer = e.script.activeMs / 1000; e.hasHit = false; } break;
+      }
+      case 'windup': {
+        const ent = e.script.attacks[e.atkIdx];
+        if (typeof ent === 'object' && ent.fake && e.timer <= e.windupTotal * (1 - (ent.fakeAt || 0.7))) {   // a bluff: pull back without swinging
+          e.fake = true; e.state = 'recovery'; e.timer = (e.script.fakeRecoveryMs || 260) / 1000;
+          break;
+        }
+        if (e.timer <= 0) { e.state = 'active'; e.timer = e.script.activeMs / 1000; e.hasHit = false; }
+        break;
+      }
       case 'active':   if (e.timer <= 0) { e.state = 'recovery'; e.timer = e.script.recoveryMs * S / 1000; } break;
       case 'recovery':
         if (e.timer <= 0) {
+          e.fake = false;
           this.advanceAttack(e);
+          if (e.comboDone && D.move && D.move.retreatPx) e.retreatLeft = D.move.retreatPx;
           if (e.comboDone && e.script.exposeMs) {            // combo over: the clear punish window
             e.comboDone = false; e.state = 'exposed'; e.timer = e.script.exposeMs / 1000; this.sfx('expose');
           } else { e.comboDone = false; e.state = 'idle'; e.timer = e.nextGapMs * S / 1000; }
@@ -1135,7 +1174,8 @@ class GameScene extends Phaser.Scene {
     switch (e.state) {
       case 'windup': ek = SK[e.attack]; ef = this.attackFrame(ek, 'windup', 1 - e.timer / Math.max(0.001, e.windupTotal)); break;
       case 'active': ek = SK[e.attack]; ef = this.attackFrame(ek, 'active', 0); break;
-      case 'recovery': ek = SK[e.attack]; ef = this.attackFrame(ek, 'recovery', 1 - e.timer / Math.max(0.001, e.script.recoveryMs * C.enemyCommon.speedScale / 1000)); break;
+      case 'recovery': ek = SK[e.attack]; ef = e.fake ? ATK_HIT[ek] - 1 : this.attackFrame(ek, 'recovery', 1 - e.timer / Math.max(0.001, e.script.recoveryMs * C.enemyCommon.speedScale / 1000)); break;
+      case 'idle': if (e.moving) { ek = e.moving === 1 ? 'run' : 'walk'; ef = (t * (e.moving === 1 ? A.runFps : A.walkFps)) % SHEETS[ek][1]; } break;
       case 'stunned': ek = 'hurt'; ef = 3; tint = 0x8fb8ff; break;
       case 'exposed': ek = 'hurt'; ef = 5; tint = 0x9ff0ff; break;
       case 'dead': ek = 'death'; ef = (t - e.deadT) / 0.06; break;
