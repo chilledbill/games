@@ -235,7 +235,7 @@ const CONFIG = {
     ['duelist'], ['warden']
   ],
 
-  debug: { startOn: true },
+  debug: { startOn: true, startWave: 6 },                 // startWave: which CONFIG.waves entry the game opens on (6 = Swinger + Archer)
 
   art: {                                                 // sprite art (set sprites:false to get the old rectangles back)
     sprites: true, charH: 36, frameW: 112, frameH: 96, footY: 85,   // charH = knight height inside a frame; footY = feet row inside a frame
@@ -311,7 +311,7 @@ class GameScene extends Phaser.Scene {
       hp: C.combat.maxHp, hurt: 0, invuln: 0, guardAge: 0,
       atk: { state: 'idle', timer: 0, hit: new Set() }, atkBuffer: 0, blockFlash: 0, cur: 0, chainT: 0, swingAge: 99, idleFor: 99, clashOk: false
     };
-    this.spawnWave(0);
+    this.spawnWave(C.debug.startWave || 0);
     this.lastResult = '-';
     this.ticks = 0; this.tickHz = 0; this.tickClock = 0;
     this.physics.world.on('worldstep', this.tick, this);
@@ -432,7 +432,10 @@ class GameScene extends Phaser.Scene {
       this.enemies.push(this.makeEnemy(key, sx));
     });
     const first = this.enemies[0];
-    if (this.player && Math.abs(this.player.x - first.x) < 110) this.player.body.reset(first.x - 260, C.world.groundY - C.player.h / 2);
+    if (this.player) {                                    // put the player where the whole wave is in view (nearest enemy ~330px away)
+      this.player.body.reset(Math.max(C.player.startX, first.x - 330), C.world.groundY - C.player.h / 2);
+      this.cameras.main.centerOnX(this.player.x);
+    }
     this.enemy = this.nearestEnemy(); this.bind(this.enemy);
     if (this.ui && this.ui.enemy) this.ui.enemy.txt.setText('ENEMY\n' + (keys.length > 1 ? keys.map(k => C.enemies[k].name.slice(0, 4)).join('+') : C.enemies[keys[0]].name.replace('THE ', '')));
     this.p && (this.p.atk.hit = new Set());
