@@ -87,7 +87,9 @@ const CONFIG = {
   },
 
   clash: {                                                // swing Attack just as an enemy strike lands: the swords clash, the whole screen slows, the enemy is staggered
-    windowMs: 150,                                        // your swing must have started this recently (swing age <= window, during windup/active)
+    windowMs: 90,                                         // your swing must have started this recently before the strike lands (smaller = harder)
+    minIdleMs: 280,                                       // anti-mash: you must have been out of a swing this long before the clashing swing started
+    cooldownMs: 2200,                                     // after a clash, no new clash for this long (real time)
     slowScale: 0.4, slowRealMs: 1400,                     // game speed during the slow-down, and how long it lasts in real time
     enemyStunMs: 1100,                                    // enemy stagger (game time). Counters on a stunned enemy do x3 damage
     recoveryCut: 0.45, stepIn: 150,                       // while slowed your swings recover this much faster, and you slide toward the enemy
@@ -256,7 +258,7 @@ class GameScene extends Phaser.Scene {
       state: 'idle', facing: 1, coyote: 0, buffer: 0, jumping: false, grounded: false,
       jumpHeldPrev: false, blocking: false, stance: C.block.neutralStance === 'low' ? 'low' : 'high',
       hp: C.combat.maxHp, hurt: 0, invuln: 0, guardAge: 0,
-      atk: { state: 'idle', timer: 0, hit: new Set() }, atkBuffer: 0, blockFlash: 0, cur: 0, chainT: 0, swingAge: 99
+      atk: { state: 'idle', timer: 0, hit: new Set() }, atkBuffer: 0, blockFlash: 0, cur: 0, chainT: 0, swingAge: 99, idleFor: 99, clashOk: false
     };
     this.spawnEnemy(C.enemyOrder[0]);
     this.lastResult = '-';
@@ -308,7 +310,7 @@ class GameScene extends Phaser.Scene {
     b.setCollideWorldBounds(true);
     b.setAllowGravity(false);
     this.physics.add.collider(this.player, this.ground);
-    this.animT = 0; this.slowUntil = 0;
+    this.animT = 0; this.slowUntil = 0; this.clashReadyAt = 0;
     if (C.art.sprites) this.pSpr = this.add.sprite(P.startX, C.world.groundY, 's_idle', 0).setOrigin(0.5, C.art.footY / C.art.frameH).setScale(P.h / C.art.charH).setDepth(6);
     this.nose = this.add.rectangle(0, 0, 12, 8, 0xffffff).setDepth(6);
     this.shield = this.add.rectangle(0, 0, 10, 30, 0xffffff).setDepth(7).setVisible(false);
@@ -458,11 +460,11 @@ class GameScene extends Phaser.Scene {
     const awayDir = (pl.x >= e.x) ? 1 : -1;
     const facingEnemy = Math.sign(e.x - pl.x) === p.facing;
     const KC = C.clash, a = p.atk;
-    if ((a.state === 'windup' || a.state === 'active') && p.swingAge <= KC.windowMs / 1000 && facingEnemy) {      // CLASH
+    if ((a.state === 'windup' || a.state === 'active') && p.clashOk && p.swingAge <= KC.windowMs / 1000 && facingEnemy) {      // CLASH
       const mx = (pl.x + e.x) / 2, my = pl.y - 14;
       e.state = 'stunned'; e.timer = KC.enemyStunMs / 1000; this.advanceAttack(e); e.comboDone = false;
       b.setVelocityX(-awayDir * KC.stepIn);
-      this.slowUntil = this.time.now + KC.slowRealMs;
+      this.slowUntil = this.time.now + KC.slowRealMs; this.clashReadyAt = this.time.now + KC.cooldownMs; p.clashOk = false;
       this.spark(mx, my, 0xfff2a0, 22, 90); this.spark(mx, my, 0xffffff, 12, 50); this.floatText(mx, my - 40, 'CLASH!', '#ffe36a');
       this.sfx('clash'); this.hitStop(KC.hitstopFrames); this.shake('perfect'); this.cameras.main.flash(140, 255, 245, 200);
       this.lastResult = 'CLASH (' + e.attack + ', swing ' + Math.round(p.swingAge * 1000) + 'ms)';
@@ -678,6 +680,7 @@ class GameScene extends Phaser.Scene {
     p.blockFlash = Math.max(0, (p.blockFlash || 0) - dt);
     p.chainT = Math.max(0, p.chainT - dt);
     p.swingAge = p.atk.state === 'idle' ? 99 : p.swingAge + dt;
+    p.idleFor = p.atk.state === 'idle' ? p.idleFor + dt : 0;
     const slowed = this.time.now < this.slowUntil;
     const stunned = p.hurt > 0;
 
@@ -700,7 +703,7 @@ class GameScene extends Phaser.Scene {
     if ((a.state === 'idle' || chainWin) && p.atkBuffer > 0 && p.grounded && !stunned) {
       p.cur = (chainWin || (p.chainT > 0 && !lastHit)) ? p.cur + 1 : 0;       // next hit of the chain, or start over
       S = this.step();
-      a.state = 'windup'; a.timer = S.startupMs / 1000; a.hit = new Set(); p.atkBuffer = 0; p.chainT = 0; p.swingAge = 0;
+      a.state = 'windup'; a.timer = S.startupMs / 1000; a.hit = new Set(); p.atkBuffer = 0; p.chainT = 0; p.clashOk = p.idleFor >= C.clash.minIdleMs / 1000 && this.time.now >= this.clashReadyAt; p.swingAge = 0;
       b.setVelocityX(p.facing * S.lunge);                                      // small step into each swing
       this.sfx('swing');
     }
