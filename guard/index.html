@@ -504,6 +504,8 @@ class GameScene extends Phaser.Scene {
         }
         continue;
       }
+      const cover = this.enemies.find(o => o !== q.owner && o.state !== 'dead' && overlap(box, this.hurtBox(o)));     // friends in the way soak shots
+      if (cover) { q.dead = true; this.spark(q.x, q.y, 0xffffff, 6, 30); continue; }
       if (ab && overlap(box, ab)) {                        // slash it out of the air
         if (PC.slashReflects.includes(q.type)) {           // magic: knock it straight back at the enemy
           q.reflected = true; q.age = 0; q.vx = -q.vx * PC.reflectSpeedMult; q.x += Math.sign(q.vx) * 8;
@@ -563,6 +565,12 @@ class GameScene extends Phaser.Scene {
     else e.nextGapMs = e.script.gapMs;
   }
 
+  losBlockedFrom(e, x) {                                  // raycast: the shooter's line to the player, who stands in the way? returns the blocking enemy
+    const gy = CONFIG.world.groundY, px = this.player.x, ray = { x: Math.min(x, px), y: gy - 40, w: Math.abs(px - x), h: 24 };
+    for (const o of this.enemies) { if (o === e || o.state === 'dead') continue; const hb = this.hurtBox(o); hb.x -= 34; hb.w += 68; if (overlap(ray, hb)) return o; }   // padded so it stands clear of its friend
+    return null;
+  }
+
   moveEnemy(e, dx) {
     e.x = Phaser.Math.Clamp(e.x + dx, 140, CONFIG.world.width - 140);
     e.rect.x = e.x; e.rect.body.updateFromGameObject();
@@ -582,11 +590,13 @@ class GameScene extends Phaser.Scene {
           else if (dist > M.engage && dist <= D.triggerRange) { const st = Math.min(M.speed * dt, dist - M.engage); this.moveEnemy(e, toward * st); e.moving = 1; e.facing = toward; }
         }
         const R = D.ranged;
-        if (R) {                                           // archers keep their distance: back off when you get close, step up when you are far
-          if (dist < R.minRange) { this.moveEnemy(e, -toward * R.speed * dt); e.moving = 2; e.facing = toward; }
+        const blocker = R ? this.losBlockedFrom(e, e.x) : null;
+        if (R) {                                           // ranged: needs a clear line to you. Blocked by a friend? it walks round to find one. Otherwise it keeps its distance
+          if (blocker && dist <= D.triggerRange) { this.moveEnemy(e, toward * R.speed * 1.4 * dt); e.moving = 1; e.facing = toward; }
+          else if (dist < R.minRange && !this.losBlockedFrom(e, e.x - toward * 40)) { this.moveEnemy(e, -toward * R.speed * dt); e.moving = 2; e.facing = toward; }   // backs off only if that keeps its line
           else if (dist > R.maxRange && dist <= D.triggerRange) { this.moveEnemy(e, toward * R.speed * dt); e.moving = 1; e.facing = toward; }
         }
-        const inRange = R ? dist <= R.maxRange + 40 : M ? dist <= M.engage + 24 && e.retreatLeft <= 0 : dist <= D.triggerRange;
+        const inRange = R ? dist <= R.maxRange + 40 && !blocker : M ? dist <= M.engage + 24 && e.retreatLeft <= 0 : dist <= D.triggerRange;
         if (e.timer <= 0 && p.hurt <= 0 && inRange) {
           if (e.atkIdx === 0) {                             // starting a new combo: pick script (boss: by phase)
             const { i, scripts } = this.pickScripts(e);
@@ -606,6 +616,7 @@ class GameScene extends Phaser.Scene {
       }
       case 'windup': {
         const ent = e.script.attacks[e.atkIdx];
+        if (D.ranged && this.losBlockedFrom(e, e.x)) { e.state = 'idle'; e.timer = 0.4; break; }        // lost its line: hold fire
         if (typeof ent === 'object' && ent.fake && e.timer <= e.windupTotal * (1 - (ent.fakeAt || 0.7))) {   // a bluff: pull back without swinging
           e.fake = true; e.state = 'recovery'; e.timer = (e.script.fakeRecoveryMs || 260) / 1000;
           break;
@@ -1211,6 +1222,11 @@ class GameScene extends Phaser.Scene {
     const art = C.art.sprites;
     this.enemyRect.setFillStyle(e.flash > 0 ? 0xffffff : (e.state === 'idle' ? D.color : EC[e.state]), art ? (this.debugOn ? 0.3 : 0) : 1);
     if (e.state === 'dead') return;
+    if (D.ranged && e.state === 'windup') {                // aim line: where the shot will go
+      const P = C.projectile[e.attack], ay = gy - P.y, ax = x + f * (D.w / 2 + 10), px = this.player.x;
+      g.fillStyle(attackColor(e.attack), 0.18 + 0.4 * (1 - e.timer / Math.max(0.001, e.windupTotal)));
+      g.fillRect(Math.min(ax, px), ay - 1.5, Math.abs(px - ax), 3);
+    }
     if (!art) { g.fillStyle(0xffffff, 1); g.fillRect(x + f * (D.w / 2 - 9) - 5, top + 16, 10, 8); }          // eye
 
     if (e.state === 'windup' || e.state === 'active') {
