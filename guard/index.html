@@ -86,6 +86,14 @@ const CONFIG = {
     respawnInvulnMs: 1500
   },
 
+  clash: {                                                // swing Attack just as an enemy strike lands: the swords clash, the whole screen slows, the enemy is staggered
+    windowMs: 150,                                        // your swing must have started this recently (swing age <= window, during windup/active)
+    slowScale: 0.4, slowRealMs: 1400,                     // game speed during the slow-down, and how long it lasts in real time
+    enemyStunMs: 1100,                                    // enemy stagger (game time). Counters on a stunned enemy do x3 damage
+    recoveryCut: 0.45, stepIn: 150,                       // while slowed your swings recover this much faster, and you slide toward the enemy
+    hitstopFrames: 6
+  },
+
   attack: {                                               // player's basic attack (the counter)
     startupMs: 70, activeMs: 110, recoveryMs: 220, bufferMs: 120,
     reach: 66, zone: [8, 52], damage: 1,
@@ -248,7 +256,7 @@ class GameScene extends Phaser.Scene {
       state: 'idle', facing: 1, coyote: 0, buffer: 0, jumping: false, grounded: false,
       jumpHeldPrev: false, blocking: false, stance: C.block.neutralStance === 'low' ? 'low' : 'high',
       hp: C.combat.maxHp, hurt: 0, invuln: 0, guardAge: 0,
-      atk: { state: 'idle', timer: 0, hit: new Set() }, atkBuffer: 0, blockFlash: 0, cur: 0, chainT: 0
+      atk: { state: 'idle', timer: 0, hit: new Set() }, atkBuffer: 0, blockFlash: 0, cur: 0, chainT: 0, swingAge: 99
     };
     this.spawnEnemy(C.enemyOrder[0]);
     this.lastResult = '-';
@@ -300,7 +308,7 @@ class GameScene extends Phaser.Scene {
     b.setCollideWorldBounds(true);
     b.setAllowGravity(false);
     this.physics.add.collider(this.player, this.ground);
-    this.animT = 0;
+    this.animT = 0; this.slowUntil = 0;
     if (C.art.sprites) this.pSpr = this.add.sprite(P.startX, C.world.groundY, 's_idle', 0).setOrigin(0.5, C.art.footY / C.art.frameH).setScale(P.h / C.art.charH).setDepth(6);
     this.nose = this.add.rectangle(0, 0, 12, 8, 0xffffff).setDepth(6);
     this.shield = this.add.rectangle(0, 0, 10, 30, 0xffffff).setDepth(7).setVisible(false);
@@ -328,6 +336,7 @@ class GameScene extends Phaser.Scene {
       case 'block':   this.tone(520, 0.06, 'triangle', 0.9); this.tone(780, 0.07, 'triangle', 0.7, 0, 0.04); break;
       case 'perfect': this.tone(1200, 0.12, 'sine', 0.9); this.tone(1800, 0.16, 'sine', 0.8, 0, 0.06); break;
       case 'hurt':    this.tone(180, 0.2, 'sawtooth', 0.9, 60); break;
+      case 'clash':   this.tone(1000, 0.09, 'square', 0.9, 300); this.tone(1600, 0.18, 'sine', 0.8, 0, 0.05); this.tone(90, 0.3, 'sawtooth', 0.8, 40, 0.02); break;
       case 'swing':   this.tone(260 + this.p.cur * 70, 0.07, 'sawtooth', 0.25, 120); break;
       case 'hit':     this.tone(300, 0.05, 'square', 0.7, 200); break;
       case 'counter': this.tone(420, 0.06, 'square', 0.8, 220); this.tone(640, 0.09, 'square', 0.7, 0, 0.05); break;
@@ -448,6 +457,17 @@ class GameScene extends Phaser.Scene {
     const A = C.attackTypes[e.attack];
     const awayDir = (pl.x >= e.x) ? 1 : -1;
     const facingEnemy = Math.sign(e.x - pl.x) === p.facing;
+    const KC = C.clash, a = p.atk;
+    if ((a.state === 'windup' || a.state === 'active') && p.swingAge <= KC.windowMs / 1000 && facingEnemy) {      // CLASH
+      const mx = (pl.x + e.x) / 2, my = pl.y - 14;
+      e.state = 'stunned'; e.timer = KC.enemyStunMs / 1000; this.advanceAttack(e); e.comboDone = false;
+      b.setVelocityX(-awayDir * KC.stepIn);
+      this.slowUntil = this.time.now + KC.slowRealMs;
+      this.spark(mx, my, 0xfff2a0, 22, 90); this.spark(mx, my, 0xffffff, 12, 50); this.floatText(mx, my - 40, 'CLASH!', '#ffe36a');
+      this.sfx('clash'); this.hitStop(KC.hitstopFrames); this.shake('perfect'); this.cameras.main.flash(140, 255, 245, 200);
+      this.lastResult = 'CLASH (' + e.attack + ', swing ' + Math.round(p.swingAge * 1000) + 'ms)';
+      return;
+    }
     const correct = p.blocking && e.attack !== 'unblockable' && p.stance === e.attack && (facingEnemy || !K.block.requireFacing);
 
     if (correct) {
@@ -657,6 +677,8 @@ class GameScene extends Phaser.Scene {
     p.invuln = Math.max(0, p.invuln - dt);
     p.blockFlash = Math.max(0, (p.blockFlash || 0) - dt);
     p.chainT = Math.max(0, p.chainT - dt);
+    p.swingAge = p.atk.state === 'idle' ? 99 : p.swingAge + dt;
+    const slowed = this.time.now < this.slowUntil;
     const stunned = p.hurt > 0;
 
     p.coyote = p.grounded ? J.coyoteMs / 1000 : Math.max(0, p.coyote - dt);
@@ -669,7 +691,7 @@ class GameScene extends Phaser.Scene {
     if (stunned) { a.state = 'idle'; p.chainT = 0; p.cur = 0; }
     let S = this.step();
     if (a.state === 'windup' && a.timer <= 0) { a.state = 'active'; a.timer = S.activeMs / 1000; a.hit = new Set(); }
-    else if (a.state === 'active' && a.timer <= 0) { a.state = 'recovery'; a.timer = S.recoveryMs / 1000; }
+    else if (a.state === 'active' && a.timer <= 0) { a.state = 'recovery'; a.timer = S.recoveryMs * (slowed ? C.clash.recoveryCut : 1) / 1000; }
     else if (a.state === 'recovery' && a.timer <= 0) { a.state = 'idle'; p.chainT = AT.chainMs / 1000; }
 
     const lastHit = p.cur >= AT.combo.length - 1;
@@ -678,7 +700,7 @@ class GameScene extends Phaser.Scene {
     if ((a.state === 'idle' || chainWin) && p.atkBuffer > 0 && p.grounded && !stunned) {
       p.cur = (chainWin || (p.chainT > 0 && !lastHit)) ? p.cur + 1 : 0;       // next hit of the chain, or start over
       S = this.step();
-      a.state = 'windup'; a.timer = S.startupMs / 1000; a.hit = new Set(); p.atkBuffer = 0; p.chainT = 0;
+      a.state = 'windup'; a.timer = S.startupMs / 1000; a.hit = new Set(); p.atkBuffer = 0; p.chainT = 0; p.swingAge = 0;
       b.setVelocityX(p.facing * S.lunge);                                      // small step into each swing
       this.sfx('swing');
     }
@@ -1044,7 +1066,7 @@ class GameScene extends Phaser.Scene {
   }
   updateSprites(delta) {
     const C = CONFIG, A = C.art, p = this.p, pl = this.player, e = this.enemy, gy = C.world.groundY;
-    if (!this.physics.world.isPaused) this.animT += Math.min(delta, 50) / 1000;
+    if (!this.physics.world.isPaused) this.animT += Math.min(delta, 50) / 1000 * (this.time.now < this.slowUntil ? CONFIG.clash.slowScale : 1);
     const t = this.animT, vx = pl.body.velocity.x, vy = pl.body.velocity.y;
 
     let key = 'idle', f = (t * A.idleFps) % SHEETS.idle[1];
@@ -1095,6 +1117,9 @@ class GameScene extends Phaser.Scene {
   renderUpdate(time, delta) {
     const C = CONFIG, p = this.p, pl = this.player, b = pl.body, cam = this.cameras.main, e = this.enemy;
 
+    const slow = this.time.now < this.slowUntil;
+    this.physics.world.timeScale = slow ? 1 / C.clash.slowScale : 1;                                   // whole-screen slow-down (bigger timeScale = slower)
+    this.tweens.timeScale = slow ? C.clash.slowScale : 1;
     this.physics.world.isPaused = this.editing || this.time.now < this.hitstopUntil;                // hit-stop freezes the simulation
 
     const art = C.art.sprites;
