@@ -16,9 +16,17 @@ The modular source lives in `source/` (ES modules, tests, packager, original spr
 
 ```sh
 cd source
-npm test            # 54 tests
+npm test            # 81 tests
 npm run check       # syntax-check every module
 npm run build       # regenerates ../index.html (the single file GitHub Pages serves)
 ```
 
 Edit `source/`, then run `npm run build` and commit both. Do not hand-edit `index.html`.
+
+## Controls (Milestone 4)
+
+Attack / Jump / Dodge / Block, plus **Rising Phoenix**: hold **↓** with the left thumb, then press **B**
+(keyboard: `I`, or hold `S` and press `L`). A plain Block press still guards; Skill never falls back to Block or Dodge.
+7 s cooldown shared by ground and air versions. Hits fill **Focus**; with full Focus, keep holding that same Skill press
+through the first Phoenix hit for **Phoenix Break**. **Style** rank (D to SS) is feedback only. Help has control size,
+opacity and reduced-effects settings, saved in the browser.

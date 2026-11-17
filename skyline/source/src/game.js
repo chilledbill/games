@@ -3,6 +3,10 @@ import { ENEMY_PROFILES, updateEnemy, enemyPhase, tryEnemyEscape } from './enemy
 import {tickGuard,guardImpact} from './guard.js';
 import { Juggle } from './juggle.js';
 import { InputBuffer } from './buffer.js';
+import { SKILLS, skillReady, skillCooldownLeft, startSkillCooldown, skillVariant } from './skills.js';
+import { Resources } from './resources.js';
+import { Style } from './style.js';
+import { emitCombat } from './combat-events.js';
 const KO_RESTART_SECONDS = 3;
 export const overlaps = (a,b) => a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
 export class Game {
@@ -17,7 +21,8 @@ export class Game {
     this.victimJuggle=new Juggle();this.juggle=new Juggle();this.dodgeUntil=0;this.stepUntil=0;this.attackHeld=null;this.guardHeld=false;
     this.action=null; this.chain=null; this.chainUntil=0; this.launch=null; this.chase=null;
     this.hits=0; this.combo=0; this.lastHit=-10; this.hitstop=0; this.effects=[]; this.history=[]; this.events=[];
-    this.lastMove='—'; this.koAt=null; this.notice=opponent.ai?'SPARRING · Dodge the marked strike':'Approach the dummy · press Attack';
+    this.lastMove='—'; this.koAt=null;
+    this.resources={player:new Resources(),rival:new Resources()};this.style=new Style();this.serial=0;this.skillHeld=0;this.skillPress=0; this.notice=opponent.ai?'SPARRING · Dodge the marked strike':'Approach the dummy · press Attack';
   }
   // Auto-restart after a KO. Uses simulation time, so Help-pause also pauses the countdown.
   // Returns seconds remaining (0 when nobody is KO'd) or -1 on the frame the round restarts.
@@ -34,6 +39,8 @@ export class Game {
   press(action, direction=this.direction) {
     if(action==='Guard'){this.guardHeld=true;return;}
     if(action==='Attack')this.attackHeld=this.time;
+    // Each physical Skill press gets a serial; the finisher must be held by that same press.
+    if(action==='Skill'){this.skillPress=(this.skillPress||0)+1;this.skillHeld=this.skillPress;}
     this.buffer.add(action,direction,this.time);
     this.history.unshift({text:`${direction.y>0?'↑ ':direction.y<0?'↓ ':''}${action}`,time:this.time});
     this.history.length=Math.min(this.history.length,8);
@@ -45,6 +52,7 @@ export class Game {
   }
   release(action){
     if(action==='Guard'){this.guardHeld=false;this.player.guarding=false;return;}
+    if(action==='Skill'){this.skillHeld=0;return;}
     if(action==='Attack' && this.attackHeld!==null){
       if(this.time-this.attackHeld>=0.32)this.buffer.add('Charge',{...this.direction},this.time);
       this.attackHeld=null;
@@ -71,7 +79,7 @@ export class Game {
   }
   start(id) {
     this.record(id);
-    this.action={id,t:0,confirmed:false,hit:new Set()}; this.lastMove=id;
+    this.action={id,t:0,confirmed:false,hit:new Set(),serial:++this.serial}; this.lastMove=id;
     this.chain=null; this.events.push({type:'move',id,time:this.time});
     if(MOVES[id].kind==='Dodge'){this.chase=null;this.dodgeUntil=this.time+0.42;if(!this.player.grounded){this.player.airDash=false;this.player.vy=0;}}
     if(id.startsWith('A_') && MOVES[id].kind!=='Dodge') this.player.vy=Math.max(this.player.vy,65);
@@ -87,18 +95,18 @@ export class Game {
     const p=this.player,d=this.dummy;
     if(p.hp<=0 || this.time<(p.guardBrokenUntil||0) || this.time<p.hurtUntil || p.enemyLaunched&&p.y>0)return;
     for(const c of [...this.buffer.commands]) {
-      if(c.action!=='Guard')p.guarding=false;
+      if(c.action!=='Guard'&&c.action!=='Skill')p.guarding=false;
       if(c.action==='Jump') {
-        if(this.canStep() && (!this.action || ['A_Light1','A_Light2'].includes(this.action.id))){
+        if(this.canStep() && (!this.action || ['A_Light1','A_Light2','A_RisingPhoenix'].includes(this.action.id))){
           if(this.juggle.step()){
             d.stun=Math.max(d.stun,0.2);d.vx=15*p.facing;
             p.vy=310;p.airDash=true;p.double=true;this.action=null;this.chain=null;this.chase=null;this.stepUntil=0;
-            this.record('A_EnemyStep');
+            this.record('A_EnemyStep');emitCombat(this,{actor:'player',kind:'step',key:'Step',hitId:`step${++this.serial}`});
             this.notice='ENEMY STEP · air mobility restored';this.events.push({type:'step',time:this.time});
             this.buffer.consume(c);continue;
           }
         }
-        if(this.validChase() && (!this.action || this.action.id==='G_Launcher')) {
+        if(this.validChase() && (!this.action || ['G_Launcher','G_RisingPhoenix'].includes(this.action.id))) {
           this.action=null; this.chain=null; this.chase={remaining:T.chaseDuration};
           p.grounded=false; p.double=false; this.launch=null;
           this.record('A_Chase');
@@ -142,15 +150,49 @@ export class Game {
         }
         if(c.direction.x) p.facing=c.direction.x;
         this.start(id);this.buffer.consume(c);
+      } else if(c.action==='Skill') {
+        // A press never falls back to Block or Dodge. Rejection spends no cooldown.
+        if(!skillReady(p,this.time)){
+          this.notice=`PHOENIX · ready in ${skillCooldownLeft(p,this.time).toFixed(1)}s`;
+          this.events.push({type:'skillRejected',time:this.time});this.buffer.consume(c);continue;
+        }
+        if(this.action){const m=MOVES[this.action.id];if(!m.skillCancel||!this.action.confirmed||this.action.t<m.cancelStart||this.action.t>m.cancelEnd)continue;}
+        if(c.direction.x)p.facing=c.direction.x;
+        this.startSkill();this.buffer.consume(c);
       } else this.buffer.consume(c);
     }
+  }
+  // Variant (ground/air) is chosen at actual execution time. Cooldown starts here, once.
+  startSkill(){
+    const p=this.player;
+    p.guarding=false;this.chase=null;this.launch=null;
+    startSkillCooldown(p,this.time);
+    this.start(skillVariant(!p.grounded));
+    this.action.skill=true;this.action.pressSerial=this.skillPress;
+    this.notice=SKILLS.RisingPhoenix.name.toUpperCase()+(this.resources.player.full()?' · HOLD Skill for Phoenix Break':'');
+  }
+  // Held-Skill finisher: validated in full, then one atomic transition (spend 100, start finisher).
+  checkFinisher(){
+    const a=this.action,p=this.player,d=this.dummy,sk=SKILLS.RisingPhoenix;
+    if(!a||!a.skill||a.markerDone||a.t<sk.marker)return false;
+    a.markerDone=true;
+    const ok=p.hp>0&&!a.finisherUsed&&this.skillHeld>0&&this.skillHeld===a.pressSerial&&
+      this.resources.player.focus>=sk.focusCost&&a.confirmed&&a.targetId===d.id&&d.hp>0&&d.state!=='Dead'&&
+      d.x>=22&&d.x<=938&&Math.abs(d.x-p.x)<=sk.finisherRange&&Math.abs(d.y-p.y)<=sk.finisherRange;
+    if(!ok)return false;
+    if(!this.resources.player.spend(sk.focusCost))return false;
+    a.finisherUsed=true;this.skillHeld=0;
+    p.facing=d.x>=p.x?1:-1;
+    this.start(sk.finisher);this.action.finisher=true;
+    this.notice='PHOENIX BREAK';this.events.push({type:'finisher',time:this.time});
+    return true;
   }
   hit() {
     const a=this.action,d=this.dummy,p=this.player,m=MOVES[a.id];
     if(a.hit.has(d.id) || d.state==='Knockdown' || d.state==='Recovering' || d.state==='Invulnerable' || d.hp<=0 || !overlaps(this.hitbox(),this.body(d))) return;
     if(d.attack && MOVES[d.attack.id]?.kind==='Dodge' && d.attack.t<=.16){
       a.hit.add(d.id);
-      if(d.attack.t<=.1&&!d.escaping)d.counterUntil=this.time+.3;
+      if(d.attack.t<=.1&&!d.escaping){d.counterUntil=this.time+.3;emitCombat(this,{actor:'rival',kind:'perfectDodge',key:'PerfectDodge',hitId:`rpd${d.attack.serial}`});}
       this.notice='ENEMY DODGED';return;
     }
     const guarded=guardImpact(d,p,m,this.time);
@@ -167,7 +209,7 @@ export class Game {
     }
 const profile=ENEMY_PROFILES[this.profile];
     const resisting=d.armor>0 && this.time>=d.brokenUntil;
-    let broke=false;
+    let broke=false;let launched=null;
     if(resisting){
       d.stagger=Math.min(100,d.stagger+m.staggerDamage);
       if(d.stagger>=100){d.stagger=0;d.brokenUntil=this.time+2.2;d.armor=0;d.state='Staggered';d.stun=2.2;d.attack=null;broke=true;this.notice='STAGGER BREAK · punish now';}
@@ -182,11 +224,11 @@ const profile=ENEMY_PROFILES[this.profile];
     const airborneHit=d.y>0 || ['Launch','Relaunch'].includes(m.reaction);
     if(airborneHit)this.juggle.spend(m.juggleCost);
     if(wasForced || this.juggle.forced){d.state='ForcedFall';d.vy=Math.min(d.vy,-100);this.launch=null;this.stepUntil=0;}
-    else if(m.reaction==='Relaunch') {d.state='AirHitstun';d.vy=245;d.y=Math.max(1,d.y);p.vy=230;}
+    else if(m.reaction==='Relaunch') {d.state='AirHitstun';d.vy=245;d.y=Math.max(1,d.y);p.vy=230;launched='relaunch';}
     else if(m.reaction==='Spike'){d.state='AirHitstun';d.vy=-600;d.spiked=true;}
     else if(m.reaction==='Knockback'){d.state='Knockdown';d.vx=230*p.facing;d.vy=120;d.y=Math.max(1,d.y);}
     else if(m.reaction==='Launch') {
-      d.state='Launched';d.vy=T.launcher;d.y=Math.max(1,d.y);
+      d.state='Launched';launched='launch';d.vy=T.launcher;d.y=Math.max(1,d.y);
       this.launch={id:d.id,until:this.time+T.chaseWindow};this.notice='LAUNCH CONFIRMED · press Jump';
     } else if(m.reaction==='Knockdown') {d.state='Knockdown';d.stun=0.8;d.escapePending=true;d.vx=110*p.facing;}
     else if(m.reaction==='Suspend' || m.reaction==='AirFinish') {
@@ -197,6 +239,9 @@ const profile=ENEMY_PROFILES[this.profile];
     if(d.hp<=0){d.state='Dead';d.attack=null;d.plan=[];d.chaseUntil=0;d.vx=0;this.launch=null;this.chase=null;this.notice='VICTORY · Restarting';}
     if(guarded==='break')d.stun=Math.max(.8,d.stun);
     if(a.id.startsWith('A_') && !this.juggle.forced)this.stepUntil=this.time+0.3;
+    a.targetId=d.id;
+    if(a.skill&&launched){p.y=Math.max(p.y,1);p.vy=Math.max(p.vy,a.id.startsWith('G_')?300:220);p.grounded=false;}
+    emitCombat(this,{actor:'player',kind:a.finisher?'finisher':a.skill?'skill':launched||'hit',key:a.id,hitId:`p${a.serial}:${d.id}`});
     this.hitstop=m.reaction==='Launch'?0.065:0.045;
     this.effects.push({x:d.x,y:d.y+28,life:0.3,damage});
     this.events.push({type:'hit',id:a.id,time:this.time});
@@ -205,7 +250,7 @@ const profile=ENEMY_PROFILES[this.profile];
   tick(dt) {
     // Fixed 120 Hz simulation called by main; combat time pauses during hitstop.
     if(this.hitstop>0) {this.hitstop=Math.max(0,this.hitstop-dt);return;}
-    this.time+=dt;const p=this.player,d=this.dummy;
+    this.time+=dt;const p=this.player,d=this.dummy;this.style.tick(this.time,dt);
     p.guarding=this.guardHeld&&p.grounded&&!this.action&&p.hp>0&&this.time>=p.hurtUntil&&this.time>=(p.guardBrokenUntil||0)&&!p.enemyLaunched;
     if(p.guarding)this.recordGuardOnce();
     tickGuard(p,this.time,dt);tickGuard(d,this.time,dt);
@@ -268,7 +313,7 @@ const profile=ENEMY_PROFILES[this.profile];
     if(d.state==='Neutral'&&this.time>=d.brokenUntil)d.armor=ENEMY_PROFILES[this.profile].armor;
     tryEnemyEscape(this);
     if(this.action) {
-      this.action.t+=dt;
+      this.action.t+=dt;this.checkFinisher();
       if(this.phase()==='Active' && MOVES[this.action.id].kind!=='Dodge')this.hit();
       const m=MOVES[this.action.id];
       if(this.action.t>=m.startup+m.active+m.recovery && (this.action.id!=='A_Plunge'||this.action.landed)) {

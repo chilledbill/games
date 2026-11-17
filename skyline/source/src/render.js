@@ -1,7 +1,8 @@
 import {DEFENSE,enemyBox,ENEMY_PROFILES,enemyPhase} from './enemy.js';
 import {drawPlayerSprite,drawEnemySprite} from './sprites.js';
 import {MOVES} from './moves.js';
-export function render(ctx,g,boxes=false,viewport={width:960,height:540}) {
+export function render(ctx,g,boxes=false,viewport={width:960,height:540},opts={}) {
+  const reduced=!!opts.reduced;
   ctx.save();
   // Fill the phone view without stretching; follow combatants within world bounds.
   const scale=Math.max(viewport.width/960,viewport.height/540);
@@ -48,6 +49,17 @@ export function render(ctx,g,boxes=false,viewport={width:960,height:540}) {
     }
   }
   fighter(g.dummy,true);fighter(g.player);
+  // Phoenix effects: warm arc for the skill, larger gold arc for the finisher. Reduced effects drops the glow.
+  const phoenix=(x,y,facing,finisher,progress)=>{
+    ctx.save();ctx.translate(x,floor-y-26);ctx.scale(facing,1);
+    const radius=finisher?80:58,sweep=-2.1+progress*2.6;
+    if(!reduced){ctx.strokeStyle=finisher?'#ffd98a55':'#ff8a3d55';ctx.lineWidth=finisher?20:14;ctx.beginPath();ctx.arc(12,0,radius,-2.1,sweep);ctx.stroke();}
+    ctx.strokeStyle=finisher?'#ffd98a':'#ff8a3d';ctx.lineWidth=finisher?8:5;ctx.beginPath();ctx.arc(12,0,radius,-2.1,sweep);ctx.stroke();
+    ctx.restore();
+  };
+  if(g.action&&(g.action.skill||g.action.finisher)){const m=MOVES[g.action.id];phoenix(g.player.x,g.player.y,g.player.facing,!!g.action.finisher,Math.min(1,g.action.t/(m.startup+m.active)));if(g.action.finisher){ctx.fillStyle='#ffd98a';ctx.font='bold 13px monospace';ctx.textAlign='center';ctx.fillText('PHOENIX BREAK',g.player.x,floor-g.player.y-96);}}
+  if(g.dummy.attack&&MOVES[g.dummy.attack.id]?.skill&&enemyPhase(g.dummy)!=='Recovery'){const m=MOVES[g.dummy.attack.id];phoenix(g.dummy.x,g.dummy.y,g.dummy.facing,false,Math.min(1,Math.max(0,g.dummy.attack.t-(g.dummy.attack.tell||0))/(m.startup+m.active)));}
+  if(g.resources.player.focus>=100&&g.player.hp>0){ctx.strokeStyle='#ffb45e';ctx.lineWidth=2;ctx.beginPath();ctx.arc(g.player.x,floor-g.player.y-24,32+(reduced?0:Math.sin(g.time*6)*2),0,Math.PI*2);ctx.stroke();}
   for(const actor of [g.player,g.dummy]){
     if(actor.guarding){ctx.strokeStyle='#9adcf5';ctx.lineWidth=4;ctx.beginPath();ctx.arc(actor.x+actor.facing*10,floor-actor.y-24,31,actor.facing>0?-1.2:Math.PI-1.2,actor.facing>0?1.2:Math.PI+1.2);ctx.stroke();}
   }

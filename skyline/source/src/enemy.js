@@ -1,5 +1,7 @@
 import {guardImpact,grounded} from './guard.js';
 import {MOVES,TUNE} from './moves.js';
+import {isSkillMove,skillReady,startSkillCooldown} from './skills.js';
+import {emitCombat} from './combat-events.js';
 // AI uses the player's move definitions; only its choices and opening tell differ.
 export const ENEMY_PROFILES={
  practice:{name:'Practice dummy',hp:1000,ai:false,armor:0,heavy:false},
@@ -15,6 +17,9 @@ export const ENEMY_ROUTES=[
  ['G_Launcher','Chase','A_Light1','A_Light2','A_Relaunch','Wait','A_Light1','A_Light2','A_Plunge'],
  ['G_Launcher','Chase','A_Light1','A_Light2','Step','A_Light1','A_Light2','A_Plunge'],
  ['Jump','DoubleJump','A_Dodge','A_DashAttack'],
+ // Milestone 4: routes that use the shared Rising Phoenix skill; skipped while it is cooling down.
+ ['G_Light1','G_Light2','G_RisingPhoenix','Chase','A_Light1','A_Light2','A_Light3'],
+ ['G_Launcher','Chase','A_Light1','A_RisingPhoenix','Wait','A_Light1','A_Light2','A_Plunge'],
 ];
 export function enemyTiming(a){const m=MOVES[a?.id]||MOVES.G_Light1;return {m,startup:m.startup+(a?.tell||0)};}
 export function enemyPhase(d){if(!d.attack)return 'Idle';const {m,startup}=enemyTiming(d.attack);return d.attack.t<startup?'Startup':d.attack.t<startup+m.active||d.attack.id==='A_Plunge'&&d.y>0?'Active':'Recovery';}
@@ -24,7 +29,8 @@ export function beginEnemyMove(g,id,tell=0){
  const d=g.dummy;if(!MOVES[id])return false;
  if(MOVES[id].kind==='Dodge'&&g.time<(d.dodgeUntil||0))return false;
  if(id==='A_Dodge'&&!d.airDash)return false;
- d.guarding=false;d.rollDirection=0;d.facing=g.player.x>=d.x?1:-1;d.attack={id,t:0,tell,spent:false,confirmed:false};d.state='Attacking';d.lastMove=id;
+ if(isSkillMove(id)){if(!skillReady(d,g.time))return false;startSkillCooldown(d,g.time);}
+ d.guarding=false;d.rollDirection=0;d.facing=g.player.x>=d.x?1:-1;d.attack={id,t:0,tell,spent:false,confirmed:false,serial:++g.serial};d.state='Attacking';d.lastMove=id;
  if(MOVES[id].kind==='Dodge'){d.dodgeUntil=g.time+.42;if(id==='A_Dodge'){d.airDash=false;d.vy=0;}}
  if(id.startsWith('A_') && MOVES[id].kind!=='Dodge')d.vy=Math.max(d.vy,65);
  g.events.push({type:'enemyMove',id,time:g.time});if(g.events.length>240)g.events.splice(0,100);
@@ -46,7 +52,7 @@ function hitPlayer(g){
  const dodge=g.action&&MOVES[g.action.id].kind==='Dodge';
  if(dodge&&g.action.t<=DEFENSE.invulnerable){
   a.spent=true;
-  if(g.action.t<=DEFENSE.perfect){g.counterUntil=g.time+DEFENSE.counter;g.record('PerfectDodge');g.notice='PERFECT DODGE · Attack to counter';}
+  if(g.action.t<=DEFENSE.perfect){g.counterUntil=g.time+DEFENSE.counter;g.record('PerfectDodge');emitCombat(g,{actor:'player',kind:'perfectDodge',key:'PerfectDodge',hitId:`pd${a.serial}`});g.notice='PERFECT DODGE · Attack to counter';}
   else g.notice='DODGED';
   return;
  }
@@ -67,6 +73,8 @@ function hitPlayer(g){
  else if(m.reaction==='Spike'){p.vy=-600;p.spiked=true;}
  else if(airborne){p.vy=m.reaction==='AirFinish'?70:110;d.vy=Math.max(d.vy,100);}
  else if(['Knockdown','Knockback'].includes(m.reaction)){p.knockdownUntil=g.time+.7;p.hurtUntil=p.knockdownUntil;}
+ g.style.penalize(g.time);
+ emitCombat(g,{actor:'rival',kind:m.skill?'skill':g.victimJuggle.forced?'hit':m.reaction==='Launch'?'launch':m.reaction==='Relaunch'?'relaunch':'hit',key:a.id,hitId:`r${a.serial}:p`});
  if(p.enemyLaunched&&!p.forcedFall)p.hurtUntil=Math.max(p.hurtUntil,g.time+.45);
  g.action=null;g.chain=null;g.chase=null;g.launch=null;g.counterUntil=0;g.combo=0;g.buffer.clear();g.attackHeld=null;
  g.notice=p.hp?`${m.name.toUpperCase()} · enemy combo ${d.combo}`:'DEFEATED · Restarting';
@@ -86,7 +94,7 @@ function special(g,token){
  }
  if(token==='Step'){
   if(!d.lastAirHit||g.time-d.lastAirHit>.3||Math.hypot(p.x-d.x,p.y-d.y)>90||p.y<=0||!g.victimJuggle.step())return false;
-  d.vy=150;d.double=true;d.airDash=true;p.hurtUntil=Math.max(p.hurtUntil,g.time+.2);d.lastAirHit=0;mark();return true;
+  d.vy=150;d.double=true;d.airDash=true;p.hurtUntil=Math.max(p.hurtUntil,g.time+.2);d.lastAirHit=0;emitCombat(g,{actor:'rival',kind:'step',key:'Step',hitId:`rstep${++g.serial}`});mark();return true;
  }
  return false;
 }
@@ -120,7 +128,11 @@ export function updateEnemy(g,dt){
     d.evadedAction=g.action;d.plan=[d.y>0?'A_DashAttack':'G_DashAttack'];beginEnemyMove(g,d.y>0?'A_Dodge':'G_Dodge');return;
    }
   }
-  if(!d.plan?.length){const index=d.routeIndex||0;d.routeIndex=index+1;d.plan=[...ENEMY_ROUTES[index%ENEMY_ROUTES.length]];d.combo=0;}
+  if(!d.plan?.length){
+   let route;
+   for(let tries=0;tries<ENEMY_ROUTES.length;tries++){const index=d.routeIndex||0;d.routeIndex=index+1;route=ENEMY_ROUTES[index%ENEMY_ROUTES.length];if(!route.some(isSkillMove)||skillReady(d,g.time))break;}
+   d.plan=[...route];d.combo=0;
+  }
   const id=d.plan.shift();
   if(!MOVES[id]){if(!special(g,id))endTurn(g);else d.readyAt=g.time+.1;return;}
   if(id.startsWith('G_')&&d.y>0){endTurn(g);return;}
@@ -134,11 +146,11 @@ export function updateEnemy(g,dt){
  if(!d.attack)return;
  // Directional branches require a real hit; dodges have their own dash-strike window.
  const next=d.plan?.[0];
- const canCancel=a.confirmed&&a.t>=startup+1/60+(next==='Step'?0:DEFENSE.comboDelay)&&(m.next===next||m.branches.includes(next)||['Chase','Step'].includes(next));
+ const canCancel=a.confirmed&&a.t>=startup+1/60+(next==='Step'?0:DEFENSE.comboDelay)&&(m.next===next||m.branches.includes(next)||['Chase','Step'].includes(next)||(m.skillCancel&&isSkillMove(next)));
  const dash=m.kind==='Dodge'&&a.t>=.1&&a.t<=.28&&next?.includes('DashAttack');
  if(canCancel||dash){
   d.plan.shift();
-  if(MOVES[next])beginEnemyMove(g,next,dash?0:DEFENSE.chainTell);else{d.attack=null;d.state='Neutral';if(!special(g,next))endTurn(g);else d.readyAt=g.time+.12;}
+  if(MOVES[next]){if(!beginEnemyMove(g,next,dash?0:DEFENSE.chainTell))endTurn(g);}else{d.attack=null;d.state='Neutral';if(!special(g,next))endTurn(g);else d.readyAt=g.time+.12;}
  }else if(a.t>=startup+m.active+m.recovery && (a.id!=='A_Plunge'||d.y===0)){
   d.attack=null;d.state='Neutral';
   if(!a.confirmed&&m.kind!=='Dodge'){endTurn(g);return;}
