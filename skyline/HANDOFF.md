@@ -196,3 +196,10 @@ Do not add progression, multiplayer, monetization, extra characters, a hosted se
 ## 10. Suggested first prompt for the next agent
 
 > Read HANDOFF.md and inspect the current source before changing anything. Preserve the single-file offline browser deliverable, four reachable phone buttons, immediate Dodge, imported two-character sprites and action checklist. Verify the latest anti-spam recovery roll and hold-to-Block behavior first. Follow the user's next requested scope; do not assume Skill can replace Block. Run relevant tests and regenerate Skyline-Play.html after source changes. Report actual verification and physical-phone gaps honestly.
+
+## 11. Changes after the 2026-11-17 snapshot (edited directly in `skyline/index.html`)
+
+The modular source is not in this repo, so these were made in the built file. Port them to `src/` if the source is restored.
+
+- **KO auto-restart:** when either fighter reaches 0 HP the round restarts 3 s later (simulation time, so Help-pause stops the timer). Same opponent profile; checklist progress is kept. The cue text shows a "Restarting in N" countdown. Reset button and opponent change still work as before. Implemented in the main loop (`KO_RESTART`, `koAt`).
+- **Slower rival combos:** in `DEFENSE`: `openingTell` .3→.4, `turnRecovery` .8→1.1, `hitstun` .32→.4, new `comboDelay` .18 (extra wait before a confirmed hit may cancel into the next move) and `chainTell` .05 (extra wind-up on chained moves). Headless 60 s sim: gap between consecutive rival combo hits went from about 0.10–0.14 s to about 0.33–0.39 s. Tune these four values for feel. Needs a phone playtest.

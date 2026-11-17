@@ -114,7 +114,7 @@ const ENEMY_PROFILES={
  armored:{name:'Armored swordfighter',hp:180,ai:true,armor:100,heavy:false},
  heavy:{name:'Heavy swordfighter',hp:260,ai:true,armor:100,heavy:true},
 };
-const DEFENSE={windup:.55,active:.14,recovery:.75,damage:8,speed:TUNE.speed,range:88,invulnerable:.16,perfect:.1,counter:.3,hitstun:.32,reaction:.18,openingTell:.3,turnRecovery:.8};
+const DEFENSE={windup:.55,active:.14,recovery:.75,damage:8,speed:TUNE.speed,range:88,invulnerable:.16,perfect:.1,counter:.3,hitstun:.4,reaction:.18,openingTell:.4,turnRecovery:1.1,comboDelay:.18,chainTell:.05};
 const ENEMY_ROUTES=[
  ['G_Light1','G_Light2','G_Light3','G_Light4'],
  ['G_Light1','G_Light2','G_Launcher','Chase','A_Light1','A_Light2','A_Light3'],
@@ -241,11 +241,11 @@ function updateEnemy(g,dt){
  if(!d.attack)return;
  // Directional branches require a real hit; dodges have their own dash-strike window.
  const next=d.plan?.[0];
- const canCancel=a.confirmed&&a.t>=startup+1/60&&(m.next===next||m.branches.includes(next)||['Chase','Step'].includes(next));
+ const canCancel=a.confirmed&&a.t>=startup+1/60+DEFENSE.comboDelay&&(m.next===next||m.branches.includes(next)||['Chase','Step'].includes(next));
  const dash=m.kind==='Dodge'&&a.t>=.1&&a.t<=.28&&next?.includes('DashAttack');
  if(canCancel||dash){
   d.plan.shift();
-  if(MOVES[next])beginEnemyMove(g,next);else{d.attack=null;d.state='Neutral';if(!special(g,next))endTurn(g);else d.readyAt=g.time+.12;}
+  if(MOVES[next])beginEnemyMove(g,next,dash?0:DEFENSE.chainTell);else{d.attack=null;d.state='Neutral';if(!special(g,next))endTurn(g);else d.readyAt=g.time+.12;}
  }else if(a.t>=startup+m.active+m.recovery && (a.id!=='A_Plunge'||d.y===0)){
   d.attack=null;d.state='Neutral';
   if(!a.confirmed&&m.kind!=='Dodge'){endTurn(g);return;}
@@ -752,17 +752,23 @@ document.querySelector('#fullscreen').onclick=async()=>{
   catch{showHelp(true);document.querySelector('#phone-help strong').textContent='Your browser uses its own full-screen controls';}
 };
 document.querySelector('#opponent').onchange=e=>{input.clear();game.reset(e.target.value);};
-let previous=performance.now(),accumulator=0;
+let previous=performance.now(),accumulator=0,koAt=null;const KO_RESTART=3;
 document.addEventListener('visibilitychange',()=>{previous=performance.now();accumulator=0;});
 function frame(now){
   const dt=Math.min((now-previous)/1000,.05);previous=now;
   if(!document.hidden && help.hidden){accumulator+=dt;while(accumulator>=1/120){game.tick(1/120);accumulator-=1/120;}}
   if(!help.hidden)accumulator=0;
+  // Auto-restart 3 s (sim time) after either fighter is KO'd; keep checklist progress.
+  if(game.player.hp<=0||game.dummy.hp<=0){
+    if(koAt===null)koAt=game.time;
+    else if(game.time-koAt>=KO_RESTART){const keep=game.performed,last=game.lastPerformed;input.clear();game.reset();game.performed=keep;game.lastPerformed=last&&{...last,time:-10};koAt=null;}
+  }else koAt=null;
+  const koLeft=koAt===null?0:Math.max(1,Math.ceil(KO_RESTART-(game.time-koAt)));
   updateChecklist();
   fitCanvas();
   render(ctx,game,boxes.checked,{width:canvas.clientWidth,height:canvas.clientHeight});
   document.querySelector('#combo').innerHTML=game.combo?`${game.combo.toString().padStart(2,'0')}<small>HIT COMBO</small>`:'';
-  document.querySelector('#cue').textContent=game.player.hp<=0?'DEFEATED · Reset for another round':game.dummy.hp<=0?'VICTORY · Reset for another round':game.time<(game.player.guardBrokenUntil||0)?'GUARD BROKEN · recover':game.player.guarding?'BLOCKING · protects your front':game.time<game.counterUntil?'PERFECT DODGE · ATTACK TO COUNTER':game.juggle.forced?'JUGGLE LIMIT · target must recover':game.attackHeld!==null && game.time-game.attackHeld>=0.32?'CHARGED CLEAVE READY · release Attack':game.canStep()?'JUMP: ENEMY STEP · once per launch':game.notice;
+  document.querySelector('#cue').textContent=game.player.hp<=0?'DEFEATED · Restarting in '+koLeft:game.dummy.hp<=0?'VICTORY · Restarting in '+koLeft:game.time<(game.player.guardBrokenUntil||0)?'GUARD BROKEN · recover':game.player.guarding?'BLOCKING · protects your front':game.time<game.counterUntil?'PERFECT DODGE · ATTACK TO COUNTER':game.juggle.forced?'JUGGLE LIMIT · target must recover':game.attackHeld!==null && game.time-game.attackHeld>=0.32?'CHARGED CLEAVE READY · release Attack':game.canStep()?'JUMP: ENEMY STEP · once per launch':game.notice;
   document.querySelector('#guard-health').textContent=game.time<(game.player.guardBrokenUntil||0)?'BROKEN':Math.ceil(game.player.guard??100);
   document.querySelector('#guard-meter').value=game.player.guard??100;
   document.querySelector('#player-health').textContent=`${game.player.hp}/100`;
