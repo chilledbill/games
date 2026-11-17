@@ -4,6 +4,7 @@ export const ACTION_LIST = [
   ['Jump','Jump','Jump on ground'],['DoubleJump','Double jump','Jump again in air'],
   ...Object.values(MOVES).map(m=>[m.id,m.name,
     m.id==='G_Launcher'?'↑ + Attack':m.id==='A_Relaunch'?'Air ↑ + Attack':m.id==='G_Sweep'?'↓ + Attack':m.id==='A_Plunge'?'Air ↓ + Attack':
+    m.id==='G_RisingPhoenix'?'Down + Block on ground':m.id==='A_RisingPhoenix'?'Down + Block in air':m.id==='F_PhoenixBreak'?'Hold Skill through a hit with full Focus':
     m.id==='G_Counter'?'Perfect dodge → Attack':m.id==='G_Charge'?'Hold, release Attack':m.kind==='Dodge'?(m.id==='G_Dodge'?'Dodge on ground':'Dodge in air'):
     m.id.includes('DashAttack')?'Dodge → Attack':'Tap Attack in sequence']),
   ['PerfectDodge','Perfect dodge','Dodge just as a strike overlaps'],

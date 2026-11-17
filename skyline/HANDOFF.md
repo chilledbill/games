@@ -211,3 +211,22 @@ The modular source is not in this repo, so these were made in the built file. Po
 - The rival's Enemy Step route skips the extra combo delay and its Step lift is 250 (was 310), otherwise the slower timing made its post-Step air hits miss. That route's hit gap is about 0.22 s; other combo gaps are about 0.33-0.39 s.
 - CSS bug fixed: the old packager regex stopped at the first `;` inside the Google Fonts URL and left `600;700;800&family=...` at the top of the built CSS, which made browsers drop the `:root` rule. The packager now strips the import fully and aborts if any font-import text or external URL remains in the build.
 - Not run here: the Playwright `.cjs` browser scripts (they need the Node Playwright module). A Python Playwright check of the built file confirmed no page errors, no network requests, the `:root` styles applied, and the 3-second KO restart. No phone testing.
+
+## 13. Milestone 4 implemented (2026-11-17)
+
+Implemented from `MILESTONE_4_IMPLEMENTATION.md` (brief now in `skyline/MILESTONE_4_IMPLEMENTATION.md`). 81 tests pass.
+
+**Decision to confirm with the user:** the brief said not to finalize the Skill mapping without approval. The user told the agent to build it, so the recommended proposal is wired in: **Down + Block press = Skill** (keyboard `I`, or `S` + `L`). The route is sampled once on the initial press (`routePress` in `input.js`) and kept for that physical press. A failed Skill press never falls back to Block/Dodge. If the user prefers a fifth button, change only `input.js`/`index.html`; game logic uses logical `Skill` press/release.
+
+**What exists:**
+- `src/skills.js`: Rising Phoenix data, per-actor shared cooldown (7 s), variant choice. `G_RisingPhoenix` 0.12/0.10/0.30 s, 18 dmg, launch; `A_RisingPhoenix` 16 dmg, relaunch; juggle cost 25; guard cost 30. Cooldown starts once when the skill begins (whiff still pays; rejected input does not). Cancels only from confirmed Light1-3 / air Light1-2 hits. Confirmed ground launch lifts the player and permits Jump chase.
+- `src/combat-events.js`, `src/resources.js`: one event pipeline for player and rival. Focus gains: hit 4, launch 8, relaunch 6, Perfect Dodge 12, Step 8, Skill 6, finisher 0. Repetition multipliers 1, .5, .25, 0. One reward per hit id; no reward for blocked, dodged, dead-target or duplicate hits. Rival has its own Focus.
+- Finisher `F_PhoenixBreak` (35 dmg, stagger 60, knockback, 0.45 s recovery, no cancels): checked once when the skill action crosses 0.24 s. Needs the same Skill press still held, Focus 100, a confirmed hit on a living in-range target. Then atomically spends 100 Focus and starts the finisher (`Game.checkFinisher`).
+- `src/style.js`: D/C/B/A/S/SS thresholds 0/50/120/220/350/500, variety +5, repetition reduction, -40 on real damage, decay 10/s after 2 s idle. Independent of Focus. Practice shows "PRACTICE STYLE".
+- `src/settings.js`: `skyline.settings.v1`, control size (0.8-1.15), opacity (0.4-1), reduced effects. Validated; storage failure falls back to defaults. No combat state is saved.
+- Rival: two new routes (indices 8 and 9) use Phoenix; skipped while on cooldown. Rival earns Focus/uses cooldown through the same code.
+- HUD row (Phoenix READY/cooldown, Focus bar, style rank, rank toast), checklist now 27 entries, Debug-only "TEST ONLY · Fill Focus" button.
+
+**Verified:** `npm test` 81/81; `npm run check`; built file has no external URLs. Python Playwright with real two-finger touch events (CDP): Block alone guards; Down held + Block casts Phoenix (cooldown 6.8 s shown, checklist ticks); a press on cooldown is rejected with no guard/dodge; with Debug-filled Focus the held press triggers Phoenix Break and checks off; settings persist across reload and reset; no page errors or network requests; HUD checked at 844x390, 390x844, 320x568.
+
+**Not done / deferred:** rival finisher (rival has Focus but no held-finisher); embedded Spell/Spell2 sheets (skills reuse existing attack sheets plus canvas arcs, so no new sprite embedding); control move/resize editing mode; extra skills. No physical-phone playtest, no performance profile, and the Node Playwright `.cjs` scripts were not run. Balance values are first-pass proposals from the brief.

@@ -10,7 +10,7 @@ export const SPRITE_SHEETS = {
 const moveSheets={G_Light1:'Attack1',G_Light2:'Attack2',G_Light3:'Attack3',G_Light4:'Attack3',
   G_Counter:'Attack3',G_Launcher:'Attack1',G_Sweep:'CrouchAttack',G_Charge:'Attack3',G_DashAttack:'Attack2',
   A_Light1:'JumpAttack1',A_Light2:'JumpAttack2',A_Light3:'JumpAttack1',
-  A_Relaunch:'JumpAttack1',A_Plunge:'JumpAttack2',A_DashAttack:'JumpAttack2',G_Dodge:'Slide',A_Dodge:'Slide'};
+  A_Relaunch:'JumpAttack1',G_RisingPhoenix:'Attack3',A_RisingPhoenix:'JumpAttack2',F_PhoenixBreak:'Attack3',A_Plunge:'JumpAttack2',A_DashAttack:'JumpAttack2',G_Dodge:'Slide',A_Dodge:'Slide'};
 const images=new Map();
 export function loadSprites(){
   return Promise.all(['WarriorMan','WarriorWoman'].flatMap(character=>Object.keys(SPRITE_SHEETS).map(name=>new Promise(resolve=>{
