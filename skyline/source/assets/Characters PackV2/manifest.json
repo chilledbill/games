@@ -1,0 +1,492 @@
+{
+  "source": "Characters PackV2.rar",
+  "frameLayout": "horizontal",
+  "assets": [
+    {
+      "path": "WarriorMan/WarriorManAttack1.png",
+      "width": 448,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 7,
+      "sha256": "48f6e97d83240d95c5405383699a8a3c07a3b918e881910c826177c46a034673"
+    },
+    {
+      "path": "WarriorMan/WarriorManAttack2.png",
+      "width": 320,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 5,
+      "sha256": "f9528531c3fb19593e69ca0800bed98074accee3245c32f3b02fa0f879d87621"
+    },
+    {
+      "path": "WarriorMan/WarriorManAttack3.png",
+      "width": 512,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 8,
+      "sha256": "a8c195690348ebe340a343a5a983672d81909170cf4eef2dbd8197aab1f999ee"
+    },
+    {
+      "path": "WarriorMan/WarriorManAttackCombo.png",
+      "width": 1280,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 20,
+      "sha256": "c4b4090ef72a64121d95b06c3dde3ebde47694ff6443e4ae13eda68d5b4be40c"
+    },
+    {
+      "path": "WarriorMan/WarriorManBlock.png",
+      "width": 384,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 6,
+      "sha256": "1e16fe2e35ca8b250bb67464ff6a213ba4b0c13cbf25f60b9bb73140f4347556"
+    },
+    {
+      "path": "WarriorMan/WarriorManCrouch.png",
+      "width": 320,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 5,
+      "sha256": "cfbcf2063276a599fab171e1341ebc62f79eb4e51966fd39926e1ebba7015da8"
+    },
+    {
+      "path": "WarriorMan/WarriorManCrouchAttack.png",
+      "width": 640,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 10,
+      "sha256": "8a5944ecbdbe5552c7b420e8abdac51857c59494fe97a368a509675025872d12"
+    },
+    {
+      "path": "WarriorMan/WarriorManDeath.png",
+      "width": 448,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 7,
+      "sha256": "5bbf9eac2be92fff7519fd2e94b5d8812c4f53f7edc96a2f3c0db7a08bbf5bc3"
+    },
+    {
+      "path": "WarriorMan/WarriorManGettingUp.png",
+      "width": 448,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 7,
+      "sha256": "b132589ab232e1cf94ff8744270312d76f822381d8589e9aed05f20fefe9cf07"
+    },
+    {
+      "path": "WarriorMan/WarriorManHPRecovery.png",
+      "width": 640,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 10,
+      "sha256": "65df49774ae6db0e896b500e86d43dc45539d636e4866802db52cbe3901ec075"
+    },
+    {
+      "path": "WarriorMan/WarriorManHit.png",
+      "width": 128,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 2,
+      "sha256": "a84652aeb18b87151e0c228d86af34c9e3419365410d7ad20311935d060cf77f"
+    },
+    {
+      "path": "WarriorMan/WarriorManIdle.png",
+      "width": 512,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 8,
+      "sha256": "cc06cccce0cbeb6c571fcf58588a4d7292497ee5d6dfb395f9fd71a0813740ee"
+    },
+    {
+      "path": "WarriorMan/WarriorManIdle2.png",
+      "width": 512,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 8,
+      "sha256": "2932c8240a18e3b76cbc7b0c1d0ffefda82087cbd2def8e6bcc2cb14070f75b9"
+    },
+    {
+      "path": "WarriorMan/WarriorManIdleBlock.png",
+      "width": 768,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 12,
+      "sha256": "8cb7bd4cf278e5ed505dc793b131c17103e524d8aa955252c4112d316933335b"
+    },
+    {
+      "path": "WarriorMan/WarriorManJump.png",
+      "width": 704,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 11,
+      "sha256": "a0453fa16fc136b3b69d1e962191a69a75ccda1c86bf114286f0610e16a3e0b5"
+    },
+    {
+      "path": "WarriorMan/WarriorManJumpAttack.png",
+      "width": 704,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 11,
+      "sha256": "796bb61e59e5691be314817a2fd42b4397324b5525f4a2e9e7ee1e71e760c975"
+    },
+    {
+      "path": "WarriorMan/WarriorManJumpAttack1.png",
+      "width": 384,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 6,
+      "sha256": "33e3e95200cba82d70a48dcdd049f75c583d8520bf81b4e94db6097096002c9d"
+    },
+    {
+      "path": "WarriorMan/WarriorManJumpAttack2.png",
+      "width": 320,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 5,
+      "sha256": "ff40e0ee2c18742aca75ef5b31bb198887e585e91687bf0eaae9e537a1879368"
+    },
+    {
+      "path": "WarriorMan/WarriorManLadderClimb.png",
+      "width": 512,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 8,
+      "sha256": "c062c8c564b233fd0f61b2a2d5b8aaae760063dd4c77bf79fac15eaba1286139"
+    },
+    {
+      "path": "WarriorMan/WarriorManMPRecovery.png",
+      "width": 640,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 10,
+      "sha256": "bfbc546b423b807ad6c82a49f12910ba8c333172b21952682af30e6eed034c7d"
+    },
+    {
+      "path": "WarriorMan/WarriorManRun.png",
+      "width": 512,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 8,
+      "sha256": "d32c6c39de3738d1580523616258be2fbcb73cfe490cf1c4f78d0f7f25a5f7a2"
+    },
+    {
+      "path": "WarriorMan/WarriorManSlide.png",
+      "width": 640,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 10,
+      "sha256": "d2f0d00b8b3e05c88f51317a27012ede86b355807043ce4a490381646d25258d"
+    },
+    {
+      "path": "WarriorMan/WarriorManSpell.png",
+      "width": 1024,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 16,
+      "sha256": "23d0e50fb066d379e4959b8180b441ddf8b18872f85d45a8c041b8519a598195"
+    },
+    {
+      "path": "WarriorMan/WarriorManSpell2.png",
+      "width": 832,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 13,
+      "sha256": "71f1269359483e689085dfb4248ca28dc509fc6e6862897116fe291304454993"
+    },
+    {
+      "path": "WarriorMan/WarriorManWalk.png",
+      "width": 512,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 8,
+      "sha256": "1aed2f97b9f2332d7127362c96abfcc5b7c2a2a337d77e7b71fc05ce2264cb0b"
+    },
+    {
+      "path": "WarriorMan/WarriorManWallClimb.png",
+      "width": 448,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 7,
+      "sha256": "111eef8f83064df539631f891497257f131a4ddd2d6220f681879fa0faa708ec"
+    },
+    {
+      "path": "WarriorMan/WarriorManWallHang.png",
+      "width": 512,
+      "height": 64,
+      "frameWidth": 64,
+      "frameHeight": 64,
+      "frames": 8,
+      "sha256": "bd5a93055220ddf8c9756762541d36cd6d26ef270c2a9dccd7705c96493e1a06"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanAttack1.png",
+      "width": 560,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 7,
+      "sha256": "5f814722326b871352388a74a3d8e87627c1bcffbbd34df65949eb2d3a43d99f"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanAttack2.png",
+      "width": 400,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 5,
+      "sha256": "cd1e684852e722d28d80a38155df2332cd8dd597511b6fb90aba6b6bc04d9c49"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanAttack3.png",
+      "width": 640,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 8,
+      "sha256": "729762a7466fa772207c4f073c68260dc493b1370a0a9538d22e736a829700e2"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanAttackCombo.png",
+      "width": 1600,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 20,
+      "sha256": "f24b2a2ed0835f69ddcc0a2e4882d149a3c8877f09d670128cca1d614e82cf2f"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanBlock.png",
+      "width": 480,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 6,
+      "sha256": "8a15960149756bc7d91b85a0669373ad6dd36ddb9c39b0fd4cdc239575d26de3"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanCrouch.png",
+      "width": 400,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 5,
+      "sha256": "a53993814d8bf0f5c5d9b4a7e843e9053be913b41b28145a6cb1483592e10da3"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanCrouchAttack.png",
+      "width": 800,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 10,
+      "sha256": "3adae8ba6e87b83121e574d68cd42634b73fbebfe3867a6db81c0c14fba331db"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanDeath.png",
+      "width": 560,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 7,
+      "sha256": "6fe153d18c9e0fd14ce6d937756a8517de09dab9206700c4ad6e5decd98c4ed8"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanGettingUp.png",
+      "width": 560,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 7,
+      "sha256": "bc90c13c755fe6079670146e47098fa72009df6af713d5075274e89adaf80d58"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanHPRecovery.png",
+      "width": 800,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 10,
+      "sha256": "e59663038a339393de490e4ef9ceba60db8318e49aac20e33e49b7a53c2d1083"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanHit.png",
+      "width": 160,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 2,
+      "sha256": "2eacb81b5a796ce0ea0a12dbb2a11259304990b2acfd2d70b4273c0c27ab07ba"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanIdle.png",
+      "width": 640,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 8,
+      "sha256": "1a32be73f1dab653b96b3e83e23baf6333fd66ee83fcb5048be1bbbb4924b71e"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanIdle2.png",
+      "width": 640,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 8,
+      "sha256": "4654152ab82740c697e8f00a7ef0f8c25f2cb6bc7f0049cad5aca5ff78e1a308"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanIdleBlock.png",
+      "width": 960,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 12,
+      "sha256": "63476fbf35cf818fc7133064fff3d579745ac8a4061bb3ad79bff2233dfc5aec"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanJump.png",
+      "width": 880,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 11,
+      "sha256": "44f9137dd9ee77fe39a81a5d0e5a80c10df868ff2622225e454cc6e3030c9afa"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanJumpAttack.png",
+      "width": 880,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 11,
+      "sha256": "0d89f8790b3c77b868b71181c064d0793651d1a8ea40acae7cf968b1eeb81345"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanJumpAttack1.png",
+      "width": 480,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 6,
+      "sha256": "77114904b13b637f2e1a6e47622e6ab0091a96772ab68272d90996b1517ad95b"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanJumpAttack2.png",
+      "width": 400,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 5,
+      "sha256": "29d6d2813096dc6199333303fb8d1a8481d0f4db596f0321a80dfefc16e66a46"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanLadderClimb.png",
+      "width": 640,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 8,
+      "sha256": "896dab68f1a83947b48b74b5f80336e67b7feca79a0807f09b119ab7323775ab"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanMPRecovery.png",
+      "width": 800,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 10,
+      "sha256": "67280a38ad72d7b54542ec9f851618ada4d47cfe2bd828633aa3a01d22057991"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanRun.png",
+      "width": 640,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 8,
+      "sha256": "2095241e54ad470e408707d1bda213e71b6196f5da41c320ef6e3ac98c3d66d0"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanSlide.png",
+      "width": 800,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 10,
+      "sha256": "0229fb0b388a25c134868a14c85d70e5206d552dfeb48ccbd9fef037116b7c79"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanSpell.png",
+      "width": 1280,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 16,
+      "sha256": "6e6384ed279a51e8689ec698991c2c048b7268e698747a5d60e44ae041fe3fc1"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanSpell2.png",
+      "width": 1040,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 13,
+      "sha256": "a9632bff0bb2a67c246ab1c2785cd2e8a3d70c2265a808b047c858c77a0e8c19"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanWalk.png",
+      "width": 640,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 8,
+      "sha256": "fa6141d80e0e90c410f68b344c0ddd980a73946d246f19e7d534c27365bca021"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanWallClimb.png",
+      "width": 560,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 7,
+      "sha256": "c9fc39f70bdc2fc8c5f215482dc61c1881a8eb5cd200f286a5d4c05f8a2b7a0b"
+    },
+    {
+      "path": "WarriorWoman/WarriorWomanWallHang.png",
+      "width": 640,
+      "height": 64,
+      "frameWidth": 80,
+      "frameHeight": 64,
+      "frames": 8,
+      "sha256": "61fb6ff3c817d10f2cdb01309bbb2f8d891dc9f31fcf820cedd5a012539be59d"
+    }
+  ]
+}

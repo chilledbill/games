@@ -1,0 +1,35 @@
+// World coordinates: +X right, +Y up. H = 48 world units. Timings in seconds.
+const move = (id, name, frames, damage, reaction, next = null, branches = []) => ({
+  id, name, startup: frames[0] / 60, active: frames[1] / 60, recovery: frames[2] / 60,
+  damage, reaction, next, branches, cancelStart: (frames[0] + 1) / 60,
+  cancelEnd: (frames[0] + frames[1] + frames[2]) / 60,
+  hitbox: { width: 76, height: reaction === 'Launch' ? 88 : 56, x: 46, y: 26 },
+});
+export const MOVES = Object.fromEntries([
+  move('G_Light1', 'Quick slash', [5,3,12], 8, 'Stun', 'G_Light2', ['G_Launcher','G_Sweep']),
+  move('G_Light2', 'Reverse slash', [6,3,13], 9, 'Stun', 'G_Light3', ['G_Launcher','G_Sweep']),
+  move('G_Light3', 'Rising cut', [7,4,15], 11, 'Pop', 'G_Light4'),
+  move('G_Light4', 'Heavy finisher', [9,4,22], 18, 'Knockdown'),
+  move('G_Launcher', 'Sky launcher', [9,3,18], 10, 'Launch'),
+  move('A_Light1', 'Air slash I', [5,3,11], 7, 'Suspend', 'A_Light2', ['A_Relaunch','A_Plunge']),
+  move('A_Light2', 'Air slash II', [5,3,11], 8, 'Suspend', 'A_Light3', ['A_Relaunch','A_Plunge']),
+  move('A_Light3', 'Air slash III', [7,4,16], 10, 'AirFinish'),
+  move('G_Counter','Dodge counter',[3,4,16],24,'Stun'),
+  move('G_Sweep','Leg sweep',[8,4,17],12,'Knockdown'),
+  move('G_Charge','Charged cleave',[9,4,24],24,'Knockback'),
+  move('G_DashAttack','Dash strike',[5,4,15],12,'Stun'),
+  move('A_DashAttack','Air dash strike',[5,4,15],10,'Suspend'),
+  move('A_Relaunch','Aerial launcher',[8,3,16],10,'Relaunch'),
+  move('A_Plunge','Meteor dive',[10,3,12],20,'Spike'),
+  {...move('G_Dodge','Ground dodge',[0,0,18],0,'None'),kind:'Dodge'},
+  {...move('A_Dodge','Air dash',[0,0,18],0,'None'),kind:'Dodge'},
+].map(m => [m.id, {...m,
+  hitbox: m.id==='G_Sweep'?{width:80,height:28,x:44,y:12}:m.id==='A_Plunge'?{width:96,height:86,x:20,y:0}:m.hitbox,
+  staggerDamage:m.id==='G_Counter'?60:m.id==='G_Charge'?50:m.id==='G_Launcher'?25:12,
+  juggleCost: ['Launch','Relaunch'].includes(m.reaction)?18:m.reaction==='Spike'?15:8,
+  dodgeCancel:['G_Light1','G_Light2','G_Light3','A_Light1','A_Light2'].includes(m.id),
+  chargeCancel:['G_Light1','G_Light2'].includes(m.id),
+}]));
+export const TUNE = { h:48, speed:216, gravity:1056, jump:384, launcher:336,
+  airGravityScale:0.4, buffer:0.15, coyote:0.1, comboWindow:0.45, chaseWindow:0.55, chaseRange:260,
+  chaseDuration:0.25, chaseSpeed:650, worldWidth:960, worldHeight:540 };

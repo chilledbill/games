@@ -10,9 +10,15 @@ dodge/perfect-dodge counters and hold-to-Block.
   move with `A`/`D`, `W` = launch modifier). Full details in `HANDOFF.md`.
 - **Handoff notes:** `HANDOFF.md` describes the design, mechanics, tuning and history.
 
-## Source status
+## Source
 
-`index.html` is the generated release build. The original modular source
-(`src/*.js`, `style.css`, `tools/package-offline.py`, `tests/`, `assets/Characters PackV2/`)
-described in `HANDOFF.md` lives in the Codex workspace and is **not yet in this repo**.
-Until it is added, edit `index.html` directly; its script is the concatenated modules.
+The modular source lives in `source/` (ES modules, tests, packager, original sprite sheets).
+
+```sh
+cd source
+npm test            # 54 tests
+npm run check       # syntax-check every module
+npm run build       # regenerates ../index.html (the single file GitHub Pages serves)
+```
+
+Edit `source/`, then run `npm run build` and commit both. Do not hand-edit `index.html`.
