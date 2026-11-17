@@ -1,0 +1,16 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {MOVES} from '../src/moves.js';
+import {Game} from '../src/game.js';
+import {DEFENSE,updateEnemy} from '../src/enemy.js';
+const step=(g,s)=>{for(let t=0;t<s;t+=1/120)g.tick(1/120);};
+function incoming(g,t=MOVES.G_Light1.startup){g.dummy.state='Attacking';g.dummy.attack={id:'G_Light1',t,spent:false,confirmed:false,tell:0};g.dummy.facing=-1;}
+function landed(g,id='G_Launcher'){g.start(id);g.action.t=.16;g.hit();g.hitstop=0;}
+test('AI telegraphs then damages once per swing; hitstun blocks inputs',()=>{const g=new Game();g.reset('light');step(g,.2);assert.equal(g.dummy.state,'Attacking');assert.equal(g.player.hp,100);step(g,.4);assert.equal(g.player.hp,92);g.press('Attack');assert.equal(g.action,null);step(g,.01);assert.equal(g.player.hp,92);});
+test('early overlapping dodge grants perfect counter, no overlap grants none',()=>{const g=new Game();g.reset('light');g.press('Dodge');incoming(g);updateEnemy(g,.001);assert.equal(g.player.hp,100);assert.ok(g.counterUntil>g.time);assert.ok(g.performed.has('PerfectDodge'));g.press('Attack');assert.equal(g.action.id,'G_Counter');assert.equal(g.counterUntil,0);const miss=new Game();miss.reset('light');miss.dummy.x=800;miss.press('Dodge');incoming(miss);updateEnemy(miss,.001);assert.equal(miss.counterUntil,0);});
+test('late invulnerability dodges without reward; expired dodge takes damage',()=>{for(const [time,hp] of [[.13,100],[.2,92]]){const g=new Game();g.reset('light');g.press('Dodge');g.action.t=time;incoming(g);updateEnemy(g,.001);assert.equal(g.player.hp,hp);assert.equal(g.counterUntil,0);}});
+test('counter expires; attacks outside the window remain ordinary',()=>{const g=new Game();g.reset('light');g.counterUntil=.3;g.time=.4;g.press('Attack');assert.equal(g.action.id,'G_Light1');});
+test('armor resists launch until actual break; heavy resists even after break',()=>{for(const profile of ['armored','heavy']){const g=new Game();g.reset(profile);landed(g);assert.equal(g.dummy.y,0);assert.equal(g.launch,null);assert.equal(g.dummy.stagger,25);g.dummy.stagger=90;landed(g);assert.equal(g.dummy.armor,0);assert.ok(g.dummy.brokenUntil>g.time);assert.equal(!!g.launch,profile==='armored');}});
+test('enemy defeat invalidates chase and does not regenerate health',()=>{const g=new Game();g.reset('light');g.dummy.hp=5;landed(g);assert.equal(g.dummy.state,'Dead');assert.equal(g.launch,null);step(g,3);assert.equal(g.dummy.hp,0);assert.equal(g.player.hp,100);});
+test('player defeat locks actions and resets on new round',()=>{const g=new Game();g.reset('light');g.player.hp=5;incoming(g);updateEnemy(g,.001);assert.equal(g.player.hp,0);g.press('Attack');g.press('Jump');assert.equal(g.action,null);assert.equal(g.player.vy,0);g.reset();assert.equal(g.player.hp,100);assert.equal(g.profile,'light');});
+test('long combo damage/hitstun scale and invulnerable targets give no hit confirm',()=>{const g=new Game();g.reset('light');g.combo=20;let hp=g.dummy.hp;landed(g,'G_Light1');assert.equal(hp-g.dummy.hp,3);assert.ok(g.dummy.stun<.65);g.dummy.state='Invulnerable';let hits=g.hits;g.start('G_Light1');g.hit();assert.equal(g.hits,hits);assert.equal(g.action.confirmed,false);});

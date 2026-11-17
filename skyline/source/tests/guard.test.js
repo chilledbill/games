@@ -1,0 +1,16 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {Game} from '../src/game.js';
+import {MOVES} from '../src/moves.js';
+import {beginEnemyMove,updateEnemy,tryEnemyEscape} from '../src/enemy.js';
+import {guardImpact,tickGuard} from '../src/guard.js';
+const step=(g,s)=>{for(let i=0;i<s*120;i++)g.tick(1/120);};
+const incoming=g=>{beginEnemyMove(g,'G_Light1');g.dummy.attack.t=MOVES.G_Light1.startup;updateEnemy(g,.001);};
+test('holding Block guards real front hit, no HP loss or enemy combo confirm',()=>{const g=new Game();g.reset('light');g.press('Guard');g.tick(1/120);incoming(g);assert.equal(g.player.hp,100);assert.equal(g.player.guard,82);assert.equal(g.dummy.attack.confirmed,false);assert.ok(g.performed.has('BlockHit'));g.release('Guard');assert.equal(g.player.guarding,false);});
+test('guard does not protect the back or midair; release allows regeneration',()=>{const p={x:0,y:0,facing:1,guarding:true,guard:100};assert.equal(guardImpact(p,{x:-10},MOVES.G_Light1,1),null);p.y=50;assert.equal(guardImpact(p,{x:10},MOVES.G_Light1,1),null);p.y=38;p.x=100;p.guard=50;p.guarding=false;tickGuard(p,3,1);assert.equal(p.guard,74);});
+test('guard breaks, locks briefly and charge drains more than light',()=>{const p={x:360,y:0,facing:1,guarding:true,guard:40};assert.equal(guardImpact(p,{x:435},MOVES.G_Charge,1),'break');assert.equal(p.guard,0);assert.equal(p.guarding,false);assert.ok(p.guardBrokenUntil>1);});
+test('enemy block does not grant on-hit cancels',()=>{const g=new Game();g.reset('light');g.dummy.guarding=true;g.dummy.guard=100;g.start('G_Light1');g.hit();assert.equal(g.dummy.hp,100);assert.equal(g.action.confirmed,false);g.press('Attack',{x:0,y:1});assert.equal(g.action.id,'G_Light1');});
+test('ground stun pressure cannot indefinitely lock enemy; recovery roll moves away',()=>{const g=new Game();g.reset('light');g.player.hp=10000;for(let i=0;i<600;i++){if(i%8===0)g.press('Attack');g.tick(1/120);}assert.ok(g.events.some(e=>e.type==='enemyEscape'));});
+test('recovery roll wins over a same-tick attack, respects cooldown and no midair escape',()=>{const g=new Game();g.reset('light');g.dummy.escapePending=true;assert.ok(tryEnemyEscape(g));assert.equal(g.dummy.attack.id,'G_Dodge');assert.equal(g.dummy.rollDirection,1);g.start('G_Light1');g.hit();assert.equal(g.dummy.hp,100);g.dummy.state='Neutral';g.dummy.y=40;g.dummy.escapePending=true;assert.equal(tryEnemyEscape(g),false);});
+test('guard cannot bypass heavy attack commitment or guard break lock; Dodge remains immediate',()=>{const g=new Game();g.start('G_Charge');g.press('Guard');step(g,.02);assert.equal(g.player.guarding,false);g.release('Guard');g.reset();g.press('Dodge');assert.equal(g.action.id,'G_Dodge');g.release('Dodge');assert.equal(g.action.id,'G_Dodge');});
+test('pressure escape remains a retreating roll rather than instantly cancelling into a counter',()=>{const g=new Game();g.reset('light');g.dummy.escapePending=true;tryEnemyEscape(g);g.start('G_Light1');g.hit();updateEnemy(g,1/120);assert.equal(g.dummy.attack.id,'G_Dodge');assert.equal(g.dummy.counterUntil,0);const before=g.dummy.x;g.action=null;step(g,.09);assert.ok(g.dummy.x>before);});

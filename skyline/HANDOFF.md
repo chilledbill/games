@@ -196,3 +196,18 @@ Do not add progression, multiplayer, monetization, extra characters, a hosted se
 ## 10. Suggested first prompt for the next agent
 
 > Read HANDOFF.md and inspect the current source before changing anything. Preserve the single-file offline browser deliverable, four reachable phone buttons, immediate Dodge, imported two-character sprites and action checklist. Verify the latest anti-spam recovery roll and hold-to-Block behavior first. Follow the user's next requested scope; do not assume Skill can replace Block. Run relevant tests and regenerate Skyline-Play.html after source changes. Report actual verification and physical-phone gaps honestly.
+
+## 11. Changes after the 2026-11-17 snapshot (edited directly in `skyline/index.html`)
+
+The modular source is not in this repo, so these were made in the built file. Port them to `src/` if the source is restored.
+
+- **KO auto-restart:** when either fighter reaches 0 HP the round restarts 3 s later (simulation time, so Help-pause stops the timer). Same opponent profile; checklist progress is kept. The cue text shows a "Restarting in N" countdown. Reset button and opponent change still work as before. Implemented in the main loop (`KO_RESTART`, `koAt`).
+- **Slower rival combos:** in `DEFENSE`: `openingTell` .3→.4, `turnRecovery` .8→1.1, `hitstun` .32→.4, new `comboDelay` .18 (extra wait before a confirmed hit may cancel into the next move) and `chainTell` .05 (extra wind-up on chained moves). Headless 60 s sim: gap between consecutive rival combo hits went from about 0.10–0.14 s to about 0.33–0.39 s. Tune these four values for feel. Needs a phone playtest.
+
+## 12. Source now in the repo (2026-11-17)
+
+- Source is in `skyline/source/`. The packager's default output is now `skyline/index.html` (not `Skyline-Play.html`); run `npm run build` in `source/`. References to `Skyline-Play.html` earlier in this document mean that built file. `npm test` no longer passes `--test-isolation=none` (older Node rejects it).
+- Section 11's KO restart and slower rival pacing are now in `src/` (`Game.checkKoRestart`, `DEFENSE.comboDelay/chainTell`, etc.), with new tests in `tests/ko-pacing.test.js`. Four older tests (`enemy.test.js`, `rival.test.js`) were retimed for the slower rival; their assertions are otherwise unchanged. Baseline is now 54 passing tests.
+- The rival's Enemy Step route skips the extra combo delay and its Step lift is 250 (was 310), otherwise the slower timing made its post-Step air hits miss. That route's hit gap is about 0.22 s; other combo gaps are about 0.33-0.39 s.
+- CSS bug fixed: the old packager regex stopped at the first `;` inside the Google Fonts URL and left `600;700;800&family=...` at the top of the built CSS, which made browsers drop the `:root` rule. The packager now strips the import fully and aborts if any font-import text or external URL remains in the build.
+- Not run here: the Playwright `.cjs` browser scripts (they need the Node Playwright module). A Python Playwright check of the built file confirmed no page errors, no network requests, the `:root` styles applied, and the 3-second KO restart. No phone testing.
