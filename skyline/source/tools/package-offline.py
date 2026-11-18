@@ -15,7 +15,7 @@ for junk in ('@import', 'family=', 'display=swap', 'fonts.googleapis'):
 sprite_names = ['Block','Hit','Death','Idle','Run','Jump','Attack1','Attack2','Attack3','JumpAttack1','JumpAttack2','CrouchAttack','Slide']
 sprite_data = {character+name: 'data:image/png;base64,' + base64.b64encode((root / f'assets/Characters PackV2/{character}/{character}{name}.png').read_bytes()).decode() for character in ['WarriorMan','WarriorWoman'] for name in sprite_names}
 parts = ['globalThis.SKYLINE_SPRITE_DATA = ' + json.dumps(sprite_data) + ';']
-for name in ['moves', 'skills', 'resources', 'style', 'combat-events', 'juggle', 'guard', 'enemy', 'buffer', 'game', 'input', 'sprites', 'render', 'settings', 'checklist', 'main']:
+for name in ['moves', 'skills', 'resources', 'style', 'combat-events', 'juggle', 'guard', 'enemy', 'buffer', 'game', 'input', 'sprites', 'camera', 'render', 'settings', 'checklist', 'main']:
     source = (root / f'src/{name}.js').read_text()
     source = re.sub(r'^import .*?;\n', '', source, flags=re.M)
     source = re.sub(r'\bexport ', '', source)

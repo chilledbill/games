@@ -1,13 +1,15 @@
 import {DEFENSE,enemyBox,ENEMY_PROFILES,enemyPhase} from './enemy.js';
 import {drawPlayerSprite,drawEnemySprite} from './sprites.js';
 import {MOVES} from './moves.js';
+import {cameraTarget,stepCamera} from './camera.js';
 export function render(ctx,g,boxes=false,viewport={width:960,height:540},opts={}) {
   const reduced=!!opts.reduced;
   ctx.save();
   // Fill the phone view without stretching; follow combatants within world bounds.
   const scale=Math.max(viewport.width/960,viewport.height/540);
   const half=viewport.width/(2*scale);
-  const focus=Math.abs(g.player.x-g.dummy.x)<220?(g.player.x+g.dummy.x)/2:g.player.x;
+  const now=performance.now(),cam=g.cameraState||(g.cameraState={});
+  const focus=stepCamera(cam,cameraTarget(g.player.x,g.dummy.x),g.time,cam.at===undefined?0:(now-cam.at)/1000);cam.at=now;
   const camera=Math.max(half,Math.min(960-half,focus));
   ctx.translate(viewport.width/2,viewport.height/2);
   ctx.scale(scale,scale);ctx.translate(-camera,-270);
