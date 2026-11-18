@@ -8,7 +8,7 @@ import {skillCooldownLeft} from './skills.js';
 import {STYLE} from './style.js';
 import {FOCUS} from './resources.js';
 import {loadSettings,saveSettings,resetSettings,sanitizeSettings} from './settings.js';
-const game=new Game();game.reset('light');const input=bindInput(game),canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d');
+const game=new Game();game.spreadStart=true;game.reset('light');const input=bindInput(game),canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d');
 loadSprites();
 const updateChecklist=bindChecklist(game);
 function fitCanvas(){

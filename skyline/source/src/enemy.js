@@ -122,6 +122,7 @@ export function updateEnemy(g,dt){
    if(d.x>=196&&next<196&&d.y<38){if(d.vy<=0)d.vy=TUNE.jump;}else d.x=next;
    return;
   }
+  if(g.time<(d.attackAfter||0))return; // opening grace: walk in and guard, but do not start an attack yet
   if(d.counterUntil>g.time && d.y===0){d.counterUntil=0;beginEnemyMove(g,'G_Counter');return;}
   if(g.action){
    if(g.time-d.seenAt>=DEFENSE.reaction && d.seenAction!==d.evadedAction){

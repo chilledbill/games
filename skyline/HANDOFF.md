@@ -230,3 +230,7 @@ Implemented from `MILESTONE_4_IMPLEMENTATION.md` (brief now in `skyline/MILESTON
 **Verified:** `npm test` 81/81; `npm run check`; built file has no external URLs. Python Playwright with real two-finger touch events (CDP): Block alone guards; Down held + Block casts Phoenix (cooldown 6.8 s shown, checklist ticks); a press on cooldown is rejected with no guard/dodge; with Debug-filled Focus the held press triggers Phoenix Break and checks off; settings persist across reload and reset; no page errors or network requests; HUD checked at 844x390, 390x844, 320x568.
 
 **Not done / deferred:** rival finisher (rival has Focus but no held-finisher); embedded Spell/Spell2 sheets (skills reuse existing attack sheets plus canvas arcs, so no new sprite embedding); control move/resize editing mode; extra skills. No physical-phone playtest, no performance profile, and the Node Playwright `.cjs` scripts were not run. Balance values are first-pass proposals from the brief.
+
+## 14. Match start (2026-11-18)
+
+New rounds (first load, Reset, opponent change, KO auto-restart) start with the fighters 200 units apart (player 340, rival 540; was 360/435) and the rival cannot begin an attack for `START_GRACE` = 1.5 s (`dummy.attackAfter`, checked in `enemy.js` after the approach/guard logic, so it still walks in and can guard). Only browser play enables this (`game.spreadStart=true` in `main.js`); `new Game()` in tests keeps the old close start. 200 units keeps both fighters on screen in portrait. Also in this pass: camera follow is continuous (`src/camera.js`).
