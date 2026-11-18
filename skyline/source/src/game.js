@@ -8,6 +8,9 @@ import { Resources } from './resources.js';
 import { Style } from './style.js';
 import { emitCombat } from './combat-events.js';
 const KO_RESTART_SECONDS = 3;
+// Match start (browser play sets game.spreadStart): fighters start farther apart and the rival may not
+// begin an attack until START_GRACE seconds have passed, so a new round is never a free combo.
+const START_GRACE = 1.5;
 export const overlaps = (a,b) => a.x < b.x+b.w && a.x+a.w > b.x && a.y < b.y+b.h && a.y+a.h > b.y;
 export class Game {
   constructor() { this.reset(); }
@@ -16,8 +19,8 @@ export class Game {
     const opponent=ENEMY_PROFILES[this.profile];this.counterUntil=0;
     this.performed=new Set();this.lastPerformed=null;
     this.time=0; this.buffer=new InputBuffer(); this.direction={x:0,y:0};
-    this.player={x:360,y:0,vx:0,vy:0,facing:1,grounded:true,lastGround:0,double:true,airDash:true,hp:100,hurtUntil:0,invulnerableUntil:0};
-    this.dummy={id:1,x:435,y:0,vx:0,vy:0,state:'Neutral',hp:opponent.hp,maxHp:opponent.hp,stun:0,armor:opponent.armor,stagger:0,brokenUntil:0,facing:-1,attack:null,airDash:true,double:true,plan:[],readyAt:0,routeIndex:0,combo:0};
+    this.player={x:this.spreadStart?340:360,y:0,vx:0,vy:0,facing:1,grounded:true,lastGround:0,double:true,airDash:true,hp:100,hurtUntil:0,invulnerableUntil:0};
+    this.dummy={id:1,x:this.spreadStart?540:435,y:0,vx:0,vy:0,state:'Neutral',hp:opponent.hp,maxHp:opponent.hp,stun:0,armor:opponent.armor,stagger:0,brokenUntil:0,facing:-1,attack:null,airDash:true,double:true,plan:[],readyAt:0,attackAfter:this.spreadStart&&this.profile!=='practice'?START_GRACE:0,routeIndex:0,combo:0};
     this.victimJuggle=new Juggle();this.juggle=new Juggle();this.dodgeUntil=0;this.stepUntil=0;this.attackHeld=null;this.guardHeld=false;
     this.action=null; this.chain=null; this.chainUntil=0; this.launch=null; this.chase=null;
     this.hits=0; this.combo=0; this.lastHit=-10; this.hitstop=0; this.effects=[]; this.history=[]; this.events=[];
