@@ -120,10 +120,30 @@ function lookAt(eye,at,up){let z=norm3(sub3(eye,at)),x=norm3(cross3(up,z)),y=cro
 function sub3(a,b){return [a[0]-b[0],a[1]-b[1],a[2]-b[2]]}function dot3(a,b){return a[0]*b[0]+a[1]*b[1]+a[2]*b[2]}function cross3(a,b){return [a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]]}function norm3(a){let s=Math.hypot(...a)||1;return a.map(n=>n/s)}
 const colors={floor:[.058,.103,.17],side:[.11,.19,.28],edge:[.22,.44,.53],player:[.11,.76,.81],pDark:[.09,.31,.45],pVest:[.15,.57,.73],skin:[.95,.70,.54],gold:[1,.70,.34],blade:[.70,1,.94],enemy:[.88,.33,.35],enemyDark:[.45,.18,.29],mage:[.57,.36,.84],mageDark:[.27,.23,.53],black:[.07,.12,.2],white:[.92,.96,1],shadow:[.007,.015,.04],pink:[1,.35,.55],orb:[.94,.41,1],burn:[1,.41,.12],brass:[.95,.70,.26],smoke:[.26,.30,.37]};
 let vp=identity(), camera={x:0,z:0,shakeX:0,shakeZ:0}, W=innerWidth,H=innerHeight,dpr=1;
-function draw(type,x,y,z,sx,sy,sz,color,opts={}){const m=mesh[type];let mat=mul(translation(x,y,z),mul(ry(opts.yaw||0),mul(rz(opts.rz||0),mul(rx(opts.rx||0),scaling(sx,sy,sz)))));gl.uniformMatrix4fv(loc.model,false,new Float32Array(mat));gl.uniform4f(loc.color,color[0],color[1],color[2],opts.alpha===undefined?1:opts.alpha);gl.uniform1f(loc.floor,opts.floor?1:0);gl.uniform1f(loc.glow,opts.glow||0);gl.bindBuffer(gl.ARRAY_BUFFER,m.vbo);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.ibo);gl.enableVertexAttribArray(loc.pos);gl.vertexAttribPointer(loc.pos,3,gl.FLOAT,false,24,0);gl.enableVertexAttribArray(loc.nor);gl.vertexAttribPointer(loc.nor,3,gl.FLOAT,false,24,12);gl.drawElements(gl.TRIANGLES,m.count,gl.UNSIGNED_SHORT,0)}
+// Reuse a matrix per draw instead of allocating nested matrices and a Float32Array for every object.
+const modelMatrix=new Float32Array(16);modelMatrix[15]=1;
+function draw(type,x,y,z,sx,sy,sz,color,opts={}){const m=mesh[type];
+ const ay=opts.yaw||0,az=opts.rz||0,ax=opts.rx||0;
+ const cy=Math.cos(ay),ya=Math.sin(ay),cz=Math.cos(az),za=Math.sin(az),cx=Math.cos(ax),xa=Math.sin(ax);
+ modelMatrix[0]=cy*cz*sx;modelMatrix[1]=za*sx;modelMatrix[2]=-ya*cz*sx;
+ modelMatrix[4]=(-cy*za*cx+ya*xa)*sy;modelMatrix[5]=cz*cx*sy;modelMatrix[6]=(ya*za*cx+cy*xa)*sy;
+ modelMatrix[8]=(cy*za*xa+ya*cx)*sz;modelMatrix[9]=-cz*xa*sz;modelMatrix[10]=(-ya*za*xa+cy*cx)*sz;
+ modelMatrix[12]=x;modelMatrix[13]=y;modelMatrix[14]=z;
+ drawCalls++;gl.uniformMatrix4fv(loc.model,false,modelMatrix);gl.uniform4f(loc.color,color[0],color[1],color[2],opts.alpha===undefined?1:opts.alpha);gl.uniform1f(loc.floor,opts.floor?1:0);gl.uniform1f(loc.glow,opts.glow||0);gl.bindBuffer(gl.ARRAY_BUFFER,m.vbo);gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.ibo);gl.enableVertexAttribArray(loc.pos);gl.vertexAttribPointer(loc.pos,3,gl.FLOAT,false,24,0);gl.enableVertexAttribArray(loc.nor);gl.vertexAttribPointer(loc.nor,3,gl.FLOAT,false,24,12);gl.drawElements(gl.TRIANGLES,m.count,gl.UNSIGNED_SHORT,0)}
 function project(x,y,z){const v=[x,y,z,1],q=[0,0,0,0];for(let i=0;i<4;i++)q[i]=vp[i]*v[0]+vp[i+4]*v[1]+vp[i+8]*v[2]+vp[i+12]*v[3];if(q[3]<=.01)return null;return {x:(q[0]/q[3]*.5+.5)*W,y:(.5-q[1]/q[3]*.5)*H,s:clamp(320/q[3],.5,2.8)}}
 function resize(){dpr=Math.min(devicePixelRatio||1,1.7);W=innerWidth;H=innerHeight;canvas.width=Math.round(W*dpr);canvas.height=Math.round(H*dpr);overlay.width=Math.round(W*dpr);overlay.height=Math.round(H*dpr);gl.viewport(0,0,canvas.width,canvas.height);ctx.setTransform(dpr,0,0,dpr,0,0)}addEventListener('resize',resize);resize();
 let phase='menu',frame=0,worldTime=0,hitPause=0,shake=0,lastMissAt=-99,events=[],enemies=[],orbs=[],effects=[],combatText=[],kills=0,wave=1,selectedId=null,nextId=1,comboHits=0,lastComboAt=0,toastUntil=0,hpFlash=0;
+const FX_LIMIT=pcPointer?240:160;
+let fxDropped=0,fxPeak=0,drawCalls=0,lastDrawCalls=0,lastFrameMs=0,slowFrames=0,frameError='';
+function emitEffect(effect){
+ if(effects.length>=FX_LIMIT){
+  if(effect.kind==='spark'||effect.kind==='smokeCloud'){fxDropped++;return}
+  const expendable=effects.findIndex(e=>e.kind==='spark'||e.kind==='smokeCloud');
+  if(expendable>=0)effects.splice(expendable,1);else effects.shift();
+  fxDropped++;
+ }
+ effects.push(effect);fxPeak=Math.max(fxPeak,effects.length);
+}
 const hoverCursor={x:-999,y:-999,valid:false,over:null};
 let pcTrials={acquire:false,hold:false,switch:false,launcher:false},pcFirstHoverId=null;
 let pendingFlickId=null,autoPrevHitId=null,autoHitCount=0,dirPrevHitId=null,lastTargetMethod='auto';
@@ -381,13 +401,13 @@ function fireGun(){
    return;
   }
   playGunshotSound('pistol');
-  effects.push({kind:'launchBurst',x:muzzleX,y:muzzleY,z:muzzleZ,life:.095,max:.095,color:colors.blade});
+  emitEffect({kind:'launchBurst',x:muzzleX,y:muzzleY,z:muzzleZ,life:.095,max:.095,color:colors.blade});
   const e=enemies.find(e=>e.id===tx&&!e.dead);
   if(!e||dist(e,player)>effectiveRange){if(worldTime-lastMissAt>1.2){lastMissAt=worldTime;announce('NO TARGET IN GUN RANGE')}return}
   const wasAir=e.y>.25,damage=(wasAir?5:7)*settings.damage;
   damageEnemy(e,damage,'pistol',1);
-  effects.push({kind:'slash',x:muzzleX,y:muzzleY,z:muzzleZ,x2:e.x,y2:e.y+1.35,z2:e.z,life:.10,max:.10,color:colors.blade});
-  effects.push({kind:'impact',x:e.x,y:e.y+1.25,z:e.z,life:.12,max:.12,color:colors.blade});
+  emitEffect({kind:'slash',x:muzzleX,y:muzzleY,z:muzzleZ,x2:e.x,y2:e.y+1.35,z2:e.z,life:.10,max:.10,color:colors.blade});
+  emitEffect({kind:'impact',x:e.x,y:e.y+1.25,z:e.z,life:.12,max:.12,color:colors.blade});
   finishGunTrial('pistol');
   if(wasAir){
    if(gunCombo.id!==e.id){gunCombo.id=e.id;gunCombo.sustain=0;gunCombo.pistolAir=false}
@@ -405,19 +425,19 @@ function spawnShotgunBlast(x,y,z,dir,range){
  shake+=.34*(settings.shotgunKick/100);
  playGunshotSound('shotgun');
  if(m<=0)return;
- effects.push({kind:'shotFan',x,y,z,dx:dir[0],dz:dir[1],reach:Math.max(3,Math.min(7.8,range)),life:.21,max:.21,intensity:m,color:colors.burn});
+ emitEffect({kind:'shotFan',x,y,z,dx:dir[0],dz:dir[1],reach:Math.max(3,Math.min(7.8,range)),life:.21,max:.21,intensity:m,color:colors.burn});
  for(let i=0;i<5;i++){
   const spread=rnd(-.48,.48),sdx=dir[0]*Math.cos(spread)+dir[1]*Math.sin(spread),sdz=dir[1]*Math.cos(spread)-dir[0]*Math.sin(spread);
-  effects.push({kind:'smokeCloud',x:x+sdx*.26,y:y+rnd(-.14,.20),z:z+sdz*.26,vx:sdx*rnd(1.6,3.5),vz:sdz*rnd(1.6,3.5),vy:rnd(.45,1.25),radius:rnd(.34,.65),life:rnd(.40,.62),max:.62,intensity:m,color:colors.smoke});
+  emitEffect({kind:'smokeCloud',x:x+sdx*.26,y:y+rnd(-.14,.20),z:z+sdz*.26,vx:sdx*rnd(1.6,3.5),vz:sdz*rnd(1.6,3.5),vy:rnd(.45,1.25),radius:rnd(.34,.65),life:rnd(.40,.62),max:.62,intensity:m,color:colors.smoke});
  }
- effects.push({kind:'shell',x:player.x-dir[1]*.58,y:1.72,z:player.z+dir[0]*.58,vx:-dir[1]*4.8-dir[0],vz:dir[0]*4.8-dir[1],vy:3.9,spin:rnd(-5,5),life:.70,max:.70,intensity:m,color:colors.brass});
+ emitEffect({kind:'shell',x:player.x-dir[1]*.58,y:1.72,z:player.z+dir[0]*.58,vx:-dir[1]*4.8-dir[0],vz:dir[0]*4.8-dir[1],vy:3.9,spin:rnd(-5,5),life:.70,max:.70,intensity:m,color:colors.brass});
 }
 function spawnShotgunImpact(e,dir,scale){
  const m=settings.shotgunFX/100;if(m<=0)return;
- effects.push({kind:'pelletHit',x:e.x,y:e.y+1.30,z:e.z,dx:dir[0],dz:dir[1],life:.29,max:.29,intensity:m*scale,color:colors.burn});
+ emitEffect({kind:'pelletHit',x:e.x,y:e.y+1.30,z:e.z,dx:dir[0],dz:dir[1],life:.29,max:.29,intensity:m*scale,color:colors.burn});
  const n=Math.round(5+7*m*scale);
  for(let i=0;i<n;i++){const a=i*TAU/n+rnd(-.35,.35),v=rnd(3.5,8.2);
-  effects.push({kind:'spark',x:e.x+rnd(-.28,.28),y:e.y+1.15+rnd(-.2,.25),z:e.z+rnd(-.28,.28),vx:Math.sin(a)*v,vy:rnd(-2.2,5),vz:Math.cos(a)*v,life:rnd(.16,.32),max:.32,color:i%3===0?colors.white:colors.burn});
+  emitEffect({kind:'spark',x:e.x+rnd(-.28,.28),y:e.y+1.15+rnd(-.2,.25),z:e.z+rnd(-.28,.28),vx:Math.sin(a)*v,vy:rnd(-2.2,5),vz:Math.cos(a)*v,life:rnd(.16,.32),max:.32,color:i%3===0?colors.white:colors.burn});
  }
 }
 function queueEvent(delay,fn){events.push({time:worldTime+delay,fn})}
@@ -450,10 +470,10 @@ function strike(kind){if(phase!=='playing'||player.hp<=0)return;const now=worldT
  const recovery=(kind==='strike'?[0,.31,.35,.48][step]:kind==='launch'?.78:kind==='slam'?.72:.72)/settings.attackRate;
  player.act=kind==='strike'?step:kind==='launch'?4:kind==='slam'?6:5;player.attackUntil=now+startup+recovery;player.nextAttack=now+startup+recovery;player.phase=0;
  const tx=t?.id;const ax=player.x,az=player.z;
- effects.push({kind:'anticipate',x:player.x,y:1.45,z:player.z,life:.22,max:.22,color:kind==='launch'||kind==='slam'?colors.gold:kind==='blast'||kind==='shotgun'?colors.orb:colors.blade});
+ emitEffect({kind:'anticipate',x:player.x,y:1.45,z:player.z,life:.22,max:.22,color:kind==='launch'||kind==='slam'?colors.gold:kind==='blast'||kind==='shotgun'?colors.orb:colors.blade});
  queueEvent(startup,()=>{if(player.dodging>0||player.hp<=0)return;let target=enemies.find(e=>e.id===tx&&!e.dead);
  const comboGrace=kind==='launch'&&target?.id===player.lastStrikeTargetId&&worldTime-player.lastStrikeHitAt<1.3?1.4:.35;
- if(!target||(kind==='slam'&&target.y<=.18)||dist(player,target)>settings.reach+comboGrace){effects.push({kind:'miss',x:player.x,y:1.4,z:player.z,life:.3,max:.3});if(worldTime-lastMissAt>1.1){lastMissAt=worldTime;announce('OUT OF REACH')}return}
+ if(!target||(kind==='slam'&&target.y<=.18)||dist(player,target)>settings.reach+comboGrace){emitEffect({kind:'miss',x:player.x,y:1.4,z:player.z,life:.3,max:.3});if(worldTime-lastMissAt>1.1){lastMissAt=worldTime;announce('OUT OF REACH')}return}
  let riposte=kind==='strike'&&worldTime<player.riposteUntil;
  let damage=(kind==='strike'?[0,14,17,26][step]:kind==='launch'?18:kind==='slam'?26:22)*settings.damage+(riposte?14*settings.damage:0);
  damageEnemy(target,damage,riposte?'counter':kind,step);
@@ -465,10 +485,10 @@ function strike(kind){if(phase!=='playing'||player.hp<=0)return;const now=worldT
   if(player.queuedSpecial)player.nextAttack=Math.min(player.nextAttack,worldTime+.065);
  }
  const x2=target.x,y2=target.y+1.15,z2=target.z;
- effects.push({kind:'slash',x:player.x,y:1.5,z:player.z,x2,y2,z2,life:.27,max:.27,color:kind==='launch'||kind==='slam'?colors.gold:kind==='blast'||kind==='shotgun'?colors.orb:colors.blade});
- effects.push({kind:'impact',x:x2,y:y2,z:z2,life:.38,max:.38,color:kind==='launch'||kind==='slam'?colors.gold:kind==='blast'||kind==='shotgun'?colors.orb:colors.blade});
+ emitEffect({kind:'slash',x:player.x,y:1.5,z:player.z,x2,y2,z2,life:.27,max:.27,color:kind==='launch'||kind==='slam'?colors.gold:kind==='blast'||kind==='shotgun'?colors.orb:colors.blade});
+ emitEffect({kind:'impact',x:x2,y:y2,z:z2,life:.38,max:.38,color:kind==='launch'||kind==='slam'?colors.gold:kind==='blast'||kind==='shotgun'?colors.orb:colors.blade});
  })}
-let audioCtx=null;
+let audioCtx=null,shotgunNoiseBuffers=[],shotgunNoiseIndex=0;
 function ensureAudio(){try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;if(!audioCtx)audioCtx=new AC();if(audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});}catch(e){}}
 function playImpactSound(kind,step){if(!settings.hitSound)return;ensureAudio();if(!audioCtx||audioCtx.state!=='running')return;try{let t=audioCtx.currentTime,level=settings.hitSound/100;
  for(const [f,amp,wave,duration] of [[kind==='blast'||kind==='shotgun'?95:kind==='launch'?145:kind==='pistol'?335:210+step*30,.19,'triangle',.11],[kind==='blast'||kind==='shotgun'?58:kind==='pistol'?110:75,.31,'sine',.16]]){
@@ -488,9 +508,14 @@ function playGunshotSound(mode){
   gain.gain.exponentialRampToValueAtTime(.0001,t+(shotgun?.20:.077));
   osc.connect(gain);gain.connect(audioCtx.destination);osc.start(t);osc.stop(t+(shotgun?.21:.085));
   if(shotgun){
-   const duration=.17,rate=audioCtx.sampleRate,count=Math.round(rate*duration);
-   const buffer=audioCtx.createBuffer(1,count,rate),data=buffer.getChannelData(0);
-   for(let i=0;i<count;i++)data[i]=(Math.random()*2-1)*(1-i/count);
+   const duration=.17,rate=audioCtx.sampleRate;
+   // Rotate cached noise variations without reallocating sample buffers for each shot.
+   if(!shotgunNoiseBuffers.length)for(let variant=0;variant<3;variant++){
+    const count=Math.round(rate*duration),buffer=audioCtx.createBuffer(1,count,rate),data=buffer.getChannelData(0);
+    for(let i=0;i<count;i++)data[i]=(Math.random()*2-1)*(1-i/count);
+    shotgunNoiseBuffers.push(buffer);
+   }
+   const buffer=shotgunNoiseBuffers[shotgunNoiseIndex++%shotgunNoiseBuffers.length];
    const noise=audioCtx.createBufferSource(),filter=audioCtx.createBiquadFilter(),ng=audioCtx.createGain();
    noise.buffer=buffer;filter.type='lowpass';filter.frequency.setValueAtTime(2400,t);filter.frequency.exponentialRampToValueAtTime(380,t+.14);
    ng.gain.setValueAtTime(.0001,t);ng.gain.linearRampToValueAtTime(vol*.45,t+.009);ng.gain.exponentialRampToValueAtTime(.0001,t+duration);
@@ -503,29 +528,29 @@ function playGunshotSound(mode){
  }catch(e){}
 }
 function spawnHitSparks(e,kind){const m=settings.impactFX/100;if(m<=0)return;let color=kind==='launch'||kind==='slam'||kind==='counter'?colors.gold:kind==='blast'||kind==='shotgun'?colors.orb:colors.blade;
- effects.push({kind:'ring',x:e.x,y:e.y+1.1,z:e.z,life:.27,max:.27,color});
+ emitEffect({kind:'ring',x:e.x,y:e.y+1.1,z:e.z,life:.27,max:.27,color});
  const n=Math.round(3+9*m);for(let i=0;i<n;i++){const a=i*TAU/n+rnd(-.2,.2),speed=rnd(2.5,6.8)*(.6+m);
- effects.push({kind:'spark',x:e.x+rnd(-.15,.15),y:e.y+1.2+rnd(-.1,.35),z:e.z+rnd(-.15,.15),vx:Math.cos(a)*speed,vy:rnd(-1.5,4.6),vz:Math.sin(a)*speed,life:rnd(.14,.27),max:.27,color});
+ emitEffect({kind:'spark',x:e.x+rnd(-.15,.15),y:e.y+1.2+rnd(-.1,.35),z:e.z+rnd(-.15,.15),vx:Math.cos(a)*speed,vy:rnd(-1.5,4.6),vz:Math.sin(a)*speed,life:rnd(.14,.27),max:.27,color});
  }
 }
 function damageEnemy(e,dmg,kind,step){e.hp-=dmg;e.glow=.21;e.recoil=.22*settings.reaction;e.lastHit=worldTime;e.stagger++;e.stun=.18;e.state='chase';e.windup=0;let dir=normal2(e.x-player.x,e.z-player.z);
  if(kind==='slam'){
   e.y=0;e.vy=0;e.vx=0;e.vz=0;e.stun=.75;e.projectileUntil=0;
-  effects.push({kind:'launchWave',x:e.x,y:.28,z:e.z,life:.55,max:.55,color:colors.gold,radius:settings.slamRadius});
-  effects.push({kind:'impact',x:e.x,y:.6,z:e.z,life:.5,max:.5,color:colors.white});
+  emitEffect({kind:'launchWave',x:e.x,y:.28,z:e.z,life:.55,max:.55,color:colors.gold,radius:settings.slamRadius});
+  emitEffect({kind:'impact',x:e.x,y:.6,z:e.z,life:.5,max:.5,color:colors.white});
   let shockHits=0;
   for(const other of enemies){if(other===e||other.dead)continue;let d=dist(e,other);if(d>settings.slamRadius)continue;
    other.hp-=Math.round((24-2*d)*settings.damage);other.glow=.3;other.recoil=.3;other.stun=.65;other.state='chase';other.windup=0;
    const v=normal2(other.x-e.x,other.z-e.z);other.vx=v[0]*7;other.vz=v[1]*7;other.vy=Math.max(other.vy,2.4);
-   effects.push({kind:'impact',x:other.x,y:other.y+1.2,z:other.z,life:.43,max:.43,color:colors.gold});shockHits++;
+   emitEffect({kind:'impact',x:other.x,y:other.y+1.2,z:other.z,life:.43,max:.43,color:colors.gold});shockHits++;
    if(other.hp<=0)killEnemy(other);
   }
   if(shockHits)finishComboTrial('shock');
  }
  else if(kind==='launch'||kind==='counter'){
- effects.push({kind:'launchWave',x:e.x,y:Math.max(e.y,.08)+.28,z:e.z,life:.42,max:.42,color:colors.gold});
- effects.push({kind:'launchWave',x:e.x,y:Math.max(e.y,.08)+.10,z:e.z,life:.58,max:.58,color:colors.edge});
- effects.push({kind:'launchBurst',x:e.x,y:Math.max(e.y,.08)+.92,z:e.z,life:.34,max:.34,color:colors.white});
+ emitEffect({kind:'launchWave',x:e.x,y:Math.max(e.y,.08)+.28,z:e.z,life:.42,max:.42,color:colors.gold});
+ emitEffect({kind:'launchWave',x:e.x,y:Math.max(e.y,.08)+.10,z:e.z,life:.58,max:.58,color:colors.edge});
+ emitEffect({kind:'launchBurst',x:e.x,y:Math.max(e.y,.08)+.92,z:e.z,life:.34,max:.34,color:colors.white});
  e.y=Math.max(e.y,.3);e.vy=settings.launchForce*(kind==='counter'?1.1:1);e.launchUntil=worldTime+settings.airHang+1.0;e.juggles=0;e.sustainCount=0;e.wallBounces=0;
  if(kind==='launch'){finishGunTrial('launch');gunCombo.id=e.id;gunCombo.sustain=0;gunCombo.pistolAir=false;player.nextAttack=Math.min(player.nextAttack,worldTime+.095);} e.vx*=.25;e.vz*=.25;e.stun=.4;e.armor=0}
  else if(kind==='shotgun'){let force=settings.knockback*1.65;e.vx=dir[0]*force;e.vz=dir[1]*force;e.vy=Math.max(e.vy,1.45);e.stun=.36;e.projectileUntil=worldTime+.85;e.wallBounces=0;}
@@ -537,11 +562,11 @@ function damageEnemy(e,dmg,kind,step){e.hp-=dmg;e.glow=.21;e.recoil=.22*settings
  if(e.stagger>=4&&e.y<.25){e.armor=1.2;e.stagger=0}if(e.hp<=0)killEnemy(e);
  playImpactSound(kind,step);spawnHitSparks(e,kind);
  comboHits=worldTime-lastComboAt<2.3?comboHits+1:1;lastComboAt=worldTime;hitPause=Math.max(hitPause,settings.hitstop*.001*(kind==='pistol'?.25:kind==='shotgun'?1.1:1));shake+=settings.shake*.0035;combatText.push({x:e.x,y:e.y+2.6,z:e.z,text:`${Math.round(dmg)}`,life:.7,max:.7});updateHUD()}
-function killEnemy(e){if(e.dead)return;e.dead=true;e.deathT=0;kills++;if(selectedId===e.id)selectedId=null;effects.push({kind:'impact',x:e.x,y:1,z:e.z,life:.7,max:.7,color:colors.gold});updateHUD()}
+function killEnemy(e){if(e.dead)return;e.dead=true;e.deathT=0;kills++;if(selectedId===e.id)selectedId=null;emitEffect({kind:'impact',x:e.x,y:1,z:e.z,life:.7,max:.7,color:colors.gold});updateHUD()}
 function dodge(){if(phase!=='playing'||player.dodging>0||player.hp<=0)return;
  const incoming=settings.enemyAI==='sparring'&&enemies.some(e=>!e.dead&&e.y<.1&&e.state==='windup'&&e.type!=='caster'&&dist(e,player)<3.4&&e.windup/settings.enemyPressure<=settings.evadeWindow);
- if(incoming){player.riposteUntil=worldTime+2.5;finishComboTrial('evade');announce('PERFECT EVADE — COUNTER READY');effects.push({kind:'launchWave',x:player.x,y:.12,z:player.z,life:.3,max:.3,color:colors.player});}
- player.dodging=.35;player.invuln=.36;player.queued=false;player.queuedSpecial=null;player.nextAttack=worldTime+.15;let v=movementInput();let d=normal2(v[0],v[1]);if(!d[0]&&!d[1])d=[Math.sin(player.angle),Math.cos(player.angle)];player.vx=d[0]*17;player.vz=d[1]*17;effects.push({kind:'impact',x:player.x,y:.3,z:player.z,life:.25,max:.25,color:colors.player})}
+ if(incoming){player.riposteUntil=worldTime+2.5;finishComboTrial('evade');announce('PERFECT EVADE — COUNTER READY');emitEffect({kind:'launchWave',x:player.x,y:.12,z:player.z,life:.3,max:.3,color:colors.player});}
+ player.dodging=.35;player.invuln=.36;player.queued=false;player.queuedSpecial=null;player.nextAttack=worldTime+.15;let v=movementInput();let d=normal2(v[0],v[1]);if(!d[0]&&!d[1])d=[Math.sin(player.angle),Math.cos(player.angle)];player.vx=d[0]*17;player.vz=d[1]*17;emitEffect({kind:'impact',x:player.x,y:.3,z:player.z,life:.25,max:.25,color:colors.player})}
 function hurt(n){if(player.invuln>0||phase!=='playing')return;player.hp=Math.max(0,player.hp-n);player.invuln=.62;hpFlash=.28;shake+=.4;player.nextAttack=worldTime+.24;player.queued=false;player.queuedSpecial=null;updateHUD();if(player.hp<=0){announce('TRAINING FAILED');queueEvent(1.4,()=>{phase='paused';renderPhase()})}}
 function movementInput(){let x=joy.x,z=joy.y;if(keys.KeyA||keys.ArrowLeft)x-=1;if(keys.KeyD||keys.ArrowRight)x+=1;if(keys.KeyW||keys.ArrowUp)z-=1;if(keys.KeyS||keys.ArrowDown)z+=1;let l=Math.hypot(x,z);return l>1?[x/l,z/l]:[x,z]}
 function updatePlayer(dt){player.invuln=Math.max(0,player.invuln-dt);player.dodging=Math.max(0,player.dodging-dt);const v=movementInput();if(player.dodging<=0){let speed=settings.moveSpeed*(worldTime<player.attackUntil?.68:1),targetX=v[0]*speed,targetZ=v[1]*speed,inter=1-Math.exp(-14*dt);player.vx=mix(player.vx,targetX,inter);player.vz=mix(player.vz,targetZ,inter);if(Math.hypot(v[0],v[1])>.25&&(!selectTarget()||settings.aimMode==='tap'&&selectedId===null)&&worldTime>player.attackUntil)player.angle=Math.atan2(v[0],v[1]);}
@@ -556,9 +581,9 @@ function updatePlayer(dt){player.invuln=Math.max(0,player.invuln-dt);player.dodg
  if(player.queued&&worldTime>player.queuedUntil)player.queued=false;
  if(player.queuedGun&&worldTime>player.queuedUntil)player.queuedGun=false;
  player.phase+=Math.hypot(player.vx,player.vz)*dt*.9}
-function spawnOrb(e){let v=normal2(player.x-e.x,player.z-e.z);orbs.push({x:e.x,y:1.5,z:e.z,vx:v[0]*8,vz:v[1]*8,life:3.5});effects.push({kind:'impact',x:e.x,y:1.5,z:e.z,life:.3,max:.3,color:colors.orb})}
+function spawnOrb(e){let v=normal2(player.x-e.x,player.z-e.z);orbs.push({x:e.x,y:1.5,z:e.z,vx:v[0]*8,vz:v[1]*8,life:3.5});emitEffect({kind:'impact',x:e.x,y:1.5,z:e.z,life:.3,max:.3,color:colors.orb})}
 function updateEnemies(dt){for(const e of enemies){e.glow=Math.max(0,e.glow-dt);e.recoil=Math.max(0,e.recoil-dt);if(e.dead){e.deathT+=dt;continue}e.stun=Math.max(0,e.stun-dt);e.armor=Math.max(0,e.armor-dt);e.attackCd=Math.max(0,e.attackCd-dt);let d=dist(e,player),dir=normal2(player.x-e.x,player.z-e.z);e.angle=Math.atan2(dir[0],dir[1]);if(worldTime-e.lastHit>2.2)e.stagger=0;
- if(e.y>.01||e.vy>0){const g=2*settings.launchForce/settings.airHang;e.vy-=g*dt;e.y+=e.vy*dt;if(e.y<=0){e.y=0;e.vy=0;e.juggles=0;e.stun=Math.max(e.stun,.22);effects.push({kind:'impact',x:e.x,y:.12,z:e.z,life:.25,max:.25,color:colors.edge})}}
+ if(e.y>.01||e.vy>0){const g=2*settings.launchForce/settings.airHang;e.vy-=g*dt;e.y+=e.vy*dt;if(e.y<=0){e.y=0;e.vy=0;e.juggles=0;e.stun=Math.max(e.stun,.22);emitEffect({kind:'impact',x:e.x,y:.12,z:e.z,life:.25,max:.25,color:colors.edge})}}
  if(e.y<=.04&&e.stun<=0){if(settings.enemyAI==='passive'){e.state='chase';e.windup=0;e.vx*=Math.exp(-6*dt);e.vz*=Math.exp(-6*dt)}else if(e.state==='windup'){e.windup-=dt*settings.enemyPressure;if(e.windup<=0){if(e.type==='caster'){spawnOrb(e)}else if(d<2.35){hurt(13)}e.state='chase';e.attackCd=(e.type==='caster'?2.4:1.7)/settings.enemyPressure;}}else if(e.attackCd<=0&&(e.type==='caster'?d<16:d<2.2)){e.state='windup';e.windup=e.type==='caster'?.8:.67;}else if(e.state==='chase'){
  let tx=dir[0],tz=dir[1],speed=3.25*settings.enemyPressure;
  if(e.type==='caster'){
@@ -579,7 +604,7 @@ function updateEnemies(dt){for(const e of enemies){e.glow=Math.max(0,e.glow-dt);
   if(Math.abs(nextZ)>17.2)e.vz*=-.55;
   e.vy=Math.max(e.vy,settings.launchForce*.32);e.stun=Math.max(e.stun,.4);
   e.wallBounces++;e.projectileUntil=0;
-  effects.push({kind:'launchBurst',x:clamp(nextX,-17.2,17.2),y:e.y+1.2,z:clamp(nextZ,-17.2,17.2),life:.42,max:.42,color:colors.gold});
+  emitEffect({kind:'launchBurst',x:clamp(nextX,-17.2,17.2),y:e.y+1.2,z:clamp(nextZ,-17.2,17.2),life:.42,max:.42,color:colors.gold});
   finishGunTrial('wall');announce('WALL BOUNCE!');
  }
  e.x=clamp(nextX,-17.2,17.2);e.z=clamp(nextZ,-17.2,17.2);
@@ -597,17 +622,32 @@ function updateEnemies(dt){for(const e of enemies){e.glow=Math.max(0,e.glow-dt);
    other.hp-=Math.round(26*settings.damage);e.hp-=Math.round(8*settings.damage);
    other.glow=.32;other.recoil=.32;other.stun=.65;other.state='chase';other.windup=0;
    other.vx=v[0]*7.5;other.vz=v[1]*7.5;other.vy=Math.max(other.vy,3.8);e.vx*=-.30;e.vz*=-.30;e.vy=Math.max(e.vy,2.4);e.projectileUntil=0;
-   effects.push({kind:'launchBurst',x:other.x,y:other.y+1.2,z:other.z,life:.37,max:.37,color:colors.gold});
-   effects.push({kind:'impact',x:e.x,y:e.y+1,z:e.z,life:.46,max:.46,color:colors.white});
+   emitEffect({kind:'launchBurst',x:other.x,y:other.y+1.2,z:other.z,life:.37,max:.37,color:colors.gold});
+   emitEffect({kind:'impact',x:e.x,y:e.y+1,z:e.z,life:.46,max:.46,color:colors.white});
    finishComboTrial('collision');finishGunTrial('body');announce('ENEMY COLLISION!');
    if(other.hp<=0)killEnemy(other);if(e.hp<=0)killEnemy(e);
    break;
   }
  }
- for(const o of orbs){if(settings.enemyAI==='passive'){o.life=0;continue}o.life-=dt;o.x+=o.vx*dt;o.z+=o.vz*dt;o.y=1.48+Math.sin(worldTime*13)*.12;if(Math.hypot(o.x-player.x,o.z-player.z)<.75){hurt(11);o.life=0;effects.push({kind:'impact',x:o.x,y:o.y,z:o.z,life:.25,max:.25,color:colors.pink})}}
+ for(const o of orbs){if(settings.enemyAI==='passive'){o.life=0;continue}o.life-=dt;o.x+=o.vx*dt;o.z+=o.vz*dt;o.y=1.48+Math.sin(worldTime*13)*.12;if(Math.hypot(o.x-player.x,o.z-player.z)<.75){hurt(11);o.life=0;emitEffect({kind:'impact',x:o.x,y:o.y,z:o.z,life:.25,max:.25,color:colors.pink})}}
  orbs=orbs.filter(o=>o.life>0);
  if(enemies.length&&enemies.every(e=>e.dead)){wave++;player.hp=clamp(player.hp+22,0,100);queueEvent(1.35,spawnWave);enemies=[];updateHUD()}}
-function updateFx(dt){shotgunRecoil=Math.max(0,shotgunRecoil-dt*4.4);for(const e of effects){e.life-=dt;if(['spark','smokeCloud','shell'].includes(e.kind)){e.x+=e.vx*dt;e.y+=e.vy*dt;e.z+=e.vz*dt;if(e.kind==='spark'||e.kind==='shell')e.vy-=7*dt;else{e.vx*=Math.exp(-2*dt);e.vz*=Math.exp(-2*dt);e.radius+=dt*.6}}}effects=effects.filter(e=>e.life>0);for(const e of combatText){e.life-=dt;e.y+=dt*1.5}combatText=combatText.filter(e=>e.life>0);}
+function updateFx(dt){
+ shotgunRecoil=Math.max(0,shotgunRecoil-dt*4.4);
+ let write=0;
+ for(let i=0;i<effects.length;i++){
+  const e=effects[i];e.life-=dt;
+  if(e.kind==='spark'||e.kind==='smokeCloud'||e.kind==='shell'){
+   e.x+=e.vx*dt;e.y+=e.vy*dt;e.z+=e.vz*dt;
+   if(e.kind==='spark'||e.kind==='shell')e.vy-=7*dt;
+   else{const drag=Math.exp(-2*dt);e.vx*=drag;e.vz*=drag;e.radius+=dt*.6}
+  }
+  if(e.life>0)effects[write++]=e;
+ }
+ effects.length=write;
+ for(const e of combatText){e.life-=dt;e.y+=dt*1.5}
+ combatText=combatText.filter(e=>e.life>0);
+}
 function renderFighter(f,hero){let recoil=hero?0:(f.recoil||0),recoilBack=recoil*settings.reaction*.72;let kick=hero&&weapon==='shotgun'?shotgunRecoil:0,x=f.x-Math.sin(f.angle)*(recoilBack+kick*.24),z=f.z-Math.cos(f.angle)*(recoilBack+kick*.24),y=f.y||0,t=worldTime,angle=f.angle;let tint=hero?colors.player:f.type==='caster'?colors.mage:colors.enemy, dark=hero?colors.pDark:f.type==='caster'?colors.mageDark:colors.enemyDark;
  const alive=hero||!f.dead;let fade=hero?1:f.dead?Math.max(0,1-f.deathT/.7):1;if(fade<=0)return;
  gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);draw('cyl',x,.032,z,1.35,.014,.92,colors.shadow,{alpha:.46*fade});gl.depthMask(true);gl.disable(gl.BLEND);
@@ -688,9 +728,9 @@ function renderEffects(){for(const fx of effects){let t=fx.life/fx.max,col=fx.co
  if(fx.kind==='anticipate'){gl.enable(gl.BLEND);draw('sphere',fx.x,fx.y,fx.z,.6+.8*(1-t),.10,.6+.8*(1-t),col,{alpha:t*.20,glow:1});gl.disable(gl.BLEND)}}
  for(const o of orbs){draw('sphere',o.x,o.y,o.z,.42,.42,.42,colors.orb,{glow:1});draw('sphere',o.x-o.vx*.035,o.y,o.z-o.vz*.035,.22,.22,.22,colors.pink,{glow:1})}
  for(const e of enemies)if(!e.dead&&e.state==='windup'){let c=e.type==='caster'?colors.orb:colors.pink;let scale=e.type==='caster'?1.3:2.2;gl.enable(gl.BLEND);draw('cyl',e.x,.045,e.z,scale,.01,scale,c,{alpha:.11+.14*Math.sin(worldTime*22),glow:.8});gl.disable(gl.BLEND)}}
-function render3D(dt){gl.clearColor(.028,.049,.086,1);gl.enable(gl.DEPTH_TEST);gl.depthMask(true);gl.disable(gl.CULL_FACE);gl.disable(gl.BLEND);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
+function render3D(dt){drawCalls=0;gl.clearColor(.028,.049,.086,1);gl.enable(gl.DEPTH_TEST);gl.depthMask(true);gl.disable(gl.CULL_FACE);gl.disable(gl.BLEND);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);
  let camT=1-Math.exp(-3.7*dt);camera.x=mix(camera.x,player.x,camT);camera.z=mix(camera.z,player.z,camT);let shakeX=rnd(-shake,shake)*settings.shake*.007,shakeZ=rnd(-shake,shake)*settings.shake*.007;const z=clamp(settings.zoom,.7,2),kick=shotgunRecoil*settings.shotgunKick/100,ey=[camera.x+shakeX,19.7/z+kick*.46,camera.z+21.0/z+shakeZ+kick*.57],at=[camera.x,0,camera.z-1.4];vp=mul(perspective((50+kick*1.25)*Math.PI/180,W/H,.1,110),lookAt(ey,at,[0,1,0]));gl.uniformMatrix4fv(loc.vp,false,new Float32Array(vp));
- renderArena();for(const e of enemies)renderFighter(e,false);renderFighter(player,true);renderEffects();shake=Math.max(0,shake-dt*2.5)}
+ renderArena();for(const e of enemies)renderFighter(e,false);renderFighter(player,true);renderEffects();lastDrawCalls=drawCalls;shake=Math.max(0,shake-dt*2.5)}
 function paint2D(){ctx.clearRect(0,0,W,H);ctx.save();if(phase!=='playing'){ctx.restore();return}
  // The reach boundary is the controlled variable in this experiment.
  ctx.save();ctx.strokeStyle='#6be6de';ctx.globalAlpha=.34;ctx.lineWidth=1.3;ctx.setLineDash([5,6]);ctx.beginPath();let started=false;for(let i=0;i<=72;i++){let a=i*TAU/72,p=project(player.x+Math.cos(a)*settings.reach,.1,player.z+Math.sin(a)*settings.reach);if(p){if(!started){ctx.moveTo(p.x,p.y);started=true}else ctx.lineTo(p.x,p.y)}}if(started)ctx.stroke();ctx.restore();
@@ -736,9 +776,21 @@ function paint2D(){ctx.clearRect(0,0,W,H);ctx.save();if(phase!=='playing'){ctx.r
  let pp=project(player.x,.06,player.z);if(pp){ctx.strokeStyle='#7df3e5aa';ctx.lineWidth=1.3;ctx.beginPath();ctx.ellipse(pp.x,pp.y,22,8,0,0,TAU);ctx.stroke()}
  for(const c of combatText){let p=project(c.x,c.y,c.z);if(!p)continue;let t=c.life/c.max;ctx.globalAlpha=clamp(t*1.5,0,1);ctx.fillStyle='#f8f0bd';ctx.font='900 18px system-ui';ctx.textAlign='center';ctx.shadowColor='#000';ctx.shadowBlur=7;ctx.fillText(c.text,p.x,p.y);ctx.shadowBlur=0;ctx.globalAlpha=1}
  ctx.restore()}
-function update(dt){if(phase!=='playing')return;if(hitPause>0){hitPause-=dt;return}worldTime+=dt;updatePlayer(dt);updateEnemies(dt);updateHoverSelection();updateFx(dt);for(let i=events.length-1;i>=0;i--){if(events[i].time<=worldTime){let evt=events.splice(i,1)[0];evt.fn()}}if(comboHits&&worldTime-lastComboAt>2.3){comboHits=0;updateHUD()}
+function update(dt){if(phase!=='playing')return;if(hitPause>0){hitPause-=dt;updateFx(dt);return}worldTime+=dt;updatePlayer(dt);updateEnemies(dt);updateHoverSelection();updateFx(dt);for(let i=events.length-1;i>=0;i--){if(events[i].time<=worldTime){let evt=events.splice(i,1)[0];evt.fn()}}if(comboHits&&worldTime-lastComboAt>2.3){comboHits=0;updateHUD()}
  if(frame%18===0){let e=enemies.find(e=>e.id===selectedId&&!e.dead),d=e?Math.round(dist(e,player)):null;$('targetModeHUD').textContent=modeLabel(settings.aimMode)+(d!==null?' · '+d+'m':' · —')+' ▾'}if(toastUntil&&performance.now()>toastUntil){$('toast').style.opacity='0';toastUntil=0}if(hpFlash>0){hpFlash-=dt;$('flash').style.opacity=String(clamp(hpFlash*1.8,0,.5))}else $('flash').style.opacity='0'}
-let last=performance.now();function loop(now){let dt=Math.min((now-last)/1000,.040);last=now;frame++;if(phase==='playing')update(dt);render3D(dt);paint2D();requestAnimationFrame(loop)}requestAnimationFrame(loop);
+let last=performance.now();
+function loop(now){
+ const elapsed=now-last,dt=Math.min(elapsed/1000,.040);
+ last=now;lastFrameMs=elapsed;if(elapsed>33)slowFrames++;frame++;
+ try{if(phase==='playing')update(dt);render3D(dt);paint2D()}
+ catch(e){
+  frameError=String(e?.stack||e);console.error('REACH frame stopped by JavaScript error',e);
+  $('toast').textContent='FRAME ERROR — CHECK BROWSER CONSOLE';$('toast').style.opacity='1';
+  return;
+ }
+ requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
 // Thumb-friendly movement: enlarged stick, broad touch area, and a floating base
 // whenever movement begins outside the visible stick. Movement remains independent
 // of the four right-side combat buttons.
@@ -796,7 +848,27 @@ canvas.addEventListener('contextmenu',ev=>{if(pcPointer&&phase==='playing')ev.pr
 addEventListener('keydown',ev=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(ev.code))ev.preventDefault();if(ev.repeat)return;keys[ev.code]=true;if(ev.code==='KeyP'||ev.code==='Escape'){phase==='playing'?pause():phase==='paused'?resume():null;return}if(phase!=='playing')return;if(ev.code==='KeyJ'){attackHeld=true;fireGun()}if(ev.code==='KeyK')strike('launch');if(ev.code==='KeyL'||ev.code==='KeyE')strike('blast');if(ev.code==='KeyF')strike('slam');if(ev.code==='Space')dodge();if(ev.code==='Digit1')setWeapon('pistols');if(ev.code==='Digit2')setWeapon('shotgun');if(ev.code==='KeyQ'&&pcPointer&&settings.aimMode==='hover')strike('launch');if(ev.code==='KeyQ'&&settings.aimMode==='hybrid'){let choices=enemies.filter(e=>!e.dead&&dist(e,player)<=settings.reach);let i=choices.findIndex(e=>e.id===selectedId);if(choices.length){selectedId=choices[(i+1)%choices.length].id;pendingFlickId=selectedId;refreshTracker()}}});addEventListener('keyup',ev=>{keys[ev.code]=false;if(ev.code==='KeyJ')attackHeld=false});
 function chooseByTap(ev){if(phase!=='playing'||settings.aimMode!=='hybrid')return;let near=null,best=10000;for(const e of enemies){if(e.dead)continue;let p=project(e.x,e.y+1.4,e.z);if(!p)continue;let d=Math.hypot(ev.clientX-p.x,ev.clientY-p.y);if(d<46&&d<best){near=e;best=d}}if(near){selectedId=near.id;pendingFlickId=near.id;announce('TAPPED E'+near.id);refreshTracker()}}canvas.addEventListener('pointerdown',chooseByTap);overlay.addEventListener('pointerdown',chooseByTap);
 renderPhase();render3D(.016);paint2D();
-window.__rangeLabDebug={get phase(){return phase},get settings(){return {...settings}},get weapon(){return weapon},get shotgunRecoil(){return shotgunRecoil},get visualEffects(){return effects.map(e=>e.kind)},get gunTrials(){return {...gunTrials}},setWeapon,fireGun,get trials(){return {...trials}},get selectedId(){return selectedId},get pcTrials(){return {...pcTrials}},get comboTrials(){return {...comboTrials}},get hoverCursor(){return {...hoverCursor}},get enemyScreen(){return enemies.map(e=>({id:e.id,p:project(e.x,e.y+1.4,e.z)}))},pickHoveredEnemy,updateHoverSelection,get enemies(){return enemies.map(e=>({id:e.id,type:e.type,x:e.x,z:e.z,y:e.y,vx:e.vx,vz:e.vz,projectileUntil:e.projectileUntil,state:e.state,windup:e.windup,hp:e.hp,dead:e.dead}))},get player(){return {x:player.x,z:player.z,hp:player.hp,riposteUntil:player.riposteUntil,combo:player.comboStep,queuedSpecial:player.queuedSpecial,lastStrikeHitAt:player.lastStrikeHitAt,activeKind:player.activeKind,worldTime}},start,pause,resume,strike,dodge,setMode,switchByFlick,selectTarget,setReach(n){settings.reach=n;syncSettings('reach')},get glOk(){return !!gl}};
+// Simulate 25 FX-heavy shotgun bursts per second without changing live combat state.
+function stressShotgunEffects(shots=250){
+ const total=clamp(Math.floor(Number(shots)||250),1,1000);
+ const liveEffects=effects,liveRecoil=shotgunRecoil,liveShake=shake,volume=settings.hitSound;
+ const priorPeak=fxPeak,priorDropped=fxDropped;
+ effects=[];settings.hitSound=0;let peak=0;
+ try{
+  for(let i=0;i<total;i++){
+   spawnShotgunBlast(0,1.58,0,[0,-1],settings.shotgunRange);
+   for(let j=0;j<3;j++)spawnShotgunImpact({x:j-1,y:.5,z:-5},[0,-1],j===0?1:.68);
+   peak=Math.max(peak,effects.length);
+   updateFx(.04);
+  }
+  for(let i=0;i<60;i++)updateFx(.02);
+  return {shots:total,peak,remaining:effects.length,limit:FX_LIMIT,dropped:fxDropped-priorDropped,passed:peak<=FX_LIMIT&&effects.length===0};
+ }finally{
+  effects=liveEffects;shotgunRecoil=liveRecoil;shake=liveShake;settings.hitSound=volume;
+  fxPeak=priorPeak;fxDropped=priorDropped;
+ }
+}
+window.__rangeLabDebug={get perf(){return {effects:effects.length,peak:fxPeak,dropped:fxDropped,limit:FX_LIMIT,drawCalls:lastDrawCalls,frameMs:lastFrameMs,slowFrames,error:frameError}},stressShotgunEffects,get phase(){return phase},get settings(){return {...settings}},get weapon(){return weapon},get shotgunRecoil(){return shotgunRecoil},get visualEffects(){return effects.map(e=>e.kind)},get gunTrials(){return {...gunTrials}},setWeapon,fireGun,get trials(){return {...trials}},get selectedId(){return selectedId},get pcTrials(){return {...pcTrials}},get comboTrials(){return {...comboTrials}},get hoverCursor(){return {...hoverCursor}},get enemyScreen(){return enemies.map(e=>({id:e.id,p:project(e.x,e.y+1.4,e.z)}))},pickHoveredEnemy,updateHoverSelection,get enemies(){return enemies.map(e=>({id:e.id,type:e.type,x:e.x,z:e.z,y:e.y,vx:e.vx,vz:e.vz,projectileUntil:e.projectileUntil,state:e.state,windup:e.windup,hp:e.hp,dead:e.dead}))},get player(){return {x:player.x,z:player.z,hp:player.hp,riposteUntil:player.riposteUntil,combo:player.comboStep,queuedSpecial:player.queuedSpecial,lastStrikeHitAt:player.lastStrikeHitAt,activeKind:player.activeKind,worldTime}},start,pause,resume,strike,dodge,setMode,switchByFlick,selectTarget,setReach(n){settings.reach=n;syncSettings('reach')},get glOk(){return !!gl}};
 })();
 </script>
 </body></html>
