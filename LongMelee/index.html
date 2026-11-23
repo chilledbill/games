@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
 <meta name="theme-color" content="#0d1321"/>
-<title>REACH // Combo Mechanics Lab</title>
+<title>REACH // DMC Gun Combat Experiment</title>
 <style>
 :root {--bg:#0b1020;--panel:#101c2e;--border:#42607c;--text:#eff6ff;--muted:#9bafc7;--aqua:#68f3ef;--orange:#ffa96b;--pink:#ff6f92;--font:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:var(--bg);color:var(--text);font-family:var(--font);touch-action:none;user-select:none;-webkit-user-select:none}button,input,select{font-family:inherit}button{cursor:pointer}#world,#overlay{position:fixed;inset:0;width:100%;height:100%;display:block}#world{background:radial-gradient(circle at center,#26314d,#080e1a)}#overlay{pointer-events:none}#vignette{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 50%,rgba(3,7,16,.46) 100%)}#flash{position:fixed;inset:0;opacity:0;background:rgba(255,90,116,.24);pointer-events:none;transition:opacity .11s}
@@ -44,28 +44,35 @@
   #world{cursor:crosshair}
   .modeChoices{grid-template-columns:repeat(4,minmax(0,1fr))}
 }
+.saveNotice{font-size:11px;color:#9febdb;margin-top:9px;line-height:1.45}.saveNotice.warning{color:#ffc68e}.savedSettingsBtn{font-size:11px;padding:10px 13px}
+
+#weaponStatus{margin-top:6px;font-size:11px;color:#bcd0e4;letter-spacing:.04em}
+#weaponStatus b{color:#ffe39c;font-weight:950}
+.weaponHint{opacity:.65}
+#weaponToggle{border:1px solid #e7c381;background:#45311bd9;color:#fff0ce;border-radius:8px;padding:9px 10px;font-size:10px;font-weight:900;cursor:pointer;pointer-events:auto}
+#weaponToggle.shotgun{background:#744426;border-color:#ffb37b}
 </style>
 </head>
 <body>
 <canvas id="world"></canvas><canvas id="overlay"></canvas><div id="vignette"></div><div id="flash"></div>
-<div id="hud"><div id="brand">REACH // COMBO MECHANICS LAB</div><div id="hpbar"><div id="hpfill"></div></div><div id="hudInfo">REACH <span id="reachHud">12 m</span> · ZOOM <span id="zoomHud">1×</span> &nbsp;·&nbsp; WAVE <span id="waveHud">1</span> &nbsp;·&nbsp; KO <span id="koHud">0</span></div><div id="chain">0 HIT CHAIN</div></div>
-<div id="topRight"><button id="targetModeHUD" aria-label="Change targeting mode">AUTO TARGET</button><button id="pauseBtn" aria-label="Pause and settings">Ⅱ</button></div><div id="tip">PC: Left click STRIKE · Right click LAUNCH · E BLAST · F AIR SLAM · Space DODGE (late dodge = counter). COMBOS tab tracks new mechanics.</div><div id="toast"></div>
-<div id="testTracker"><button id="testPeek" aria-expanded="false">FEEL LAB <span id="testCount">0 / 6</span> <small> ▾</small><div id="testFill"><div id="testFillInner"></div></div></button><div id="testPanel"><h2 id="trackerTitle">MELEE FEEL — 6 CHECKS</h2><div id="testTabs"><button id="feelTab" class="selected">FEEL</button><button id="targetingTab">TARGETING</button><button id="pcHoverTab">PC HOVER</button><button id="comboTab">COMBOS</button></div><div id="trialNotice">Try landing hits with different impact settings.</div><ol id="testList"></ol><button id="resetTrials">RESET TRIALS</button></div></div>
-<div id="controls"><div id="joyZone" aria-label="Movement area"><div id="joy" aria-label="Movement joystick"><div id="stick"></div></div></div><div id="buttons"><button class="action" id="attack">STRIKE<small>HOLD</small></button><button class="action" id="launch">LAUNCH<small>↑</small></button><button class="action" id="blast">BLAST<small>↗</small></button><button class="action" id="dodge">DODGE<small>↝</small></button></div></div>
-<section id="menu" class="screen"><div class="panel"><div class="eyebrow">EXPERIMENT 04 • COMBO MECHANICS LAB</div><h1>REACH <b>//</b> COMBAT LAB</h1><p class="lede">Test three new combat decisions: <strong>slam an airborne enemy</strong> to end a juggle with a shockwave; <strong>blast a foe into another</strong> for a collision; and <strong>dodge a telegraphed melee attack at the last moment</strong> to earn a powered counterstrike. Keep hover-to-lock targeting, 12m reach, 2× tempo, and all game-feel sliders. Two enemies by default.</p>
- <div class="menuGrid"><div class="card"><div class="cardTitle">Quick melee-feel controls</div><div id="quickSettings"></div><div class="cardTitle" style="margin-top:9px">Targeting</div><div class="modeChoices" id="menuModes"></div><div class="cardTitle">Enemy behavior</div><div class="modeChoices enemyChoices" id="menuEnemies"></div></div><div class="card"><div class="cardTitle">How to play</div><div class="controlHint"><b>LEFT PAD</b><span>Move by dragging anywhere in the lower-left area; the stick follows your thumb</span></div><div class="controlHint"><b>STRIKE</b><span>Tap or hold for a three-hit chain. Third strike knocks back.</span></div><div class="controlHint"><b>LAUNCH</b><span>Send the targeted enemy airborne. Works immediately after STRIKE, including during recovery.</span></div><div class="controlHint"><b>BLAST</b><span>Knock enemies away, potentially into another foe.</span></div><div class="controlHint"><b>DODGE</b><span>Evade; last-second dodges against melee attacks empower your next STRIKE.</span></div><div class="controlHint"><b>AIR SLAM</b><span>PC F: slam a launched foe down; nearby enemies take shockwave damage. Ends the juggle.</span></div><div class="controlHint"><b>COLLISION</b><span>BLAST (E) sends foes flying. Line them up to hit another enemy for bonus damage and relaunch.</span></div><p class="hint"><strong>AUTO:</strong> game picks your target. <strong>DIR:</strong> move the left stick toward the opponent you want to hit. <strong>HYBRID:</strong> retains a target; <strong>flick the STRIKE button</strong> toward another enemy to switch. Tapping an enemy also works in hybrid.</p><p class="hint"><strong>FEEL LAB</strong> checks off successful strikes, air follow-ups, blast hits, and slider comparisons. Tap its header to open the objectives. Switch to the previous targeting tests using the TARGETING tab.</p><p class="hint"><strong>PASSIVE</strong> keeps two targets still for reliable hit-feedback tests; <strong>SPARRING</strong> activates their movement and attacks. Change the number of foes in pause settings.</p><p class="hint"><strong>PC HOVER:</strong> Move the mouse over an enemy to select it. Moving into empty space retains that target; moving over a different enemy switches. Each attack commits to its target at startup. Out-of-reach targets stay marked but cannot be hit.</p><p class="hint"><strong>PC:</strong> WASD move · Left mouse STRIKE (hold to chain) · Right mouse LAUNCH · E BLAST · F AIR SLAM (launched targets only) · Space DODGE / perfect evade · P / Esc pause. A perfect evade requires SPARRING AI and a late dodge inside melee range. The original J/K/L shortcuts remain available. Open the new COMBOS tracker tab to see what to test.</p></div></div>
- <div class="menuFooter"><button id="startBtn" class="primary">START FEEL TEST ▶</button><span class="smallNote">Offline • 2 training enemies • PC mouse + mobile touch</span></div>
+<div id="hud"><div id="brand">REACH // GUN COMBAT EXPERIMENT</div><div id="hpbar"><div id="hpfill"></div></div><div id="hudInfo">REACH <span id="reachHud">12 m</span> · ZOOM <span id="zoomHud">1×</span> &nbsp;·&nbsp; WAVE <span id="waveHud">1</span> &nbsp;·&nbsp; KO <span id="koHud">0</span></div><div id="weaponStatus" aria-live="polite">WEAPON: <b id="weaponHud">DUAL PISTOLS</b> <span class="weaponHint">[1 / 2]</span></div><div id="chain">0 HIT CHAIN</div></div>
+<div id="topRight"><button id="weaponToggle" aria-label="Switch pistols and shotgun">PISTOLS [1/2]</button><button id="targetModeHUD" aria-label="Change targeting mode">AUTO TARGET</button><button id="pauseBtn" aria-label="Pause and settings">Ⅱ</button></div><div id="tip">DMC GUN LAB: 1 PISTOLS · RMB LAUNCH · LMB sustain · 2 SHOTGUN · LMB knockback · E directional blast · Space dodge.</div><div id="toast"></div>
+<div id="testTracker"><button id="testPeek" aria-expanded="false">FEEL LAB <span id="testCount">0 / 6</span> <small> ▾</small><div id="testFill"><div id="testFillInner"></div></div></button><div id="testPanel"><h2 id="trackerTitle">MELEE FEEL — 6 CHECKS</h2><div id="testTabs"><button id="feelTab" class="selected">FEEL</button><button id="targetingTab">TARGETING</button><button id="pcHoverTab">PC HOVER</button><button id="comboTab">COMBOS</button><button id="gunTab">GUN LAB</button></div><div id="trialNotice">Try landing hits with different impact settings.</div><ol id="testList"></ol><button id="resetTrials">RESET TRIALS</button></div></div>
+<div id="controls"><div id="joyZone" aria-label="Movement area"><div id="joy" aria-label="Movement joystick"><div id="stick"></div></div></div><div id="buttons"><button class="action" id="attack">FIRE<small>HOLD</small></button><button class="action" id="launch">LAUNCH<small>↑</small></button><button class="action" id="blast">BLAST<small>↗</small></button><button class="action" id="dodge">DODGE<small>↝</small></button></div></div>
+<section id="menu" class="screen"><div class="panel"><div class="eyebrow">EXPERIMENT 05 • DMC GUN COMBAT BRANCH</div><h1>REACH <b>//</b> COMBAT LAB</h1><p class="lede"><strong>Separate gun-combat experiment.</strong> Dual pistols maintain airborne enemies; a shotgun sacrifices that control to launch them horizontally into walls and other enemies. Keep your familiar PC hover soft lock, 12m reach, two-target training arena, game-feel sliders, and milestones. The melee build remains available on the original branch.</p>
+ <div class="menuGrid"><div class="card"><div class="cardTitle">Quick gun-combat controls</div><div id="quickSettings"></div><div class="cardTitle" style="margin-top:9px">Targeting</div><div class="modeChoices" id="menuModes"></div><div class="cardTitle">Enemy behavior</div><div class="modeChoices enemyChoices" id="menuEnemies"></div></div><div class="card"><div class="cardTitle">How to play</div><div class="controlHint"><b>LEFT PAD</b><span>Move by dragging anywhere in the lower-left area; the stick follows your thumb</span></div><div class="controlHint"><b>FIRE</b><span>Left click or tap: PISTOLS rapid fire / SHOTGUN heavy knockback. Weapon select: 1 / 2 or top HUD.</span></div><div class="controlHint"><b>LAUNCH</b><span>Right click (or Q) launches the target; pistol shots then maintain a short aerial combo.</span></div><div class="controlHint"><b>BLAST</b><span>E / BLAST: strong directional knockback; shoot into another foe or wall.</span></div><div class="controlHint"><b>DODGE</b><span>Evade; last-second dodges against melee attacks empower your next STRIKE.</span></div><div class="controlHint"><b>AIR SLAM</b><span>PC F: slam a launched foe down; nearby enemies take shockwave damage. Ends the juggle.</span></div><div class="controlHint"><b>COLLISION</b><span>BLAST (E) sends foes flying. Line them up to hit another enemy for bonus damage and relaunch.</span></div><p class="hint"><strong>AUTO:</strong> game picks your target. <strong>DIR:</strong> move the left stick toward the opponent you want to hit. <strong>HYBRID:</strong> retains a target; <strong>flick the STRIKE button</strong> toward another enemy to switch. Tapping an enemy also works in hybrid.</p><p class="hint"><strong>FEEL LAB</strong> checks off successful strikes, air follow-ups, blast hits, and slider comparisons. Tap its header to open the objectives. Switch to the previous targeting tests using the TARGETING tab.</p><p class="hint"><strong>PASSIVE</strong> keeps two targets still for reliable hit-feedback tests; <strong>SPARRING</strong> activates their movement and attacks. Change the number of foes in pause settings.</p><p class="hint"><strong>PC HOVER:</strong> Move the mouse over an enemy to select it. Moving into empty space retains that target; moving over a different enemy switches. Each attack commits to its target at startup. Out-of-reach targets stay marked but cannot be hit.</p><p class="hint"><strong>PC:</strong> WASD move · hover enemy for persistent soft lock · LMB FIRE · RMB LAUNCH · 1/2 switch gun · Q LAUNCH · E DIRECTIONAL BLAST · F AIR SLAM · Space DODGE. Switch during a juggle: pistols sustain, shotgun redirects. <strong>GUN LAB</strong> tab tracks live hit-confirmed milestones.</p></div></div>
+ <div class="menuFooter"><button id="startBtn" class="primary">START GUN LAB ▶</button><button id="resetSavedMenu" class="secondary savedSettingsBtn" type="button">RESET SAVED SETTINGS</button><span class="smallNote">Separate DMC-inspired experiment • Offline • 2 targets</span></div><p id="saveNoticeMenu" class="saveNotice" role="status" aria-live="polite">Settings save automatically in this browser.</p>
 </div></section>
-<section id="pauseScreen" class="screen hide"><div class="panel pausePanel"><div class="eyebrow">LIVE TUNING</div><div class="pauseHead"><h1 style="font-size:clamp(23px,5vh,38px);margin:6px 0">PAUSE <b>//</b> SETTINGS</h1><button id="resumeTop" class="secondary">RESUME ▶</button></div><p class="lede">Changes apply immediately. PASSIVE targets work for slams and enemy collisions. Enable SPARRING to test perfect evades and powered counterstrikes. Zoom, hit-stop, speed, damage, and other settings are unchanged. Enemy count changes reset the encounter.</p><div class="modeChoices" id="pauseModes"></div><div class="cardTitle">Enemy behavior</div><div class="modeChoices enemyChoices" id="pauseEnemies"></div><div id="fullSettings" class="settingsGrid"></div><div class="menuFooter"><button id="resumeBtn" class="primary">RESUME ▶</button><button id="resetBtn" class="secondary">RESET ENCOUNTER</button><button id="mainMenuBtn" class="secondary">MAIN MENU</button></div></div></section>
+<section id="pauseScreen" class="screen hide"><div class="panel pausePanel"><div class="eyebrow">LIVE TUNING</div><div class="pauseHead"><h1 style="font-size:clamp(23px,5vh,38px);margin:6px 0">PAUSE <b>//</b> SETTINGS</h1><button id="resumeTop" class="secondary">RESUME ▶</button></div><p class="lede">Changes apply immediately. Tune pistol cadence, shotgun cadence and reach, air sustain limits, camera zoom, and hit feedback. Use PASSIVE for predictable combo tests, or SPARRING to test the weapons under pressure. Enemy count changes reset the encounter.</p><div class="modeChoices" id="pauseModes"></div><div class="cardTitle">Enemy behavior</div><div class="modeChoices enemyChoices" id="pauseEnemies"></div><div id="fullSettings" class="settingsGrid"></div><div class="menuFooter"><button id="resumeBtn" class="primary">RESUME ▶</button><button id="resetBtn" class="secondary">RESET ENCOUNTER</button><button id="mainMenuBtn" class="secondary">MAIN MENU</button><button id="resetSavedPause" class="secondary savedSettingsBtn" type="button">RESET SAVED SETTINGS</button></div><p id="saveNoticePause" class="saveNotice" role="status" aria-live="polite">Settings save automatically in this browser.</p></div></section>
 <section id="rotate"><div class="rotIcon">▭ ↻</div><h2>ROTATE TO LANDSCAPE</h2><p>Wider space keeps the movement and combat controls separate.</p></section>
 <script>
 (()=>{'use strict';
 const $=id=>document.getElementById(id), clamp=(v,a,b)=>Math.max(a,Math.min(b,v)), mix=(a,b,t)=>a+(b-a)*t, rnd=(a,b)=>a+Math.random()*(b-a), TAU=Math.PI*2;
-const defs={zoom:{label:'Camera zoom (in = higher)',min:.7,max:2,step:.05,unit:'×'},enemyCount:{label:'Enemies on screen',min:2,max:7,step:1,unit:' foes'},enemyHP:{label:'Target health',min:60,max:400,step:20,unit:' HP'},impactFX:{label:'Impact sparks',min:0,max:100,step:5,unit:'%'},reaction:{label:'Enemy hit reaction',min:.3,max:2,step:.1,unit:'×'},hitSound:{label:'Impact sound volume',min:0,max:100,step:5,unit:'%'},reach:{label:'Attack reach',min:2,max:25,step:1,unit:' m'},moveSpeed:{label:'Movement speed',min:3,max:12,step:.5,unit:' m/s'},attackRate:{label:'Attack tempo',min:.5,max:2,step:.1,unit:'×'},airHang:{label:'Airborne duration',min:.6,max:3,step:.1,unit:' s'},slamRadius:{label:'Air slam shockwave radius',min:2,max:7,step:.25,unit:' m'},evadeWindow:{label:'Perfect evade timing window',min:.1,max:.45,step:.05,unit:' s'},collisionRadius:{label:'Enemy collision leniency',min:1.4,max:2.7,step:.05,unit:' m'},launchForce:{label:'Launch power',min:3,max:11,step:.5,unit:''},knockback:{label:'Knockback force',min:1,max:13,step:.5,unit:''},enemyPressure:{label:'Enemy pressure',min:.3,max:2,step:.1,unit:'×'},comboWindow:{label:'Combo link window',min:.35,max:1.6,step:.05,unit:' s'},hitstop:{label:'Hit-stop',min:0,max:110,step:5,unit:' ms'},shake:{label:'Camera shake',min:0,max:100,step:5,unit:'%'},damage:{label:'Attack damage',min:.4,max:1.5,step:.05,unit:'×'}};
+const defs={zoom:{label:'Camera zoom (in = higher)',min:.7,max:2,step:.05,unit:'×'},enemyCount:{label:'Enemies on screen',min:2,max:7,step:1,unit:' foes'},enemyHP:{label:'Target health',min:60,max:400,step:20,unit:' HP'},impactFX:{label:'Impact sparks',min:0,max:100,step:5,unit:'%'},reaction:{label:'Enemy hit reaction',min:.3,max:2,step:.1,unit:'×'},hitSound:{label:'Impact sound volume',min:0,max:100,step:5,unit:'%'},reach:{label:'Attack reach',min:2,max:25,step:1,unit:' m'},moveSpeed:{label:'Movement speed',min:3,max:12,step:.5,unit:' m/s'},attackRate:{label:'Attack tempo',min:.5,max:2,step:.1,unit:'×'},airHang:{label:'Airborne duration',min:.6,max:3,step:.1,unit:' s'},slamRadius:{label:'Air slam shockwave radius',min:2,max:7,step:.25,unit:' m'},evadeWindow:{label:'Perfect evade timing window',min:.1,max:.45,step:.05,unit:' s'},collisionRadius:{label:'Enemy collision leniency',min:1.4,max:2.7,step:.05,unit:' m'},launchForce:{label:'Launch power',min:3,max:11,step:.5,unit:''},knockback:{label:'Knockback force',min:1,max:13,step:.5,unit:''},enemyPressure:{label:'Enemy pressure',min:.3,max:2,step:.1,unit:'×'},comboWindow:{label:'Combo link window',min:.35,max:1.6,step:.05,unit:' s'},hitstop:{label:'Hit-stop',min:0,max:110,step:5,unit:' ms'},shake:{label:'Camera shake',min:0,max:100,step:5,unit:'%'},damage:{label:'Attack damage',min:.4,max:1.5,step:.05,unit:'×'},pistolInterval:{label:'Pistol shot interval',min:.09,max:.30,step:.01,unit:' s'},shotgunInterval:{label:'Shotgun shot interval',min:.25,max:.80,step:.01,unit:' s'},shotgunRange:{label:'Shotgun effective reach',min:3,max:12,step:.5,unit:' m'},sustainHits:{label:'Full-strength air sustain hits',min:1,max:6,step:1,unit:' hits'}};
 const pcPointer=!!(window.matchMedia&&window.matchMedia('(hover:hover) and (pointer:fine)').matches);
-const defaults={zoom:1,enemyCount:2,enemyHP:180,impactFX:75,reaction:1.1,hitSound:35,enemyAI:'passive',reach:12,moveSpeed:7,attackRate:2,airHang:2.1,slamRadius:4.4,evadeWindow:.27,collisionRadius:2.05,launchForce:7,knockback:6,enemyPressure:1,comboWindow:.92,hitstop:40,shake:40,damage:1,aimMode:pcPointer?'hover':'hybrid'};
+const defaults={zoom:1,enemyCount:2,enemyHP:180,impactFX:75,reaction:1.1,hitSound:35,enemyAI:'passive',reach:12,moveSpeed:7,attackRate:2,airHang:2.1,slamRadius:4.4,evadeWindow:.27,collisionRadius:2.05,launchForce:7,knockback:6,enemyPressure:1,comboWindow:.92,hitstop:40,shake:40,damage:1,pistolInterval:.15,shotgunInterval:.43,shotgunRange:9,sustainHits:3,aimMode:pcPointer?'hover':'hybrid'};
 let settings={...defaults},tempo2Migration=true,pcHoverMigration=pcPointer;
-try{const s=JSON.parse(localStorage.getItem('reachLabV1')||'{}');for(const k of Object.keys(defaults))if(s[k]!==undefined)settings[k]=s[k];tempo2Migration=s.__tempo2Migration!==true;pcHoverMigration=pcPointer&&s.__pcHoverMigration!==true}catch(e){}
+try{const s=JSON.parse(localStorage.getItem('reachDmcLabV1')||'{}');for(const k of Object.keys(defaults))if(s[k]!==undefined)settings[k]=s[k];tempo2Migration=s.__tempo2Migration!==true;pcHoverMigration=pcPointer&&s.__pcHoverMigration!==true}catch(e){}
 // Apply this build's 2x tempo once, even if the previous version stored a slower setting.
 // Afterwards, respect any further slider changes the player makes.
 if(tempo2Migration)settings.attackRate=2;
@@ -73,11 +80,15 @@ if(tempo2Migration)settings.attackRate=2;
 if(pcHoverMigration)settings.aimMode='hover';
 if(!['auto','directional','hybrid','hover'].includes(settings.aimMode))settings.aimMode=defaults.aimMode;
 if(!pcPointer&&settings.aimMode==='hover')settings.aimMode='hybrid';
-const save=()=>{try{localStorage.setItem('reachLabV1',JSON.stringify({...settings,__tempo2Migration:true,__pcHoverMigration:pcPointer}))}catch(e){}};
-if(tempo2Migration||pcHoverMigration)save();
+function showSaveNotice(message,warning=false){for(const id of ['saveNoticeMenu','saveNoticePause']){const el=$(id);if(el){el.textContent=message;el.classList.toggle('warning',warning)}}}
+const save=()=>{try{localStorage.setItem('reachDmcLabV1',JSON.stringify({...settings,__tempo2Migration:true,__pcHoverMigration:pcPointer}));showSaveNotice('✓ Settings saved automatically on this device.')}catch(e){showSaveNotice('Browser storage is unavailable. Settings will reset when you reopen the game.',true)}};
+function resetSavedSettings(){if(!window.confirm('Reset all saved REACH settings to defaults? The game will reload.'))return;try{localStorage.removeItem('reachDmcLabV1');localStorage.removeItem('reachDmcGunV1')}catch(e){}window.location.reload()}
+$('resetSavedMenu').addEventListener('click',resetSavedSettings);
+$('resetSavedPause').addEventListener('click',resetSavedSettings);
+if(tempo2Migration||pcHoverMigration)save();else{try{localStorage.getItem('reachDmcLabV1')!==null?showSaveNotice('✓ Saved settings restored from this browser.'):showSaveNotice('Adjust any slider to save your settings automatically.')}catch(e){showSaveNotice('Browser storage is unavailable. Settings may reset when you reopen the game.',true)}}
 function addSliders(host,keys){for(const k of keys){let d=defs[k],wrap=document.createElement('div');wrap.className='field';wrap.innerHTML=`<div class="fieldHead"><label for="${host.id}_${k}">${d.label}</label><output></output></div><input type="range" id="${host.id}_${k}" min="${d.min}" max="${d.max}" step="${d.step}" value="${settings[k]}">`;host.append(wrap);let inp=wrap.querySelector('input'),out=wrap.querySelector('output');function update(){const n=+inp.value;settings[k]=n;out.textContent=Number.isInteger(n)?`${n}${d.unit}`:`${n.toFixed(d.step<.1?2:1)}${d.unit}`;inp.style.setProperty('--pct',`${(n-d.min)/(d.max-d.min)*100}%`);save();syncSettings(k);if(k==='reach'){$('reachHud').textContent=n+' m';document.querySelectorAll('.preset').forEach(x=>x.classList.toggle('active',+x.dataset.reach===n))}if(k==='zoom'){$('zoomHud').textContent=n.toFixed(2)+'×';finishFeelTrial('zoom')}if(k==='hitstop'){if(n<=10)feelHitstopLow=true;if(n>=55)feelHitstopHigh=true;if(feelHitstopLow&&feelHitstopHigh)finishFeelTrial('hitstop')}if(k==='enemyCount'&&phase!=='menu')reset();if(k==='enemyHP'&&phase!=='menu'){for(const e of enemies){const ratio=e.maxHp>0?e.hp/e.maxHp:1;e.maxHp=n*(e.type==='caster'?.8:1);e.hp=Math.max(0,ratio*e.maxHp)}}}inp.addEventListener('input',update);out.textContent=settings[k]+d.unit;inp.style.setProperty('--pct',`${(settings[k]-d.min)/(d.max-d.min)*100}%`);}}
 const sliderRefs={};function syncSettings(key){for(const i of document.querySelectorAll(`input[type=range]`)){if(i.id.endsWith('_'+key)&&+i.value!==settings[key]){i.value=settings[key];const d=defs[key];i.closest('.field').querySelector('output').textContent=settings[key]+d.unit;i.style.setProperty('--pct',`${(settings[key]-d.min)/(d.max-d.min)*100}%`)}}}
-addSliders($('quickSettings'),['reach','zoom','attackRate','slamRadius','hitstop','impactFX']);addSliders($('fullSettings'),Object.keys(defs));
+addSliders($('quickSettings'),['reach','zoom','pistolInterval','shotgunInterval','hitstop','impactFX']);addSliders($('fullSettings'),Object.keys(defs));
 for(const hostId of ['quickSettings','fullSettings']){const host=$(hostId),first=host.querySelector('.field'),presets=document.createElement('div');presets.className='presets';for(const n of [2,6,12,25]){let b=document.createElement('button');b.className='preset';b.dataset.reach=String(n);b.textContent=n+' m';b.addEventListener('click',()=>{settings.reach=n;syncSettings('reach');$('reachHud').textContent=n+' m';document.querySelectorAll('.preset').forEach(x=>x.classList.toggle('active',+x.dataset.reach===n));save()});presets.append(b)}first.after(presets)}document.querySelectorAll('.preset').forEach(x=>x.classList.toggle('active',+x.dataset.reach===settings.reach));
 function modeLabel(m){return {auto:'AUTO',directional:'DIR',hybrid:'HYBRID',hover:'PC HOVER'}[m]||'AUTO'}
 function setMode(mode){if(!['auto','directional','hybrid','hover'].includes(mode)||mode==='hover'&&!pcPointer)return;if(settings.aimMode!==mode){selectedId=null;pendingFlickId=null;dirPrevHitId=null;autoPrevHitId=null;autoHitCount=0}settings.aimMode=mode;document.querySelectorAll('.modeChoice').forEach(b=>b.classList.toggle('selected',b.dataset.mode===mode));$('targetModeHUD').textContent=modeLabel(mode)+' ▾';save();if(window.__rangeLabDebug&&phase==='playing'){renderPhase();announce(modeLabel(mode)+' TARGETING')}}
@@ -116,11 +127,12 @@ let phase='menu',frame=0,worldTime=0,hitPause=0,shake=0,lastMissAt=-99,events=[]
 const hoverCursor={x:-999,y:-999,valid:false,over:null};
 let pcTrials={acquire:false,hold:false,switch:false,launcher:false},pcFirstHoverId=null;
 let pendingFlickId=null,autoPrevHitId=null,autoHitCount=0,dirPrevHitId=null,lastTargetMethod='auto';
-const player={x:0,z:0,y:0,angle:Math.PI,vx:0,vz:0,hp:100,maxHp:100,act:0,attackUntil:0,comboStep:0,lastAttackAt:-99,nextAttack:0,queued:false,queuedUntil:0,queuedSpecial:null,queuedSpecialUntil:0,activeKind:null,attackStartedAt:-99,lastStrikeHitAt:-99,lastStrikeTargetId:null,dodging:0,invuln:0,riposteUntil:0,phase:0};
+let weapon='pistols',gunShotCommittedAt=-99;const gunReady={pistols:0,shotgun:0};
+const player={x:0,z:0,y:0,angle:Math.PI,vx:0,vz:0,hp:100,maxHp:100,act:0,attackUntil:0,comboStep:0,lastAttackAt:-99,nextAttack:0,queued:false,queuedGun:false,queuedUntil:0,queuedSpecial:null,queuedSpecialUntil:0,activeKind:null,attackStartedAt:-99,lastStrikeHitAt:-99,lastStrikeTargetId:null,dodging:0,invuln:0,riposteUntil:0,phase:0};
 let keys={},joy={x:0,y:0,pointer:null},attackHeld=false;
 function normal2(x,z){const l=Math.hypot(x,z);return l>0?[x/l,z/l]:[0,0]}
 function dist(a,b){return Math.hypot(a.x-b.x,a.z-b.z)}
-function makeEnemy(type,x,z){const hp=settings.enemyHP*(type==='caster'?.8:1);return {id:nextId++,type,x,z,y:0,vx:0,vz:0,vy:0,angle:0,hp,maxHp:hp,stagger:0,stun:0,armor:0,lastHit:-99,launchUntil:0,juggles:0,dead:false,deathT:0,state:'chase',windup:0,attackCd:rnd(.4,1.7),collideCd:0,projectileUntil:0,glow:0,recoil:0,step:rnd(0,TAU),side:Math.random()<.5?-1:1}}
+function makeEnemy(type,x,z){const hp=settings.enemyHP*(type==='caster'?.8:1);return {id:nextId++,type,x,z,y:0,vx:0,vz:0,vy:0,angle:0,hp,maxHp:hp,stagger:0,stun:0,armor:0,lastHit:-99,launchUntil:0,juggles:0,dead:false,deathT:0,state:'chase',windup:0,attackCd:rnd(.4,1.7),collideCd:0,projectileUntil:0,wallBounces:0,sustainCount:0,glow:0,recoil:0,step:rnd(0,TAU),side:Math.random()<.5?-1:1}}
 function spawnWave(){
  enemies=[];orbs=[];selectedId=null;const count=settings.enemyCount;
  for(let i=0;i<count;i++){
@@ -131,7 +143,7 @@ function spawnWave(){
  }
  announce(settings.enemyAI==='passive'?`${count} TRAINING TARGETS`:`WAVE ${wave}`)
 }
-function reset(){relay={id:null,stage:0};player.x=0;player.z=0;player.y=0;player.vx=0;player.vz=0;player.hp=100;player.angle=Math.PI;player.act=0;player.comboStep=0;player.attackUntil=0;player.lastAttackAt=-99;player.nextAttack=0;player.queued=false;player.queuedSpecial=null;player.queuedSpecialUntil=0;player.activeKind=null;player.attackStartedAt=-99;player.lastStrikeHitAt=-99;player.lastStrikeTargetId=null;player.dodging=0;player.invuln=0;player.riposteUntil=0;events=[];effects=[];combatText=[];kills=0;wave=1;comboHits=0;worldTime=0;hitPause=0;spawnWave();updateHUD()}
+function reset(){relay={id:null,stage:0};player.x=0;player.z=0;player.y=0;player.vx=0;player.vz=0;player.hp=100;player.angle=Math.PI;player.act=0;player.comboStep=0;player.attackUntil=0;player.lastAttackAt=-99;player.nextAttack=0;gunReady.pistols=0;gunReady.shotgun=0;player.queued=false;player.queuedGun=false;player.queuedSpecial=null;player.queuedSpecialUntil=0;player.activeKind=null;player.attackStartedAt=-99;player.lastStrikeHitAt=-99;player.lastStrikeTargetId=null;player.dodging=0;player.invuln=0;player.riposteUntil=0;events=[];effects=[];combatText=[];kills=0;wave=1;comboHits=0;worldTime=0;hitPause=0;spawnWave();updateHUD();updateWeaponHUD()}
 function announce(s){$('toast').textContent=s;$('toast').style.opacity='1';toastUntil=performance.now()+1100}
 // Independently tracked milestones; only successful combat hits count.
 const trialTitles=[
@@ -142,6 +154,16 @@ const trialTitles=[
 ];
 let trials={auto:false,directional:false,hybrid:false,relay:false};
 let relay={id:null,stage:0};
+const gunTitles=[
+ ['pistol','PISTOLS · hit with LMB','Switch to pistols [1], hover an enemy, and land a shot'],
+ ['launch','LAUNCH · right click','Launch a targeted enemy with right mouse (or Q)'],
+ ['sustain','SUSTAIN · 2 airborne pistol hits','Launch, then land at least two pistol shots while the target remains airborne'],
+ ['switch','SWITCH · shotgun follow-up','After a pistol air hit, switch to shotgun [2] and hit the same airborne enemy'],
+ ['wall','WALL BOUNCE · blast into arena boundary','Send a knocked-back enemy into a boundary while it is still travelling'],
+ ['body','BODY COLLISION · knock one enemy into another','Use shotgun or E blast to send one opponent into the other']
+];
+let gunTrials={pistol:false,launch:false,sustain:false,switch:false,wall:false,body:false};
+const gunCombo={id:null,sustain:0,pistolAir:false,shotgunFollow:false};
 const feelTitles=[
  ['strike','STRIKE · land a two-hit chain','Two strikes must connect with the same opponent'],
  ['link','LINK · strike → launcher','Hit an enemy with STRIKE, then LAUNCH that same enemy immediately'],
@@ -156,7 +178,7 @@ const pcTrialTitles=[
  ['switch','SWITCH · hover the other enemy','Move the cursor to another opponent; the soft lock should move'],
  ['launcher','LAUNCH · right-click the locked enemy','Hit the locked opponent with right mouse to launch it']
 ];
-let trackerTab=pcPointer?'combos':'feel',feelTrials={strike:false,link:false,air:false,blast:false,zoom:false,hitstop:false};
+let trackerTab=pcPointer?'gun':'gun',feelTrials={strike:false,link:false,air:false,blast:false,zoom:false,hitstop:false};
 let feelPrevStrikeId=null,feelPrevStrikeAt=-99,feelAirId=null,feelHitstopLow=false,feelHitstopHigh=false;
 const comboTitles=[
  ['slam','AIR SLAM · launch → F','Launch an opponent with RIGHT CLICK, then press F while that target is airborne. It must hit and land.'],
@@ -178,11 +200,11 @@ function recordFeelHit(e,kind){
  if(kind==='blast')finishFeelTrial('blast');
 }
 function refreshTracker(){
- const active=trackerTab==='combos'?comboTrials:trackerTab==='feel'?feelTrials:trackerTab==='pc'?pcTrials:trials,titles=trackerTab==='combos'?comboTitles:trackerTab==='feel'?feelTitles:trackerTab==='pc'?pcTrialTitles:trialTitles;
+ const active=trackerTab==='gun'?gunTrials:trackerTab==='combos'?comboTrials:trackerTab==='feel'?feelTrials:trackerTab==='pc'?pcTrials:trials,titles=trackerTab==='gun'?gunTitles:trackerTab==='combos'?comboTitles:trackerTab==='feel'?feelTitles:trackerTab==='pc'?pcTrialTitles:trialTitles;
  const done=titles.filter(([k])=>active[k]).length;
  $('testCount').textContent=done+' / '+titles.length;$('testFillInner').style.width=(done/titles.length*100)+'%';
- $('trackerTitle').textContent=trackerTab==='combos'?'NEW MECHANICS — 5 CHECKS':trackerTab==='feel'?'MELEE FEEL — 6 CHECKS':trackerTab==='pc'?'PC HOVER — 4 CHECKS':'TARGETING TRIALS — 4 CHECKS';
- $('comboTab').classList.toggle('selected',trackerTab==='combos');$('feelTab').classList.toggle('selected',trackerTab==='feel');$('targetingTab').classList.toggle('selected',trackerTab==='targeting');$('pcHoverTab').classList.toggle('selected',trackerTab==='pc');
+ $('trackerTitle').textContent=trackerTab==='gun'?'GUN LAB — 6 CHECKS':trackerTab==='combos'?'NEW MECHANICS — 5 CHECKS':trackerTab==='feel'?'MELEE FEEL — 6 CHECKS':trackerTab==='pc'?'PC HOVER — 4 CHECKS':'TARGETING TRIALS — 4 CHECKS';
+ $('gunTab').classList.toggle('selected',trackerTab==='gun');$('comboTab').classList.toggle('selected',trackerTab==='combos');$('feelTab').classList.toggle('selected',trackerTab==='feel');$('targetingTab').classList.toggle('selected',trackerTab==='targeting');$('pcHoverTab').classList.toggle('selected',trackerTab==='pc');
  const list=$('testList');list.innerHTML='';for(const [key,title,hint] of titles){
   const li=document.createElement('li');li.className=active[key]?'done':'';
   const check=document.createElement('span');check.className='check';check.textContent=active[key]?'✓':'·';
@@ -191,8 +213,8 @@ function refreshTracker(){
  }
  const next=titles.find(([key])=>!active[key]);
  $('trialNotice').textContent=next?`NEXT: ${next[1]}. ${next[2]}`:'ALL COMPLETE! Compare which settings felt best.';
- $('testPeek').firstChild.textContent=(trackerTab==='combos'?'COMBOS ':trackerTab==='feel'?'FEEL LAB ':trackerTab==='pc'?'PC HOVER ':'TARGETING ');
- $('resetTrials').textContent=trackerTab==='combos'?'RESET COMBO CHECKS':trackerTab==='feel'?'RESET FEEL CHECKS':trackerTab==='pc'?'RESET PC CHECKS':'RESET TARGETING CHECKS';
+ $('testPeek').firstChild.textContent=(trackerTab==='gun'?'GUN LAB ':trackerTab==='combos'?'COMBOS ':trackerTab==='feel'?'FEEL LAB ':trackerTab==='pc'?'PC HOVER ':'TARGETING ');
+ $('resetTrials').textContent=trackerTab==='gun'?'RESET GUN CHECKS':trackerTab==='combos'?'RESET COMBO CHECKS':trackerTab==='feel'?'RESET FEEL CHECKS':trackerTab==='pc'?'RESET PC CHECKS':'RESET TARGETING CHECKS';
 }
 function finishTrial(key){if(trials[key])return;trials[key]=true;refreshTracker();announce('✓ '+key.toUpperCase()+' TRIAL COMPLETE')}
 function recordTrialHit(e,kind,aimedByStick){
@@ -209,17 +231,18 @@ function recordTrialHit(e,kind,aimedByStick){
  if(relay.stage===2&&e.id===relay.id&&kind==='strike'&&e.y>.17){relay={id:null,stage:0};finishTrial('relay')}
 }
 $('testPeek').addEventListener('click',()=>{const tracker=$('testTracker');const opened=tracker.classList.toggle('open');$('testPeek').setAttribute('aria-expanded',String(opened))});
+$('gunTab').addEventListener('click',()=>{trackerTab='gun';refreshTracker()});
 $('comboTab').addEventListener('click',()=>{trackerTab='combos';refreshTracker()});$('feelTab').addEventListener('click',()=>{trackerTab='feel';refreshTracker()});
 $('targetingTab').addEventListener('click',()=>{trackerTab='targeting';refreshTracker()});
 $('pcHoverTab').addEventListener('click',()=>{trackerTab='pc';refreshTracker()});
 if(!pcPointer){$('pcHoverTab').style.display='none';$('comboTab').style.display='none'}
-$('resetTrials').addEventListener('click',()=>{if(trackerTab==='combos'){comboTrials={slam:false,shock:false,collision:false,evade:false,counter:false};}else if(trackerTab==='feel'){feelTrials={strike:false,link:false,air:false,blast:false,zoom:false,hitstop:false};feelPrevStrikeId=null;feelPrevStrikeAt=-99;feelAirId=null;feelHitstopLow=false;feelHitstopHigh=false;}else if(trackerTab==='pc'){pcTrials={acquire:false,hold:false,switch:false,launcher:false};pcFirstHoverId=null;}else{trials={auto:false,directional:false,hybrid:false,relay:false};relay={id:null,stage:0};autoPrevHitId=null;autoHitCount=0;dirPrevHitId=null;pendingFlickId=null;}refreshTracker()});
+$('resetTrials').addEventListener('click',()=>{if(trackerTab==='gun'){gunTrials={pistol:false,launch:false,sustain:false,switch:false,wall:false,body:false};gunCombo.id=null;gunCombo.sustain=0;gunCombo.pistolAir=false;}else if(trackerTab==='combos'){comboTrials={slam:false,shock:false,collision:false,evade:false,counter:false};}else if(trackerTab==='feel'){feelTrials={strike:false,link:false,air:false,blast:false,zoom:false,hitstop:false};feelPrevStrikeId=null;feelPrevStrikeAt=-99;feelAirId=null;feelHitstopLow=false;feelHitstopHigh=false;}else if(trackerTab==='pc'){pcTrials={acquire:false,hold:false,switch:false,launcher:false};pcFirstHoverId=null;}else{trials={auto:false,directional:false,hybrid:false,relay:false};relay={id:null,stage:0};autoPrevHitId=null;autoHitCount=0;dirPrevHitId=null;pendingFlickId=null;}refreshTracker()});
 refreshTracker();
-function renderPhase(){const active=phase==='playing';$('tip').textContent=pcPointer&&settings.aimMode==='hover'?'PC HOVER: Point at enemy A → move into empty space → point at B. Left click STRIKE, right click LAUNCH, E BLAST. Open PC HOVER tracker for tests.':'Two-target feel test: adjust ZOOM and HIT-STOP in pause. Tap LAB for objectives.';$('testTracker').style.display=active?'block':'none';$('hud').style.display=active?'block':'none';$('topRight').style.display=active?'flex':'none';$('controls').style.display=active?'block':'none';$('tip').style.display=active?'block':'none';$('menu').classList.toggle('hide',phase!=='menu');$('pauseScreen').classList.toggle('hide',phase!=='paused');}
-function start(){ensureAudio();reset();phase='playing';if(pcPointer&&settings.aimMode==='hover'){trackerTab='pc';refreshTracker()}renderPhase();if(screen.orientation?.lock)screen.orientation.lock('landscape').catch(()=>{});}
+function renderPhase(){const active=phase==='playing';$('tip').textContent=pcPointer&&settings.aimMode==='hover'?'PC HOVER: Mouse selects and retains enemies. LMB FIRE · RMB LAUNCH · 1/2 guns · E BLAST. Open GUN LAB tracker.':'Gun experiment: launch with right click, sustain with pistols, switch to shotgun and redirect the enemy. Open GUN LAB tracker.';$('testTracker').style.display=active?'block':'none';$('hud').style.display=active?'block':'none';$('topRight').style.display=active?'flex':'none';$('controls').style.display=active?'block':'none';$('tip').style.display=active?'block':'none';$('menu').classList.toggle('hide',phase!=='menu');$('pauseScreen').classList.toggle('hide',phase!=='paused');}
+function start(){ensureAudio();reset();phase='playing';if(pcPointer&&settings.aimMode==='hover'){trackerTab='gun';refreshTracker()}renderPhase();if(screen.orientation?.lock)screen.orientation.lock('landscape').catch(()=>{});}
 function pause(){if(phase==='playing'){phase='paused';attackHeld=false;player.queuedSpecial=null;renderPhase()}}function resume(){if(phase==='paused'){phase='playing';renderPhase()}}
 $('startBtn').addEventListener('click',start);$('pauseBtn').addEventListener('click',pause);$('resumeBtn').addEventListener('click',resume);$('resumeTop').addEventListener('click',resume);$('resetBtn').addEventListener('click',()=>{reset();resume()});$('mainMenuBtn').addEventListener('click',()=>{phase='menu';renderPhase()});
-function updateHUD(){$('hpfill').style.width=clamp(player.hp,0,100)+'%';$('reachHud').textContent=settings.reach+' m';$('zoomHud').textContent=settings.zoom.toFixed(2)+'×';$('zoomHud').textContent=settings.zoom.toFixed(2)+'×';$('waveHud').textContent=wave;$('koHud').textContent=kills;$('chain').textContent=`${comboHits} HIT CHAIN`;$('chain').style.opacity=comboHits>1&&worldTime-lastComboAt<2.3?'1':'0'}
+function updateHUD(){$('hpfill').style.width=clamp(player.hp,0,100)+'%';updateWeaponHUD();$('reachHud').textContent=settings.reach+' m';$('zoomHud').textContent=settings.zoom.toFixed(2)+'×';$('zoomHud').textContent=settings.zoom.toFixed(2)+'×';$('waveHud').textContent=wave;$('koHud').textContent=kills;$('chain').textContent=`${comboHits} HIT CHAIN`;$('chain').style.opacity=comboHits>1&&worldTime-lastComboAt<2.3?'1':'0'}
 function selectTarget(){
  if(settings.aimMode==='hover')return enemies.find(e=>e.id===selectedId&&!e.dead)||null;
  const avail=enemies.filter(e=>!e.dead&&dist(e,player)<=settings.reach+.001);if(!avail.length)return null;
@@ -287,6 +310,72 @@ function switchByFlick(dx,dy){
  if(!best){const others=enemies.filter(e=>!e.dead&&e.id!==selectedId&&dist(e,player)<=settings.reach);if(!others.length)return false;others.sort((a,b)=>dist(a,player)-dist(b,player));best=others[0]}
  selectedId=best.id;pendingFlickId=best.id;lastTargetMethod='flick';faceEnemy(best);announce('FLICK → E'+best.id);refreshTracker();return true;
 }
+// --- DMC-inspired, data-tuned firearm layer. Separate from original melee branch. ---
+// Weapon choices change enemy reaction and combo decisions, not just damage.
+function finishGunTrial(key){if(!gunTrials[key]){gunTrials[key]=true;refreshTracker();if(phase==='playing'&&trackerTab==='gun')announce('✓ '+key.toUpperCase()+' COMPLETE')}}
+function setWeapon(next){
+ if(next!=='pistols'&&next!=='shotgun')return;
+ if(weapon===next)return;
+ weapon=next;
+ try{localStorage.setItem('reachDmcGunV1',weapon)}catch(e){}
+ // Shot committed before weapon-switch cancellation; no duplicated shot is created.
+ if((player.activeKind==='pistol'||player.activeKind==='shotgun')&&gunShotCommittedAt>=player.attackStartedAt){
+  player.nextAttack=Math.min(player.nextAttack,worldTime+.045);
+ }
+ updateWeaponHUD();
+ if(phase==='playing')announce(weapon==='pistols'?'DUAL PISTOLS':'SHOTGUN');
+}
+function updateWeaponHUD(){
+ $('weaponHud').textContent=weapon==='pistols'?'DUAL PISTOLS':'SHOTGUN';
+ $('weaponToggle').textContent=(weapon==='pistols'?'PISTOLS':'SHOTGUN')+' [1/2]';
+ $('weaponToggle').classList.toggle('shotgun',weapon==='shotgun');
+}
+try{const oldGun=localStorage.getItem('reachDmcGunV1');if(oldGun==='shotgun')weapon='shotgun'}catch(e){}
+$('weaponToggle').addEventListener('click',()=>setWeapon(weapon==='pistols'?'shotgun':'pistols'));
+updateWeaponHUD();
+function fireGun(){
+ if(phase!=='playing'||player.hp<=0||player.dodging>.12)return;
+ const now=worldTime;
+ // Short input buffer allows a shot just before recovery ends. It is consumed once.
+ const readyAt=Math.max(player.nextAttack,gunReady[weapon]);
+ if(now<readyAt){if(readyAt-now<.17){player.queuedGun=true;player.queuedUntil=now+.18;}return}
+ player.queuedGun=false;
+ if(player.queuedSpecial)return;
+ const mode=weapon,target=selectTarget(),tx=target?.id;
+ const interval=mode==='pistols'?settings.pistolInterval:settings.shotgunInterval;
+ const effectiveRange=mode==='pistols'?settings.reach:Math.min(settings.reach,settings.shotgunRange);
+ gunReady[mode]=now+interval;player.nextAttack=now+interval;player.attackUntil=now+(mode==='pistols'?.08:.18);
+ player.activeKind=mode==='pistols'?'pistol':'shotgun';player.attackStartedAt=now;
+ player.act=mode==='pistols'?1:5;
+ if(target)faceEnemy(target);
+ const forward=target?normal2(target.x-player.x,target.z-player.z):[Math.sin(player.angle),Math.cos(player.angle)];
+ const muzzleX=player.x+forward[0]*.9,muzzleZ=player.z+forward[1]*.9,muzzleY=1.75;
+ effects.push({kind:'launchBurst',x:muzzleX,y:muzzleY,z:muzzleZ,life:.11,max:.11,color:mode==='pistols'?colors.blade:colors.gold});
+ // Snapshot weapon and target at shot commitment; switching cannot retroactively alter the fired bullet.
+ queueEvent(mode==='pistols'?.012:.055,()=>{
+  if(phase!=='playing'||player.hp<=0||player.dodging>0)return;
+  gunShotCommittedAt=worldTime;
+  const e=enemies.find(e=>e.id===tx&&!e.dead);
+  if(!e||dist(e,player)>effectiveRange){if(worldTime-lastMissAt>1.2){lastMissAt=worldTime;announce('NO TARGET IN GUN RANGE')}return}
+  const wasAir=e.y>.25;
+  const hitKind=mode==='pistols'?'pistol':'shotgun';
+  const damage=(mode==='pistols'?(wasAir?5:7):22)*settings.damage;
+  const x0=player.x+forward[0]*.65,y0=1.7,z0=player.z+forward[1]*.65;
+  damageEnemy(e,damage,hitKind,1);
+  effects.push({kind:'slash',x:x0,y:y0,z:z0,x2:e.x,y2:e.y+1.35,z2:e.z,life:mode==='pistols'?.13:.22,max:mode==='pistols'?.13:.22,color:mode==='pistols'?colors.blade:colors.gold});
+  effects.push({kind:'impact',x:e.x,y:e.y+1.25,z:e.z,life:.17,max:.17,color:mode==='pistols'?colors.blade:colors.gold});
+  if(mode==='pistols'){
+   finishGunTrial('pistol');
+   if(wasAir){
+    if(gunCombo.id!==e.id){gunCombo.id=e.id;gunCombo.sustain=0;gunCombo.pistolAir=false}
+    gunCombo.sustain++;gunCombo.pistolAir=true;
+    if(gunCombo.sustain>=2)finishGunTrial('sustain');
+   }
+  }else if(wasAir&&gunCombo.id===e.id&&gunCombo.pistolAir){finishGunTrial('switch');gunCombo.shotgunFollow=true}
+  recordTrialHit(e,mode==='pistols'?'strike':'blast',false);
+  if(mode==='pistols'){player.lastStrikeHitAt=worldTime;player.lastStrikeTargetId=e.id}
+ });
+}
 function queueEvent(delay,fn){events.push({time:worldTime+delay,fn})}
 function faceEnemy(e){if(e)player.angle=Math.atan2(e.x-player.x,e.z-player.z)}
 function strike(kind){if(phase!=='playing'||player.hp<=0)return;const now=worldTime;if(player.dodging>0.13)return;
@@ -297,7 +386,7 @@ function strike(kind){if(phase!=='playing'||player.hp<=0)return;const now=worldT
    player.queuedSpecial=kind;player.queuedSpecialUntil=now+Math.max(.75,.6/settings.attackRate);
    player.queued=false;
    // Once the strike has connected, cancel only its remaining recovery, not startup.
-   if(player.activeKind==='strike'&&player.lastStrikeHitAt>=player.attackStartedAt)
+   if((player.activeKind==='strike'||player.activeKind==='pistol'||player.activeKind==='shotgun')&&player.lastStrikeHitAt>=player.attackStartedAt)
      player.nextAttack=Math.min(player.nextAttack,now+.065);
   }else if(!player.queuedSpecial){player.queued=true;player.queuedUntil=now+.28}
   return;
@@ -317,7 +406,7 @@ function strike(kind){if(phase!=='playing'||player.hp<=0)return;const now=worldT
  const recovery=(kind==='strike'?[0,.31,.35,.48][step]:kind==='launch'?.78:kind==='slam'?.72:.72)/settings.attackRate;
  player.act=kind==='strike'?step:kind==='launch'?4:kind==='slam'?6:5;player.attackUntil=now+startup+recovery;player.nextAttack=now+startup+recovery;player.phase=0;
  const tx=t?.id;const ax=player.x,az=player.z;
- effects.push({kind:'anticipate',x:player.x,y:1.45,z:player.z,life:.22,max:.22,color:kind==='launch'||kind==='slam'?colors.gold:kind==='blast'?colors.orb:colors.blade});
+ effects.push({kind:'anticipate',x:player.x,y:1.45,z:player.z,life:.22,max:.22,color:kind==='launch'||kind==='slam'?colors.gold:kind==='blast'||kind==='shotgun'?colors.orb:colors.blade});
  queueEvent(startup,()=>{if(player.dodging>0||player.hp<=0)return;let target=enemies.find(e=>e.id===tx&&!e.dead);
  const comboGrace=kind==='launch'&&target?.id===player.lastStrikeTargetId&&worldTime-player.lastStrikeHitAt<1.3?1.4:.35;
  if(!target||(kind==='slam'&&target.y<=.18)||dist(player,target)>settings.reach+comboGrace){effects.push({kind:'miss',x:player.x,y:1.4,z:player.z,life:.3,max:.3});if(worldTime-lastMissAt>1.1){lastMissAt=worldTime;announce('OUT OF REACH')}return}
@@ -332,19 +421,19 @@ function strike(kind){if(phase!=='playing'||player.hp<=0)return;const now=worldT
   if(player.queuedSpecial)player.nextAttack=Math.min(player.nextAttack,worldTime+.065);
  }
  const x2=target.x,y2=target.y+1.15,z2=target.z;
- effects.push({kind:'slash',x:player.x,y:1.5,z:player.z,x2,y2,z2,life:.27,max:.27,color:kind==='launch'||kind==='slam'?colors.gold:kind==='blast'?colors.orb:colors.blade});
- effects.push({kind:'impact',x:x2,y:y2,z:z2,life:.38,max:.38,color:kind==='launch'||kind==='slam'?colors.gold:kind==='blast'?colors.orb:colors.blade});
+ effects.push({kind:'slash',x:player.x,y:1.5,z:player.z,x2,y2,z2,life:.27,max:.27,color:kind==='launch'||kind==='slam'?colors.gold:kind==='blast'||kind==='shotgun'?colors.orb:colors.blade});
+ effects.push({kind:'impact',x:x2,y:y2,z:z2,life:.38,max:.38,color:kind==='launch'||kind==='slam'?colors.gold:kind==='blast'||kind==='shotgun'?colors.orb:colors.blade});
  })}
 let audioCtx=null;
 function ensureAudio(){try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;if(!audioCtx)audioCtx=new AC();if(audioCtx.state==='suspended')audioCtx.resume().catch(()=>{});}catch(e){}}
 function playImpactSound(kind,step){if(!settings.hitSound)return;ensureAudio();if(!audioCtx||audioCtx.state!=='running')return;try{let t=audioCtx.currentTime,level=settings.hitSound/100;
- for(const [f,amp,wave,duration] of [[kind==='blast'?95:kind==='launch'?145:210+step*30,.19,'triangle',.11],[kind==='blast'?58:75,.31,'sine',.16]]){
+ for(const [f,amp,wave,duration] of [[kind==='blast'||kind==='shotgun'?95:kind==='launch'?145:kind==='pistol'?335:210+step*30,.19,'triangle',.11],[kind==='blast'||kind==='shotgun'?58:kind==='pistol'?110:75,.31,'sine',.16]]){
   const osc=audioCtx.createOscillator(),gain=audioCtx.createGain();osc.type=wave;osc.frequency.setValueAtTime(f,t);osc.frequency.exponentialRampToValueAtTime(Math.max(35,f*.42),t+duration);
   gain.gain.setValueAtTime(Math.max(.0001,amp*level),t);gain.gain.exponentialRampToValueAtTime(.0001,t+duration);
   osc.connect(gain);gain.connect(audioCtx.destination);osc.start(t);osc.stop(t+duration+.01);
  }
 }catch(e){}}
-function spawnHitSparks(e,kind){const m=settings.impactFX/100;if(m<=0)return;let color=kind==='launch'||kind==='slam'||kind==='counter'?colors.gold:kind==='blast'?colors.orb:colors.blade;
+function spawnHitSparks(e,kind){const m=settings.impactFX/100;if(m<=0)return;let color=kind==='launch'||kind==='slam'||kind==='counter'?colors.gold:kind==='blast'||kind==='shotgun'?colors.orb:colors.blade;
  effects.push({kind:'ring',x:e.x,y:e.y+1.1,z:e.z,life:.27,max:.27,color});
  const n=Math.round(3+9*m);for(let i=0;i<n;i++){const a=i*TAU/n+rnd(-.2,.2),speed=rnd(2.5,6.8)*(.6+m);
  effects.push({kind:'spark',x:e.x+rnd(-.15,.15),y:e.y+1.2+rnd(-.1,.35),z:e.z+rnd(-.15,.15),vx:Math.cos(a)*speed,vy:rnd(-1.5,4.6),vz:Math.sin(a)*speed,life:rnd(.14,.27),max:.27,color});
@@ -368,14 +457,17 @@ function damageEnemy(e,dmg,kind,step){e.hp-=dmg;e.glow=.21;e.recoil=.22*settings
  effects.push({kind:'launchWave',x:e.x,y:Math.max(e.y,.08)+.28,z:e.z,life:.42,max:.42,color:colors.gold});
  effects.push({kind:'launchWave',x:e.x,y:Math.max(e.y,.08)+.10,z:e.z,life:.58,max:.58,color:colors.edge});
  effects.push({kind:'launchBurst',x:e.x,y:Math.max(e.y,.08)+.92,z:e.z,life:.34,max:.34,color:colors.white});
- e.y=Math.max(e.y,.3);e.vy=settings.launchForce*(kind==='counter'?1.1:1);e.launchUntil=worldTime+settings.airHang+1.0;e.juggles=0;e.vx*=.25;e.vz*=.25;e.stun=.4;e.armor=0}
+ e.y=Math.max(e.y,.3);e.vy=settings.launchForce*(kind==='counter'?1.1:1);e.launchUntil=worldTime+settings.airHang+1.0;e.juggles=0;e.sustainCount=0;e.wallBounces=0;
+ if(kind==='launch'){finishGunTrial('launch');gunCombo.id=e.id;gunCombo.sustain=0;gunCombo.pistolAir=false;player.nextAttack=Math.min(player.nextAttack,worldTime+.095);} e.vx*=.25;e.vz*=.25;e.stun=.4;e.armor=0}
+ else if(kind==='shotgun'){let force=settings.knockback*1.65;e.vx=dir[0]*force;e.vz=dir[1]*force;e.vy=Math.max(e.vy,1.45);e.stun=.36;e.projectileUntil=worldTime+.85;e.wallBounces=0;}
+ else if(kind==='pistol'){if(e.y>.25){if(e.sustainCount<settings.sustainHits){e.vy=Math.max(e.vy,settings.launchForce*.11);e.stun=Math.max(e.stun,.11)}e.sustainCount++;}else{e.stun=.045;e.stagger=Math.max(0,e.stagger-1);e.vx+=dir[0]*.16;e.vz+=dir[1]*.16}}
  else if(kind==='blast'){let force=settings.knockback*2.0;e.vx=dir[0]*force;e.vz=dir[1]*force;e.vy=Math.max(e.vy,2.0);e.stun=.48;e.projectileUntil=worldTime+.85;}
  else if(e.y>.25){if(e.juggles<4){e.vy=Math.max(e.vy,settings.launchForce*.21);e.juggles++;e.stun=.26}else{e.vy-=2.2}}
  else if(step===3){e.vx=dir[0]*settings.knockback*.85;e.vz=dir[1]*settings.knockback*.85;e.stun=.32}
  else{e.vx+=dir[0]*1.2;e.vz+=dir[1]*1.2}
  if(e.stagger>=4&&e.y<.25){e.armor=1.2;e.stagger=0}if(e.hp<=0)killEnemy(e);
  playImpactSound(kind,step);spawnHitSparks(e,kind);
- comboHits=worldTime-lastComboAt<2.3?comboHits+1:1;lastComboAt=worldTime;hitPause=Math.max(hitPause,settings.hitstop*.001);shake+=settings.shake*.0035;combatText.push({x:e.x,y:e.y+2.6,z:e.z,text:`${Math.round(dmg)}`,life:.7,max:.7});updateHUD()}
+ comboHits=worldTime-lastComboAt<2.3?comboHits+1:1;lastComboAt=worldTime;hitPause=Math.max(hitPause,settings.hitstop*.001*(kind==='pistol'?.25:kind==='shotgun'?1.1:1));shake+=settings.shake*.0035;combatText.push({x:e.x,y:e.y+2.6,z:e.z,text:`${Math.round(dmg)}`,life:.7,max:.7});updateHUD()}
 function killEnemy(e){if(e.dead)return;e.dead=true;e.deathT=0;kills++;if(selectedId===e.id)selectedId=null;effects.push({kind:'impact',x:e.x,y:1,z:e.z,life:.7,max:.7,color:colors.gold});updateHUD()}
 function dodge(){if(phase!=='playing'||player.dodging>0||player.hp<=0)return;
  const incoming=settings.enemyAI==='sparring'&&enemies.some(e=>!e.dead&&e.y<.1&&e.state==='windup'&&e.type!=='caster'&&dist(e,player)<3.4&&e.windup/settings.enemyPressure<=settings.evadeWindow);
@@ -389,9 +481,11 @@ function updatePlayer(dt){player.invuln=Math.max(0,player.invuln-dt);player.dodg
  // A buffered special takes priority over auto-repeat while the attack thumb is held.
  if(player.queuedSpecial&&worldTime>player.queuedSpecialUntil)player.queuedSpecial=null;
  if(player.queuedSpecial&&worldTime>=player.nextAttack){const special=player.queuedSpecial;player.queuedSpecial=null;strike(special)}
- else if(attackHeld&&worldTime>=player.nextAttack)strike('strike');
- else if(player.queued&&worldTime>=player.nextAttack&&worldTime<=player.queuedUntil)strike('strike');
+ else if(attackHeld&&worldTime>=player.nextAttack)fireGun();
+ else if(player.queuedGun&&worldTime>=player.nextAttack&&worldTime<=player.queuedUntil)fireGun();
+ else if(player.queued&&worldTime>=player.nextAttack&&worldTime<=player.queuedUntil)fireGun();
  if(player.queued&&worldTime>player.queuedUntil)player.queued=false;
+ if(player.queuedGun&&worldTime>player.queuedUntil)player.queuedGun=false;
  player.phase+=Math.hypot(player.vx,player.vz)*dt*.9}
 function spawnOrb(e){let v=normal2(player.x-e.x,player.z-e.z);orbs.push({x:e.x,y:1.5,z:e.z,vx:v[0]*8,vz:v[1]*8,life:3.5});effects.push({kind:'impact',x:e.x,y:1.5,z:e.z,life:.3,max:.3,color:colors.orb})}
 function updateEnemies(dt){for(const e of enemies){e.glow=Math.max(0,e.glow-dt);e.recoil=Math.max(0,e.recoil-dt);if(e.dead){e.deathT+=dt;continue}e.stun=Math.max(0,e.stun-dt);e.armor=Math.max(0,e.armor-dt);e.attackCd=Math.max(0,e.attackCd-dt);let d=dist(e,player),dir=normal2(player.x-e.x,player.z-e.z);e.angle=Math.atan2(dir[0],dir[1]);if(worldTime-e.lastHit>2.2)e.stagger=0;
@@ -410,7 +504,18 @@ function updateEnemies(dt){for(const e of enemies){e.glow=Math.max(0,e.glow-dt);
  }
  const len=Math.hypot(tx,tz)||1;let targetVx=tx/len*speed,targetVz=tz/len*speed;const lerp=1-Math.exp(-5*dt);e.vx=mix(e.vx,targetVx,lerp);e.vz=mix(e.vz,targetVz,lerp)}}
  else if(e.y>.02){e.vx*=Math.exp(-2.2*dt);e.vz*=Math.exp(-2.2*dt)}else {e.vx*=Math.exp(-3.4*dt);e.vz*=Math.exp(-3.4*dt)}
- e.x=clamp(e.x+e.vx*dt,-17.2,17.2);e.z=clamp(e.z+e.vz*dt,-17.2,17.2);
+ const nextX=e.x+e.vx*dt,nextZ=e.z+e.vz*dt;
+ if(e.projectileUntil>worldTime&&e.wallBounces<1&&(Math.abs(nextX)>17.2||Math.abs(nextZ)>17.2)){
+  if(Math.abs(nextX)>17.2)e.vx*=-.55;
+  if(Math.abs(nextZ)>17.2)e.vz*=-.55;
+  e.vy=Math.max(e.vy,settings.launchForce*.32);e.stun=Math.max(e.stun,.4);
+  e.wallBounces++;e.projectileUntil=0;
+  effects.push({kind:'launchBurst',x:clamp(nextX,-17.2,17.2),y:e.y+1.2,z:clamp(nextZ,-17.2,17.2),life:.42,max:.42,color:colors.gold});
+  finishGunTrial('wall');announce('WALL BOUNCE!');
+ }
+ e.x=clamp(nextX,-17.2,17.2);e.z=clamp(nextZ,-17.2,17.2);
+ if(e.y<=.02&&e.stun<=0&&worldTime-e.lastHit>1.5){e.wallBounces=0;e.sustainCount=0}
+
  if(e.y<.1){let px=e.x-player.x,pz=e.z-player.z,ps=Math.hypot(px,pz);if(ps<.95){let force=(.95-ps)*.65/(ps||1);e.x+=px*force;e.z+=pz*force}
  for(const other of enemies){if(other===e||other.dead)continue;let dx=e.x-other.x,dz=e.z-other.z,d=Math.hypot(dx,dz);if(d>.01&&d<1.7){e.x+=dx/d*(1.7-d)*.24;e.z+=dz/d*(1.7-d)*.24}}}
  if(e.state==='windup'){e.vx*=.86;e.vz*=.86}e.step+=dt*3;
@@ -425,7 +530,7 @@ function updateEnemies(dt){for(const e of enemies){e.glow=Math.max(0,e.glow-dt);
    other.vx=v[0]*7.5;other.vz=v[1]*7.5;other.vy=Math.max(other.vy,3.8);e.vx*=-.30;e.vz*=-.30;e.vy=Math.max(e.vy,2.4);e.projectileUntil=0;
    effects.push({kind:'launchBurst',x:other.x,y:other.y+1.2,z:other.z,life:.37,max:.37,color:colors.gold});
    effects.push({kind:'impact',x:e.x,y:e.y+1,z:e.z,life:.46,max:.46,color:colors.white});
-   finishComboTrial('collision');announce('ENEMY COLLISION!');
+   finishComboTrial('collision');finishGunTrial('body');announce('ENEMY COLLISION!');
    if(other.hp<=0)killEnemy(other);if(e.hp<=0)killEnemy(e);
    break;
   }
@@ -446,7 +551,22 @@ function renderFighter(f,hero){let recoil=hero?0:(f.recoil||0),recoilBack=recoil
  locPart('sphere',-.51,1.78,0,.40,.36,.43,dark);locPart('sphere',.51,1.78,0,.40,.36,.43,dark);
  let attackAnim=hero&&worldTime<player.attackUntil?Math.sin((player.attackUntil-worldTime)*18)*.6:0;
  locPart('cyl',-.58,1.29,.05,.21,.74,.24,dark,{rz:-.10});locPart('cyl',.59,1.28,.03,.21,.73,.24,dark,{rz:.3+attackAnim});
- if(hero){locPart('cube',0,2.52,.01,.72,.12,.66,colors.black);locPart('cube',0,1.06,-.28,.42,.13,.1,colors.gold);locPart('cyl',.85,1.35,-.18,.10,.55,.11,colors.black,{rz:.43+attackAnim});locPart('cube',1.07,1.84,-.20,.16,.99,.12,colors.blade,{rz:-.30+attackAnim,glow:.65});locPart('cube',.08,1.78,.28,.32,.49,.12,colors.gold);}
+ if(hero){
+  locPart('cube',0,2.52,.01,.72,.12,.66,colors.black);
+  locPart('cube',0,1.06,-.28,.42,.13,.1,colors.gold);
+  if(weapon==='pistols'){
+   for(const off of [-.81,.81]){
+    locPart('cube',off,1.45,-.33,.22,.27,.58,colors.black);
+    locPart('cube',off,1.54,-.63,.18,.16,.72,colors.edge,{glow:.15});
+    locPart('cube',off,1.61,-.77,.20,.07,.22,colors.blade,{glow:.45});
+   }
+  }else{
+   locPart('cube',.59,1.52,-.36,.30,.31,.67,colors.black);
+   locPart('cube',.59,1.56,-.95,.19,.18,1.10,colors.edge,{glow:.2});
+   locPart('cube',.59,1.50,-.75,.30,.24,.35,colors.gold);
+   locPart('cube',.59,1.56,-1.46,.24,.22,.08,colors.black);
+  }
+ }
  else{locPart('cube',0,1.02,-.30,.44,.11,.12,colors.pink,{glow:.2});if(f.type==='caster'){locPart('sphere',.83,1.53,-.1,.35,.35,.35,colors.orb,{glow:1});locPart('cyl',-.5,1.34,-.26,.10,1,.1,colors.black,{rz:-.17})}else{locPart('cube',.93,1.13,-.24,.19,.75,.19,colors.edge,{rz:-.22});locPart('cube',-.75,1.16,-.10,.35,.70,.34,colors.black)}}
  }
 function renderArena(){draw('plane',0,-.055,0,76,1,76,colors.floor,{floor:true});draw('cube',0,-.2,-18,37,.40,.35,colors.side);draw('cube',0,-.2,18,37,.40,.35,colors.side);draw('cube',-18,-.2,0,.35,.4,36,colors.side);draw('cube',18,-.2,0,.35,.4,36,colors.side);
@@ -557,7 +677,7 @@ joyZone.addEventListener('lostpointercapture',releaseJoy);
 window.addEventListener('blur',()=>{joy.x=joy.y=0;attackHeld=false;for(const k of Object.keys(keys))keys[k]=false});
 // A press still attacks immediately; an intentional swipe switches targets during the hold.
 const attackButton=$('attack');let attackPointer=null,attackOrigin=null,attackFlicked=false;
-attackButton.addEventListener('pointerdown',ev=>{ev.preventDefault();attackButton.setPointerCapture(ev.pointerId);attackPointer=ev.pointerId;attackOrigin={x:ev.clientX,y:ev.clientY};attackFlicked=false;attackButton.classList.add('pressed');attackHeld=true;strike('strike')});
+attackButton.addEventListener('pointerdown',ev=>{ev.preventDefault();attackButton.setPointerCapture(ev.pointerId);attackPointer=ev.pointerId;attackOrigin={x:ev.clientX,y:ev.clientY};attackFlicked=false;attackButton.classList.add('pressed');attackHeld=true;fireGun()});
 attackButton.addEventListener('pointermove',ev=>{if(attackPointer!==ev.pointerId||!attackOrigin||attackFlicked||settings.aimMode!=='hybrid')return;let dx=ev.clientX-attackOrigin.x,dy=ev.clientY-attackOrigin.y;if(Math.hypot(dx,dy)>28){if(switchByFlick(dx,dy))attackFlicked=true;else attackOrigin={x:ev.clientX,y:ev.clientY}}});
 function endAttack(ev){if(ev&&attackPointer!==ev.pointerId)return;attackButton.classList.remove('pressed');attackHeld=false;attackPointer=null;attackOrigin=null}
 attackButton.addEventListener('pointerup',endAttack);attackButton.addEventListener('pointercancel',endAttack);attackButton.addEventListener('lostpointercapture',endAttack);
@@ -572,15 +692,15 @@ window.addEventListener('pointermove',ev=>{
 });
 canvas.addEventListener('mousedown',ev=>{
  if(!pcPointer||phase!=='playing')return;
- if(ev.button===0){ev.preventDefault();attackHeld=true;strike('strike')}
+ if(ev.button===0){ev.preventDefault();attackHeld=true;fireGun()}
  else if(ev.button===2){ev.preventDefault();strike('launch')}
 });
 window.addEventListener('mouseup',ev=>{if(ev.button===0&&pcPointer)attackHeld=false});
 canvas.addEventListener('contextmenu',ev=>{if(pcPointer&&phase==='playing')ev.preventDefault()});
-addEventListener('keydown',ev=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(ev.code))ev.preventDefault();if(ev.repeat)return;keys[ev.code]=true;if(ev.code==='KeyP'||ev.code==='Escape'){phase==='playing'?pause():phase==='paused'?resume():null;return}if(phase!=='playing')return;if(ev.code==='KeyJ'){attackHeld=true;strike('strike')}if(ev.code==='KeyK')strike('launch');if(ev.code==='KeyL'||ev.code==='KeyE')strike('blast');if(ev.code==='KeyF')strike('slam');if(ev.code==='Space')dodge();if(ev.code==='KeyQ'&&settings.aimMode==='hybrid'){let choices=enemies.filter(e=>!e.dead&&dist(e,player)<=settings.reach);let i=choices.findIndex(e=>e.id===selectedId);if(choices.length){selectedId=choices[(i+1)%choices.length].id;pendingFlickId=selectedId;refreshTracker()}}});addEventListener('keyup',ev=>{keys[ev.code]=false;if(ev.code==='KeyJ')attackHeld=false});
+addEventListener('keydown',ev=>{if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(ev.code))ev.preventDefault();if(ev.repeat)return;keys[ev.code]=true;if(ev.code==='KeyP'||ev.code==='Escape'){phase==='playing'?pause():phase==='paused'?resume():null;return}if(phase!=='playing')return;if(ev.code==='KeyJ'){attackHeld=true;fireGun()}if(ev.code==='KeyK')strike('launch');if(ev.code==='KeyL'||ev.code==='KeyE')strike('blast');if(ev.code==='KeyF')strike('slam');if(ev.code==='Space')dodge();if(ev.code==='Digit1')setWeapon('pistols');if(ev.code==='Digit2')setWeapon('shotgun');if(ev.code==='KeyQ'&&pcPointer&&settings.aimMode==='hover')strike('launch');if(ev.code==='KeyQ'&&settings.aimMode==='hybrid'){let choices=enemies.filter(e=>!e.dead&&dist(e,player)<=settings.reach);let i=choices.findIndex(e=>e.id===selectedId);if(choices.length){selectedId=choices[(i+1)%choices.length].id;pendingFlickId=selectedId;refreshTracker()}}});addEventListener('keyup',ev=>{keys[ev.code]=false;if(ev.code==='KeyJ')attackHeld=false});
 function chooseByTap(ev){if(phase!=='playing'||settings.aimMode!=='hybrid')return;let near=null,best=10000;for(const e of enemies){if(e.dead)continue;let p=project(e.x,e.y+1.4,e.z);if(!p)continue;let d=Math.hypot(ev.clientX-p.x,ev.clientY-p.y);if(d<46&&d<best){near=e;best=d}}if(near){selectedId=near.id;pendingFlickId=near.id;announce('TAPPED E'+near.id);refreshTracker()}}canvas.addEventListener('pointerdown',chooseByTap);overlay.addEventListener('pointerdown',chooseByTap);
 renderPhase();render3D(.016);paint2D();
-window.__rangeLabDebug={get phase(){return phase},get settings(){return {...settings}},get trials(){return {...trials}},get selectedId(){return selectedId},get pcTrials(){return {...pcTrials}},get comboTrials(){return {...comboTrials}},get hoverCursor(){return {...hoverCursor}},get enemyScreen(){return enemies.map(e=>({id:e.id,p:project(e.x,e.y+1.4,e.z)}))},pickHoveredEnemy,updateHoverSelection,get enemies(){return enemies.map(e=>({id:e.id,type:e.type,x:e.x,z:e.z,y:e.y,vx:e.vx,vz:e.vz,projectileUntil:e.projectileUntil,state:e.state,windup:e.windup,hp:e.hp,dead:e.dead}))},get player(){return {x:player.x,z:player.z,hp:player.hp,riposteUntil:player.riposteUntil,combo:player.comboStep,queuedSpecial:player.queuedSpecial,lastStrikeHitAt:player.lastStrikeHitAt,activeKind:player.activeKind,worldTime}},start,pause,resume,strike,dodge,setMode,switchByFlick,selectTarget,setReach(n){settings.reach=n;syncSettings('reach')},get glOk(){return !!gl}};
+window.__rangeLabDebug={get phase(){return phase},get settings(){return {...settings}},get weapon(){return weapon},get gunTrials(){return {...gunTrials}},setWeapon,fireGun,get trials(){return {...trials}},get selectedId(){return selectedId},get pcTrials(){return {...pcTrials}},get comboTrials(){return {...comboTrials}},get hoverCursor(){return {...hoverCursor}},get enemyScreen(){return enemies.map(e=>({id:e.id,p:project(e.x,e.y+1.4,e.z)}))},pickHoveredEnemy,updateHoverSelection,get enemies(){return enemies.map(e=>({id:e.id,type:e.type,x:e.x,z:e.z,y:e.y,vx:e.vx,vz:e.vz,projectileUntil:e.projectileUntil,state:e.state,windup:e.windup,hp:e.hp,dead:e.dead}))},get player(){return {x:player.x,z:player.z,hp:player.hp,riposteUntil:player.riposteUntil,combo:player.comboStep,queuedSpecial:player.queuedSpecial,lastStrikeHitAt:player.lastStrikeHitAt,activeKind:player.activeKind,worldTime}},start,pause,resume,strike,dodge,setMode,switchByFlick,selectTarget,setReach(n){settings.reach=n;syncSettings('reach')},get glOk(){return !!gl}};
 })();
 </script>
 </body></html>
