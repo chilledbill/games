@@ -1,42 +1,33 @@
-# REACH — Combo Mechanics Lab
+# REACH // DMC-inspired Gun Combat Experiment
 
-Standalone HTML game for GitHub Pages. This folder contains the latest implemented playable version from the conversation (PC hover soft-lock, fast strike chains, launch, blast, air slam, enemy collisions, perfect evade, camera zoom, feel sliders and milestone tracker).
+This branch tests stylish gun-combat principles in the existing **LongMelee** 3D browser game. The original melee version remains on `main`.
 
-## Install in the local repository
+## Play
 
-Extract/copy this **RangeMelee** folder into:
+Open `index.html` in a desktop browser, or host the `LongMelee` directory with GitHub Pages. The prototype uses a single HTML file with no build process or dependencies.
 
-`C:\Users\load2\Documents\Claude-KHlike\incrementalgame\incrementalgame\RangeMelee`
+## Controls
 
-The file must be at:
+| Input | Action |
+|---|---|
+| WASD | Move |
+| Mouse hover | Acquire a sticky soft-lock target; hovering another opponent switches targets |
+| Left click / hold | Fire current weapon |
+| Right click or Q | Launch selected enemy |
+| 1 / 2 | Switch pistols / shotgun |
+| E | Directional blast |
+| F | Aerial slam |
+| Space | Dodge |
+| Esc / P | Pause / settings |
 
-`C:\Users\load2\Documents\Claude-KHlike\incrementalgame\incrementalgame\RangeMelee\index.html`
+## Experiment
 
-If a `RangeMelee` folder already exists, copy the files **inside** it rather than creating `RangeMelee\RangeMelee`.
+The goal is a player-authored sequence:
 
-## Test locally
+**Launch → sustain an enemy in the air with pistols → switch to shotgun → redirect into a wall or another enemy.**
 
-Open `index.html` in a modern browser with WebGL enabled. No installation, network connection, package manager, build tools or dependencies are required.
+Pistols emphasize frequent shots and sustaining the target; the shotgun emphasizes stronger single hits and displacement. Collision rules and in-game combat milestones help evaluate the loop. Existing 3D camera, adjustable feel settings, and PC hover targeting are retained. Settings are saved in the browser separately from the original REACH melee experiment.
 
-## Publish with GitHub Pages
+See [Stylish Gun Combat Implementation Spec](docs/Stylish_Gun_Combat_Implementation_Spec.md) for the broader design and test goals. Its original 2D Godot assumptions have been adapted to this 3D WebGL prototype.
 
-1. Commit `RangeMelee/index.html` to the branch being published by GitHub Pages.
-2. In your GitHub repository, select **Settings > Pages** and publish the branch from the repository's root (`/(root)`) if that's where your Pages site is deployed.
-3. If that Pages deployment publishes the repo root, the game's URL will be:
-
-   `https://YOUR-USERNAME.github.io/YOUR-REPO/RangeMelee/`
-
-If your repo instead uses a `/docs` publishing source or a GitHub Actions workflow that publishes only a particular folder, the `RangeMelee` folder must be included in that published site output. GitHub Pages branch deployment doesn't offer an arbitrary subfolder such as `/RangeMelee` as its publishing source.
-
-## PC controls
-
-- WASD: move
-- Mouse hover: target an enemy; soft-lock persists over empty space
-- Left mouse: strike / hold to combo
-- Right mouse: launch
-- E: blast
-- F: air slam
-- Space: dodge / perfect evade
-- Esc or P: pause and adjust settings
-
-Mobile touch support is retained. In-game milestones help evaluate the combat mechanics.
+This is a **focused first experiment**, not a complete DMC-style combat system or a faithful reproduction of Devil May Cry assets or move timing. Manual hitscan aim, extensive poise profiles, delayed charge shots, and full cancel tables are not included yet.
