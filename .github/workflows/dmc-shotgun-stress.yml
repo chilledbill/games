@@ -1,0 +1,23 @@
+name: DMC gun-combat browser stress
+on:
+  push:
+    branches:
+      - experiment/dmc-gun-combat
+    paths:
+      - LongMelee/index.html
+      - LongMelee/tests/**
+      - .github/workflows/dmc-shotgun-stress.yml
+  workflow_dispatch:
+jobs:
+  browser-stress:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install headless browser driver
+        run: npm install --no-save --no-package-lock puppeteer-core@24
+      - name: Run 500-shot and live firing test
+        run: node LongMelee/tests/dmc-smoke.mjs
