@@ -1,9 +1,9 @@
 import { legs, marchPosition, skeletonPosition } from './dungeon.mjs?v=6';
 
 export const champions = [
-  { name: 'The Bellkeeper', kind: 'Miniboss', essence: 2, skill: 'Last Toll', boon: 'Heals the weakest living skeleton for 9 every fourth combat round. Can revive a fallen skeleton if the survivors are healthy.' },
-  { name: 'The Ash Hound', kind: 'Miniboss', essence: 3, skill: 'Cinder Leap', boon: 'Leaps past the front line to hit archers for 13 damage every third combat round. Hunts the closest foe when there is no archer.' },
-  { name: 'The Iron Abbot', kind: 'Boss', essence: 5, skill: 'Glass Aegis', boon: 'Blocks up to 8 damage and strikes back every third combat round.' },
+  { name: 'The Bellkeeper', kind: 'Miniboss', essence: 2, skill: 'Last Toll', boon: 'Heals the most wounded skeleton for 15 every fourth combat round. Revives a fallen skeleton if the survivors are healthy.' },
+  { name: 'The Ash Hound', kind: 'Miniboss', essence: 3, skill: 'Cinder Leap', boon: 'Leaps past the front line to hit archers for 20 damage every third combat round. Hunts the closest foe when there is no archer.' },
+  { name: 'The Iron Abbot', kind: 'Boss', essence: 5, skill: 'Glass Aegis', boon: 'Blocks up to 10 damage and counters for 10 every third combat round.' },
 ];
 
 export const encounters = [
@@ -32,20 +32,34 @@ export const rituals = {
 export const archer = { name: 'Crypt Archer', kind: 'Archer', area: 2, hp: 29, attack: 6 };
 export const opponents = wave => legs[wave].backline ? [encounters[wave], archer] : [encounters[wave]];
 export const enemyPosition = (wave, index) => index === 1 ? legs[wave].backline : legs[wave].enemy;
-export const skeletonHealth = state => 30 + state.levels.armor * 6;
+export const skeletonClasses = {
+  shield: { name: 'Shieldbearer', hp: 42, attack: 1, detail: 'Draws melee attacks and blocks 2 damage from each hit.' },
+  blade: { name: 'Swordsman', hp: 30, attack: 3, detail: 'Closes in and deals heavy sword damage.' },
+  bow: { name: 'Archer', hp: 24, attack: 2, detail: 'Fires from behind the front line. Arrows bypass the Sentinel’s shield.' },
+};
+const defaultClasses = ['shield', 'blade', 'bow'];
+const classOf = unit => skeletonClasses[unit.role];
+export const skeletonHealth = (state, unit) => (unit ? classOf(unit).hp : skeletonClasses.blade.hp) + state.levels.armor * 6;
+export const squadSize = state => 2 + state.levels.skeletons;
+export const squadClass = (state, index) => state.squad[index] ?? defaultClasses[index % defaultClasses.length];
+
+export function setSquadClass(state, index, role) {
+  if (!Number.isInteger(index) || index < 0 || index >= squadSize(state) || !Object.hasOwn(skeletonClasses, role)) return false;
+  state.squad[index] = role;
+  return true;
+}
 export const livingSkeletons = state => state.run.units.filter(unit => unit.hp > 0).length;
 const supportDamage = state => state.levels.grimoire * 3 + state.lineup.length * 3;
-export const damage = state => 2 * livingSkeletons(state) + supportDamage(state);
+export const damage = state => state.run.units.reduce((total, unit) => total + (unit.hp ? classOf(unit).attack : 0), supportDamage(state));
 export const upgradeCost = (state, key) => Math.ceil(upgrades[key].base * 1.58 ** state.levels[key]);
 export const target = state => encounters[state.run.wave];
 export const stepMs = 125;
 export const isMarching = ({ run }) => !run.result && run.travel < legs[run.wave].length;
 
 function startRun(state, number) {
-  const squad = 2 + state.levels.skeletons;
   state.run = {
     number, wave: 0, length: state.cleared === champions.length ? encounters.length : encounters.length - 1,
-    units: makeUnits(squad, skeletonHealth(state)), enemies: makeEnemies(0), dust: 0,
+    units: makeUnits(state), enemies: makeEnemies(0), dust: 0,
     round: 0, totalRounds: 0, cooldown: 0, wait: 2, result: null, travel: 0, frame: 0,
   };
 }
@@ -56,7 +70,7 @@ export function initialState(previous = {}) {
     levels: { skeletons: 0, grimoire: 0, armor: 0, ...previous.levels },
     raised: [...(previous.raised ?? [])], ritual: previous.ritual ?? 'bloom',
     lineup: (previous.lineup ?? []).slice(0, championSlots),
-    best: previous.best ?? 0,
+    best: previous.best ?? 0, squad: [...(previous.squad ?? [])],
   };
   if (previous.run) {
     const { run } = previous;
@@ -64,7 +78,11 @@ export function initialState(previous = {}) {
     const { army, enemy, shield, squad, ...savedRun } = run;
     state.run = {
       travel: nearEntrance ? 0 : legs[run.wave].length, frame: 0, ...savedRun,
-      units: run.units?.map(unit => ({ ...unit })) ?? makeUnits(squad, skeletonHealth(state), army),
+      units: run.units?.map(unit => ({ role: 'blade', ...unit })) ?? Array.from({ length: squad }, (_, index) => {
+        const max = skeletonHealth(state);
+        const hp = Math.max(0, Math.min(max, army - (squad - index - 1) * max));
+        return makeUnit('blade', hp);
+      }),
       enemies: run.enemies?.map(foe => ({ ...foe })) ?? makeEnemies(run.wave, enemy, shield),
     };
   } else {
@@ -103,11 +121,15 @@ export function toggleChampion(state, index) {
   return true;
 }
 
-function makeUnits(count, max, army = count * max) {
-  return Array.from({ length: count }, (_, id) => ({
-    hp: Math.max(0, Math.min(max, army - (count - id - 1) * max)),
-    x: null, y: null, target: null, fallenTo: null,
-  }));
+function makeUnit(role, hp) {
+  return { role, hp, x: null, y: null, target: null, fallenTo: null };
+}
+
+function makeUnits(state) {
+  return Array.from({ length: squadSize(state) }, (_, index) => {
+    const role = squadClass(state, index);
+    return makeUnit(role, skeletonHealth(state, { role }));
+  });
 }
 
 function makeEnemies(wave, primaryHealth, shield = 0) {
@@ -182,14 +204,15 @@ function moveSkeletons(run) {
   const direction = Math.atan2(lead.y - foe.y, lead.x - foe.x);
   let rank = 0;
 
-  for (const unit of run.units) {
-    if (!unit.hp) continue;
+  const fighters = run.units.filter(unit => unit.hp > 0);
+  for (const unit of fighters.sort((a, b) => Number(a.role === 'bow') - Number(b.role === 'bow'))) {
     if (unit.x === null) Object.assign(unit, skeletonPosition(run.wave, run.travel, rank));
     unit.target = index;
-    const row = Math.floor(rank / 7);
-    const offset = rank % 7;
-    const arc = direction + Math.ceil(offset / 2) * (offset % 2 ? .46 : -.46);
-    const reach = 13 + Math.min(row, 3) * 3;
+    const ranged = unit.role === 'bow';
+    const offset = rank % 5;
+    const spread = ranged ? .28 : .68;
+    const arc = direction + Math.ceil(offset / 2) * (offset % 2 ? spread : -spread);
+    const reach = ranged ? 30 + rank % 2 * 2 : 17 + Math.min(Math.floor(rank / 5), 2) * 3;
     const goal = { x: foe.x + Math.cos(arc) * reach, y: foe.y + Math.sin(arc) * reach };
     const remaining = distance(unit, goal);
     const fraction = remaining ? Math.min(1, 8 / remaining) : 0;
@@ -210,18 +233,17 @@ export function step(state) {
 
 function restoreSkeleton(state, effects) {
   const { run } = state;
-  const max = skeletonHealth(state);
-  const wounded = run.units.filter(unit => unit.hp > 0 && unit.hp <= max - 9)
-    .sort((a, b) => a.hp - b.hp)[0];
-  const unit = wounded ?? run.units.find(skeleton => skeleton.hp === 0)
-    ?? run.units.filter(skeleton => skeleton.hp < max).sort((a, b) => a.hp - b.hp)[0];
+  const wounded = run.units.filter(unit => unit.hp > 0 && unit.hp < skeletonHealth(state, unit))
+    .sort((a, b) => (skeletonHealth(state, b) - b.hp) - (skeletonHealth(state, a) - a.hp))[0];
+  const unit = wounded && skeletonHealth(state, wounded) - wounded.hp >= 10 ? wounded
+    : run.units.find(skeleton => skeleton.hp === 0) ?? wounded;
   if (!unit) return;
   if (unit.hp === 0) {
     // A fallen skeleton may be several rooms back. It rises near the Bellkeeper.
     Object.assign(unit, skeletonPosition(run.wave, run.travel, livingSkeletons(state)));
     unit.fallenTo = null;
   }
-  const heal = Math.min(9, max - unit.hp);
+  const heal = Math.min(15, skeletonHealth(state, unit) - unit.hp);
   unit.hp += heal;
   effects.push({ kind: 'heal', id: run.units.indexOf(unit), hit: heal });
 }
@@ -250,16 +272,20 @@ function combatTick(state, moving) {
   if (thirdRound && state.lineup.includes(1)) {
     const backline = run.enemies.findIndex((enemy, index) => enemy.hp > 0 && roster[index] === archer);
     const index = backline === -1 ? front : backline;
-    effects.push({ kind: 'hound', index, hit: hitEnemy(run, index, 13) });
+    effects.push({ kind: 'hound', index, hit: hitEnemy(run, index, 20) });
     front = run.enemies.findIndex(enemy => enemy.hp > 0);
     if (front === -1) return victory(state);
   }
 
   const frontPosition = enemyPosition(run.wave, front);
   const attackers = run.units.map((unit, id) => ({ unit, id }))
-    .filter(({ unit }) => unit.hp > 0 && unit.target === front && distance(unit, frontPosition) <= 26);
+    .filter(({ unit }) => unit.hp > 0 && unit.target === front && distance(unit, frontPosition) <= (unit.role === 'bow' ? 39 : 26));
   if (attackers.length) {
-    let damage = attackers.length * (roster[front].kind === 'Shield guard' ? 1 : 2) + supportDamage(state);
+    const guarded = roster[front].kind === 'Shield guard';
+    let damage = attackers.reduce((total, { unit }) => {
+      const attack = classOf(unit).attack;
+      return total + (guarded && unit.role !== 'bow' ? Math.ceil(attack / 2) : attack);
+    }, supportDamage(state));
     if (thirdRound && state.ritual === 'bloom') damage += 6;
     if (state.ritual === 'pact' && state.lineup.length) damage += 5;
     const hit = hitEnemy(run, front, damage);
@@ -275,13 +301,15 @@ function combatTick(state, moving) {
     const origin = enemyPosition(run.wave, index);
     const reachable = run.units.map((unit, id) => ({ unit, id, range: distance(unit, origin) }))
       .filter(({ unit, range }) => unit.hp > 0 && (ranged || range <= 34));
-    reachable.sort(ranged ? (a, b) => a.unit.hp - b.unit.hp : (a, b) => a.range - b.range);
+    reachable.sort(ranged ? (a, b) => a.unit.hp - b.unit.hp
+      : (a, b) => Number(b.unit.role === 'shield') - Number(a.unit.role === 'shield') || a.range - b.range);
     const victim = reachable[0];
     if (!victim) continue;
     let incoming = attacker.attack + (attacker.guardian === 1 && enemyThirdRound ? 5 : 0);
+    if (!ranged && victim.unit.role === 'shield') incoming = Math.max(0, incoming - 2);
     if (index === 0 && thirdRound && state.lineup.includes(2)) {
-      incoming = Math.max(0, incoming - 8);
-      hitEnemy(run, index, 8, true);
+      incoming = Math.max(0, incoming - 10);
+      effects.push({ kind: 'ward', index, id: victim.id, hit: hitEnemy(run, index, 10, true) });
       if (run.enemies.every(enemy => enemy.hp === 0)) return victory(state);
       if (!enemy.hp) continue;
     }

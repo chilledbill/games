@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#15121b">
   <meta name="description" content="Lead an army of skeletons through the haunted abbey, rebuild after each fall, and raise defeated guardians as Champions.">
   <title>Gravebound</title>
-  <link rel="stylesheet" href="./style.css?v=6">
-  <script type="module" src="./game.mjs?v=6"></script>
+  <link rel="stylesheet" href="./style.css?v=7">
+  <script type="module" src="./game.mjs?v=7"></script>
 </head>
 <body>
   <header class="top">
@@ -65,6 +65,11 @@
           <span class="tag" id="dps">4 dmg / round</span>
         </div>
         <div id="upgrades" class="list"></div>
+        <section class="squad" aria-labelledby="squad-title">
+          <h3 id="squad-title">Next march</h3>
+          <p>Choose a role for each skeleton. Changes take effect on the next run.</p>
+          <div id="squad-slots" class="squad-slots"></div>
+        </section>
       </section>
       <section class="panel crypt" aria-labelledby="crypt-title">
         <div class="panel-head">
@@ -87,6 +92,16 @@
     </div>
     <footer id="save-note">Progress saves in this browser. Runs pause when you leave the game.</footer>
   </main>
+  <dialog id="summon-dialog" aria-labelledby="summon-title" aria-describedby="summon-boon">
+    <div class="summon-art">
+      <div class="summon-ring" aria-hidden="true"></div>
+      <canvas id="summon-portrait" width="224" height="152" aria-hidden="true"></canvas>
+    </div>
+    <p class="eyebrow" id="summon-status">Champion raised</p>
+    <h2 id="summon-title"></h2>
+    <p id="summon-boon"></p>
+    <form method="dialog"><button autofocus>Continue</button></form>
+  </dialog>
   <dialog id="reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-details">
     <h2 id="reset-title">Start a new game?</h2>
     <p id="reset-details">This resets your Bone Dust, Grave Essence, upgrades, Champions, and run records. You’ll start at the Abbey Gate with two skeletons.</p>

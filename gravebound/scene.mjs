@@ -1,4 +1,4 @@
-import { encounters, isMarching, enemyPosition, opponents, skeletonHealth } from './engine.mjs?v=6';
+import { encounters, isMarching, enemyPosition, opponents, skeletonHealth } from './engine.mjs?v=7';
 import { TILE, WIDTH, HEIGHT, floorTiles, legs, marchPosition, skeletonPosition } from './dungeon.mjs?v=6';
 
 const stone = [
@@ -72,7 +72,7 @@ function shadow(ctx, width) {
   ctx.fill();
 }
 
-function skeleton(ctx, gait) {
+function skeleton(ctx, gait, role) {
   shadow(ctx, 7);
   rect(ctx, '#e7dcc5', -5, -16, 10, 7);
   rect(ctx, '#34283b', -3, -14, 2, 2);
@@ -82,8 +82,21 @@ function skeleton(ctx, gait) {
   rect(ctx, '#bba38f', -4, -5, 8, 2);
   rect(ctx, '#f5e2c7', -4, -3 + gait, 2, 6);
   rect(ctx, '#f5e2c7', 2, -3 - gait, 2, 6);
-  rect(ctx, '#b5d2c7', 6, -14, 2, 11);
-  rect(ctx, '#789b97', 4, -6, 6, 2);
+  if (role === 'shield') {
+    rect(ctx, '#a38760', 3, -10, 9, 12);
+    rect(ctx, '#e2bf7c', 4, -9, 7, 9);
+    rect(ctx, '#8b7155', 7, -9, 1, 9);
+  } else if (role === 'bow') {
+    ctx.strokeStyle = '#db9e69';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(6, -9, 6, -Math.PI / 2, Math.PI / 2);
+    ctx.stroke();
+    rect(ctx, '#e6d3b1', 6, -15, 1, 12);
+  } else {
+    rect(ctx, '#b5d2c7', 6, -14, 2, 11);
+    rect(ctx, '#789b97', 4, -6, 6, 2);
+  }
 }
 
 function necromancer(ctx) {
@@ -151,6 +164,25 @@ function enemySprite(ctx, foe, index, ally = false) {
   }
 }
 
+export function drawChampionPortrait(canvas, index) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const glow = ['#acf7c6', '#ffbb83', '#ccafff'][index];
+  for (let i = 0; i < 25; i++) {
+    const x = 28 + (i * 41) % 168;
+    const y = 24 + (i * 29) % 98;
+    ctx.globalAlpha = .25 + (i % 4) * .17;
+    rect(ctx, glow, x, y, 1 + (i % 3), 1 + (i % 5 === 0));
+  }
+  ctx.globalAlpha = 1;
+  ctx.save();
+  ctx.translate(canvas.width / 2, 122);
+  ctx.scale(index === 1 ? 4 : 3.2, index === 1 ? 4 : 3.2);
+  enemySprite(ctx, encounters.find(foe => foe.guardian === index), -1, true);
+  ctx.restore();
+}
+
 function healthBar(ctx, health, max, x, y, color) {
   rect(ctx, '#171120', x - 12, y, 24, 4);
   rect(ctx, color, x - 11, y + 1, Math.round(22 * health / max), 2);
@@ -213,7 +245,6 @@ export function animateScene(canvas, state) {
     const lunge = still ? 0 : Math.sin(Math.PI * Math.min(age, 1));
     const focus = effects.find(effect => effect.kind === 'strike');
     const hound = effects.find(effect => effect.kind === 'hound');
-    const max = skeletonHealth(state);
     const captain = marchPosition(run.wave, distance - 33);
     const unitPositions = run.units.map((unit, id) => {
       if (!unit.hp) return unit.x === null ? null : { x: unit.x, y: unit.y };
@@ -226,7 +257,7 @@ export function animateScene(canvas, state) {
       const x = walking ? previous.x + (unit.x - previous.x) * .48 : unit.x;
       const y = walking ? previous.y + (unit.y - previous.y) * .48 : unit.y;
       displayUnits[id] = { x, y };
-      if (!focus?.attackers.includes(id)) return { x, y, walking };
+      if (unit.role === 'bow' || !focus?.attackers.includes(id)) return { x, y, walking };
       const foe = enemyPosition(run.wave, focus.index);
       return { x: x + (foe.x - x) * lunge * .51, y: y + (foe.y - y) * lunge * .51, walking };
     });
@@ -287,10 +318,10 @@ export function animateScene(canvas, state) {
       const gait = (walking || position.walking) && !still ? Math.round(Math.sin(now / 85 + id) * 2) : 0;
       ctx.save();
       ctx.translate(x, y);
-      skeleton(ctx, gait);
+      skeleton(ctx, gait, unit.role);
       ctx.restore();
       if (engaged) {
-        healthBar(ctx, unit.hp, max, x, y - 23, '#a1e8c7');
+        healthBar(ctx, unit.hp, skeletonHealth(state, unit), x, y - 23, '#a1e8c7');
         ctx.font = '9px monospace';
         ctx.textAlign = 'center';
         ctx.fillStyle = '#c3baaf';
@@ -315,9 +346,27 @@ export function animateScene(canvas, state) {
         ctx.lineTo(foe.x, foe.y - 8);
         ctx.stroke();
       }
+      if (effect.kind === 'strike') {
+        const travel = still ? 1 : Math.min(1, age * 2.7);
+        for (const id of effect.attackers) {
+          const origin = unitPositions[id];
+          if (!origin || run.units[id].role !== 'bow') continue;
+          const x = origin.x + (foe.x - origin.x) * travel;
+          const y = origin.y + (foe.y - origin.y) * travel - 9;
+          rect(ctx, '#b2ffd3', x - 3, y, 6, 2);
+        }
+      }
+      if (effect.kind === 'ward' && unit) {
+        ctx.strokeStyle = '#d4b8ff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(unit.x, unit.y - 8, 14 + age * 6, 0, Math.PI * 2);
+        ctx.stroke();
+        continue;
+      }
       const kind = effect.kind;
       if (unit && (kind !== 'arrow' || age >= .4 || still)) {
-        readout(ctx, kind === 'heal' ? `+${effect.hit}` : `−${effect.hit}`,
+        readout(ctx, kind === 'heal' ? `+${effect.hit}` : effect.hit ? `−${effect.hit}` : 'BLOCK',
           unit.x, unit.y - 29 - rise, kind === 'heal' ? '#b2ffd3' : '#ffa18e');
       } else if (!unit && foe) {
         readout(ctx, effect.hit || 'BLOCK', foe.x, foe.y - 45 - rise, kind === 'strike' ? '#fff0d2' : '#b2ffd3');

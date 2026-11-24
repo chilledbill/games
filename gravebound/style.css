@@ -126,3 +126,78 @@ footer { color: var(--muted); padding: 1rem 0 1.5rem; font-size: .875rem; }
   .panel-head, .battle-controls { padding-inline: .75rem; }
   .tag { font-size: .8125rem; }
 }
+
+.squad { margin: .15rem .75rem .8rem; padding: .85rem .2rem .15rem; border-top: 1px solid var(--line); }
+.squad > p, .squad-slot p { margin: .3rem 0 .65rem; color: var(--muted); font-size: .875rem; }
+.squad-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .65rem; }
+.squad-slot { min-width: 0; }
+.squad-slot label { display: block; margin-bottom: .25rem; color: var(--muted); font-size: .875rem; }
+.squad-slot select {
+  appearance: none;
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #685876;
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  padding: .45rem 2rem .45rem .6rem;
+  background:
+    linear-gradient(45deg, transparent 50%, var(--gold) 51%) calc(100% - 15px) 55% / 5px 5px no-repeat,
+    linear-gradient(135deg, var(--gold) 50%, transparent 51%) calc(100% - 10px) 55% / 5px 5px no-repeat,
+    #30263b;
+}
+.squad-slot select:focus-visible { outline: 2px solid var(--mint); outline-offset: 2px; }
+
+#summon-dialog {
+  width: min(calc(100% - 2rem), 28rem);
+  max-height: calc(100% - 2rem);
+  overflow: auto;
+  background: #1a1424;
+  color: var(--text);
+  border: 1px solid #8b729f;
+  border-radius: 10px;
+  padding: .85rem 1rem 1rem;
+  text-align: center;
+}
+#summon-dialog::backdrop { background: #100b18e8; }
+#summon-dialog[data-champion="0"] { --summon-glow: #9ee4b0; }
+#summon-dialog[data-champion="1"] { --summon-glow: #efad77; }
+#summon-dialog[data-champion="2"] { --summon-glow: #c5a8ff; }
+.summon-art {
+  position: relative;
+  display: grid;
+  place-items: center;
+  isolation: isolate;
+  overflow: hidden;
+  min-height: clamp(6rem, 23vh, 11rem);
+  background: radial-gradient(ellipse at 50% 73%, color-mix(in srgb, var(--summon-glow) 24%, transparent), transparent 67%), #130e1a;
+  border-radius: 6px;
+  margin-bottom: .85rem;
+}
+.summon-ring {
+  position: absolute;
+  width: 67%;
+  height: 26%;
+  bottom: 13%;
+  border: 2px solid var(--summon-glow);
+  border-radius: 50%;
+  box-shadow: 0 0 20px var(--summon-glow), inset 0 0 12px var(--summon-glow);
+}
+#summon-portrait { width: min(55%, 14rem); height: auto; image-rendering: pixelated; position: relative; }
+#summon-dialog[open] .summon-ring { animation: open-portal .86s ease-out both; }
+#summon-dialog[open] #summon-portrait { animation: rise-champion 1.05s .12s cubic-bezier(.25,.75,.35,1) both; }
+#summon-dialog h2 { margin: .25rem 0; }
+#summon-boon { color: var(--muted); font-size: .95rem; }
+#summon-dialog form { margin-top: .85rem; }
+@keyframes open-portal {
+  from { opacity: .15; transform: scale(.25); }
+  65% { opacity: 1; transform: scale(1.13); }
+  to { opacity: .8; transform: scale(1); }
+}
+@keyframes rise-champion {
+  from { opacity: 0; transform: translateY(26%) scale(.74); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #summon-dialog[open] .summon-ring, #summon-dialog[open] #summon-portrait { animation: none; }
+}

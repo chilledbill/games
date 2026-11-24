@@ -1,8 +1,8 @@
 import {
-  champions, encounters, championSlots, upgrades, rituals, initialState, skeletonHealth, damage, livingSkeletons, upgradeCost, opponents,
+  champions, encounters, championSlots, upgrades, rituals, initialState, skeletonHealth, damage, livingSkeletons, upgradeCost, opponents, skeletonClasses, squadSize, squadClass, setSquadClass,
   target, buyUpgrade, raiseChampion, toggleChampion, castBolt, step, stepMs, isMarching,
-} from './engine.mjs?v=6';
-import { animateScene } from './scene.mjs?v=6';
+} from './engine.mjs?v=7';
+import { animateScene, drawChampionPortrait } from './scene.mjs?v=7';
 
 const ACTIVE_SAVE_KEY = 'gravebound:active-save';
 const DEFAULT_SAVE_KEY = 'gravebound:v3';
@@ -62,10 +62,14 @@ const championButtons = champions.map((foe, index) => {
   button.addEventListener('click', () => {
     if (state.raised.includes(index)) {
       if (toggleChampion(state, index)) {
-        announce(`${foe.name} ${state.lineup.includes(index) ? 'joins the army.' : 'returns to the crypt.'}`);
+        const deployed = state.lineup.includes(index);
+        announce(`${foe.name} ${deployed ? 'joins the army.' : 'returns to the crypt.'}`);
+        if (deployed) showSummon(index, 'Champion deployed');
       }
     } else if (raiseChampion(state, index)) {
-      announce(`${foe.name} ${state.lineup.includes(index) ? 'rises and joins your army.' : 'rises and waits in the crypt.'}`);
+      const deployed = state.lineup.includes(index);
+      announce(`${foe.name} ${deployed ? 'rises and joins your army.' : 'rises and waits in the crypt.'}`);
+      showSummon(index, 'Champion raised');
     }
     saveAndRender();
   });
@@ -102,6 +106,28 @@ const ritualButtons = Object.entries(rituals).map(([key, ritual]) => {
 
 const bolt = find('bolt');
 const resetDialog = find('reset-dialog');
+const summonDialog = find('summon-dialog');
+let summonTimer;
+
+function showSummon(index, status) {
+  const champion = champions[index];
+  summonDialog.dataset.champion = index;
+  setText(find('summon-status'), status);
+  setText(find('summon-title'), champion.name);
+  setText(find('summon-boon'), `${champion.skill}. ${champion.boon}`);
+  drawChampionPortrait(find('summon-portrait'), index);
+  summonDialog.showModal();
+  syncTimer();
+  summonTimer = setTimeout(() => {
+    if (summonDialog.open) summonDialog.close();
+  }, status === 'Champion raised' ? 4800 : 2800);
+}
+
+summonDialog.addEventListener('close', () => {
+  clearTimeout(summonTimer);
+  syncTimer();
+});
+
 const waveTrack = find('wave-track');
 const waveMarkers = encounters.map(foe => {
   const marker = document.createElement('span');
@@ -135,6 +161,32 @@ function renderMeters(container, entries, allied = false) {
   });
 }
 
+function renderSquad() {
+  const container = find('squad-slots');
+  const size = squadSize(state);
+  while (container.children.length > size) container.lastElementChild.remove();
+  for (let index = 0; index < size; index++) {
+    let slot = container.children[index];
+    if (!slot) {
+      slot = document.createElement('div');
+      slot.className = 'squad-slot';
+      slot.innerHTML = `<label for="squad-${index}">Skeleton ${index + 1} role</label>
+        <select id="squad-${index}" aria-describedby="squad-detail-${index}">
+          ${Object.entries(skeletonClasses).map(([key, role]) => `<option value="${key}">${role.name}</option>`).join('')}
+        </select><p id="squad-detail-${index}"></p>`;
+      slot.querySelector('select').addEventListener('change', event => {
+        if (setSquadClass(state, index, event.target.value)) saveAndRender();
+      });
+      container.append(slot);
+    }
+    const role = squadClass(state, index);
+    const select = slot.querySelector('select');
+    if (select.value !== role) select.value = role;
+    const { hp, attack, detail } = skeletonClasses[role];
+    setText(slot.querySelector('p'), `${hp} base HP · ${attack} damage. ${detail}`);
+  }
+}
+
 function render() {
   const foe = target(state);
   const { run, lineup } = state;
@@ -160,8 +212,9 @@ function render() {
   setText(find('army-label'), `${skeletons} / ${run.units.length} skeletons`);
   find('summon-link').hidden = !canRaise;
   renderMeters(find('skeleton-meters'), run.units.map((unit, id) => ({
-    name: `Skeleton ${id + 1}`, health: unit.hp, max: skeletonHealth(state), fallenTo: unit.fallenTo,
+    name: `${skeletonClasses[unit.role].name} ${id + 1}`, health: unit.hp, max: skeletonHealth(state, unit), fallenTo: unit.fallenTo,
   })), true);
+  renderSquad();
   renderMeters(find('enemy-meters'), run.enemies.map((enemy, index) => ({
     name: roster[index].name, health: enemy.hp, max: roster[index].hp, shield: enemy.shield,
   })));
@@ -258,9 +311,9 @@ saveAndRender();
 let timer;
 function syncTimer() {
   clearInterval(timer);
-  if (!document.hidden && !resetDialog.open) {
+  if (!document.hidden && !resetDialog.open && !summonDialog.open) {
     timer = setInterval(() => {
-      if (document.hidden || resetDialog.open) return;
+      if (document.hidden || resetDialog.open || summonDialog.open) return;
       const marching = isMarching(state);
       eventFeedback(step(state));
       if (state.run.frame === 0) saveAndRender();
