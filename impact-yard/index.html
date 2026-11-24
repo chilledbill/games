@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <meta name="theme-color" content="#0a1020" />
-<title>IMPACT YARD — Shorter Throws v7</title>
+<title>IMPACT YARD — Counterplay v8</title>
 <style>
 :root{color-scheme:dark;--ink:#eef5ff;--muted:#aab6ca;--cyan:#62e9ff;--orange:#ffba59;--red:#ff6677}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070b14;touch-action:none;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);user-select:none;-webkit-user-select:none}
@@ -86,9 +86,9 @@ h1 em{font-style:normal;color:var(--orange)}
    <h1 id="modalTitle">IMPACT <em>YARD</em></h1>
    <p class="sub" id="modalText">One fighter. A whole crowd. <b>Hit enemies to charge your meter.</b> Tap <b>GRAB</b> near a foe to hold them, then tap a direction to throw them into the crowd. Throws cost 25 meter; store up to four. <b>Choose quickly: enemies keep attacking and can break your grab.</b></p>
    <div class="mechanics" id="modalMechanics">
-    <div class="mechanic"><strong>01 / HIT</strong><span>Hits build meter; third strike knocks foes down.</span></div>
+    <div class="mechanic"><strong>01 / HIT</strong><span>Hits build meter. A focused third strike can knock down one foe; punches cannot stop every attack.</span></div>
     <div class="mechanic"><strong>02 / GRAB</strong><span>Grab first, then choose a direction to throw. Costs 25 on release.</span></div>
-    <div class="mechanic"><strong>03 / FORMATIONS</strong><span>Enemies spread, flank and surge. Line up a throw to hit multiple foes.</span></div>
+    <div class="mechanic"><strong>03 / FORMATIONS</strong><span>Enemies spread and strike through repeated punches. Dodge incoming warnings and set up throws.</span></div>
    </div>
    <button id="startBtn">START FIGHT →</button>
    <div class="note" id="modalNote">Touch: HIT → GRAB → tap an arrow. Keyboard: WASD move / choose throw, J hit, K grab, L dodge, P pause.</div>
@@ -119,8 +119,8 @@ addEventListener('resize',resize);resize();
 function initAudio(){if(!soundOn)return;try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume()}catch(e){soundOn=false;}}
 function sound(freq=300,dur=.08,type='triangle',vol=.055,slide=0){if(!audioCtx||!soundOn)return;try{const o=audioCtx.createOscillator(),g=audioCtx.createGain(),n=audioCtx.currentTime;o.type=type;o.frequency.setValueAtTime(freq,n);if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(35,freq+slide),n+dur);g.gain.setValueAtTime(vol,n);g.gain.exponentialRampToValueAtTime(.0001,n+dur);o.connect(g);g.connect(audioCtx.destination);o.start(n);o.stop(n+dur+.01)}catch(e){}}
 function vibrate(ms){try{navigator.vibrate?.(ms)}catch(e){}}
-function reset(){state='playing';enemies=[];particles=[];labels=[];slashes=[];rings=[];keys.clear();held.hit=false;app.classList.remove('grabMode');score=0;wave=0;waveDelay=-1;nextId=1;kills=0;collisionKills=0;hitStop=0;flash=0;player={x:475,z:391,hp:100,maxHp:100,meter:0,grabTime:0,facing:1,attackCd:0,attackStep:0,attackAnim:0,throwCd:0,inv:0,dodgeCd:0,dodge:0,dodgeVX:0,dodgeVZ:0,run:0,hitFlash:0,combo:0,comboTimer:0,grabbed:null};setStick(0,0);spawnWave();ui.modal.classList.add('hidden');ui.pause.textContent='Ⅱ';initAudio();}
-function makeEnemy(type,x,z){const heavy=type==='heavy',runner=type==='runner',hp=heavy?108:runner?42:56,id=nextId++;return{id,type,slot:(id-1)%FORMATION.length,x,z,h:0,vy:0,vx:0,vz:0,hp,maxHp:hp,r:heavy?23:runner?15:18,mass:heavy?1.85:runner?.78:1,speed:heavy?70:runner?128:91,face:x<player.x?1:-1,stun:0,attackCd:rand(.3,1.1),windup:0,attackMode:'',chargeTime:0,chargeDX:0,chargeDZ:0,chargeHit:new Set(),flight:0,thrown:false,flightHits:new Set(),wallBounces:0,flash:0,dead:0,anim:rand(0,10),poise:0,down:0,downMax:0,getup:0,hitReact:0,grabbed:false};}
+function reset(){state='playing';enemies=[];particles=[];labels=[];slashes=[];rings=[];keys.clear();held.hit=false;app.classList.remove('grabMode');score=0;wave=0;waveDelay=-1;nextId=1;kills=0;collisionKills=0;hitStop=0;flash=0;player={x:475,z:391,hp:100,maxHp:100,meter:0,grabTime:0,facing:1,attackCd:0,attackStep:0,attackAnim:0,throwCd:0,inv:0,dodgeCd:0,dodge:0,dodgeVX:0,dodgeVZ:0,run:0,hitFlash:0,combo:0,comboTimer:0,grabbed:null,hurtStun:0};setStick(0,0);spawnWave();ui.modal.classList.add('hidden');ui.pause.textContent='Ⅱ';initAudio();}
+function makeEnemy(type,x,z){const heavy=type==='heavy',runner=type==='runner',hp=heavy?108:runner?42:56,id=nextId++;return{id,type,slot:(id-1)%FORMATION.length,x,z,h:0,vy:0,vx:0,vz:0,hp,maxHp:hp,r:heavy?23:runner?15:18,mass:heavy?1.85:runner?.78:1,speed:heavy?70:runner?128:91,face:x<player.x?1:-1,stun:0,attackCd:rand(.3,1.1),windup:0,attackMode:'',chargeTime:0,chargeDX:0,chargeDZ:0,chargeHit:new Set(),flight:0,thrown:false,flightHits:new Set(),wallBounces:0,flash:0,dead:0,anim:rand(0,10),poise:0,staggerGuard:0,down:0,downMax:0,getup:0,hitReact:0,grabbed:false};}
 function spawnWave(){wave++;waveDelay=-1;const kinds=wave===1?['grunt','grunt','grunt','grunt','runner','grunt']:wave===2?['grunt','runner','grunt','heavy','grunt','runner','grunt']:['heavy','runner','grunt','grunt','heavy','grunt','runner','grunt'];
  kinds.forEach((type,i)=>{let x,z;for(let j=0;j<12;j++){x=i%2===0?rand(90,280):rand(665,866);z=rand(318,449);if(Math.hypot(x-player.x,z-player.z)>150)break;}enemies.push(makeEnemy(type,x,z));});
  toast=`WAVE ${wave} / ${finalWave}`;toastTime=2.0;player.hp=Math.min(100,player.hp+(wave>1?18:0));if(wave>1)player.meter=Math.min(100,player.meter+20);sound(170,.25,'sawtooth',.025,180);}
@@ -151,12 +151,38 @@ function knockDown(e,seconds=1.5,fx=true,withSound=true){
  if(fresh&&fx){label('DOWN!',e.x,e.z,'#bdf3ff',14);ring(e.x,e.z,'#91e2ec',19);if(withSound)sound(145,.11,'triangle',.033,-55);}
 }
 function damageEnemy(e,amount,source='hit'){if(e.dead>0||e.hp<=0)return;e.hp-=amount;e.flash=.16;e.hitReact=.22;if(e.hp<=0){e.hp=0;e.dead=.75;e.down=1;e.downMax=1;e.getup=0;e.h=0;e.vy=0;e.thrown=false;e.windup=0;e.chargeTime=0;score+=100;kills++;if(source==='collision'||source==='wall')collisionKills++;label('+100',e.x,e.z,'#96edff',13);burst(e.x,e.z,'#fba95b',18,1);ring(e.x,e.z,'#f8a752',22);if(source==='hit')sound(110,.18,'sawtooth',.06,-70);}else if(source==='hit'){sound(210+Math.random()*100,.07,'triangle',.065,-140);} }
-function attack(){if(state!=='playing'||player.attackCd>0||player.dodge>0||player.grabbed)return;player.attackCd=.27;player.attackAnim=.19;player.attackStep=(player.attackStep+1)%3;
+function attack(){if(state!=='playing'||player.attackCd>0||player.dodge>0||player.grabbed||player.hurtStun>0)return;player.attackCd=.29;player.attackAnim=.19;player.attackStep=(player.attackStep+1)%3;
  const candidates=enemies.filter(e=>e.hp>0&&e.dead<=0&&e.down<=0&&Math.abs(e.x-player.x)<95&&Math.abs(e.z-player.z)<45&&e.h<75).sort((a,b)=>dist(a,player)-dist(b,player));
  const input=moveInput();if(candidates.length&&Math.abs(input.x)<.23)player.facing=candidates[0].x>=player.x?1:-1;
- const targets=candidates.filter(e=>(e.x-player.x)*player.facing>=-12&&Math.abs(e.z-player.z)<38).slice(0,3);
+ const targets=candidates.filter(e=>(e.x-player.x)*player.facing>=-12&&Math.abs(e.z-player.z)<38).slice(0,2);
  const sw=player.attackStep;slashes.push({x:player.x+player.facing*43,z:player.z-27,face:player.facing,t:0,hit:targets.length>0});
- if(targets.length){let earned=0;targets.forEach((e,i)=>{const dmg=sw===0?14:11;damageEnemy(e,dmg,'hit');e.stun=Math.max(e.stun,e.type==='heavy'?.32:.46);e.vx=player.facing*(e.type==='heavy'?35:95);e.vz+=(e.z-player.z)*.5;e.poise++;if(sw===0&&e.hp>0){e.h=13;e.vy=105;knockDown(e,e.type==='heavy'?1.15:1.45);}earned+=i===0?17:7;burst(e.x,e.z,'#fce8a6',7,.65);});player.meter=clamp(player.meter+Math.min(earned,31),0,100);player.combo++;player.comboTimer=2.6;score+=targets.length*10;hitStop=.037;sound(420,.08,'square',.035,-280);}
+ if(targets.length){let earned=0;
+    targets.forEach((e,i)=>{
+      const dmg=sw===0?14:11;
+      damageEnemy(e,dmg,'hit');
+      if(e.hp>0){
+        // Hits deal damage, but cannot indefinitely reset an enemy's actions.
+        // Once an attack is telegraphed, light punches will not cancel it.
+        const committed=e.windup>0||e.chargeTime>0;
+        const canStagger=!committed&&e.staggerGuard<=0;
+        if(canStagger){e.stun=Math.max(e.stun,e.type==='heavy'?.11:.18);e.staggerGuard=e.type==='heavy'?1.0:.84;}
+        e.vx=player.facing*(committed?0:canStagger?(e.type==='heavy'?18:50):12);
+        e.vz+=(e.z-player.z)*.17;
+        e.poise=Math.min(4,e.poise+1);
+        // Only the primary target gets the finishing knockdown. Attacking
+        // enemy windups are protected: dodge or throw to counter them.
+        if(i===0&&sw===0&&e.poise>=3&&!committed){
+          e.h=13;e.vy=105;knockDown(e,e.type==='heavy'?1.0:1.18);
+          e.poise=0;e.staggerGuard=1.15;
+        }
+      }
+      earned+=i===0?17:7;
+      burst(e.x,e.z,'#fce8a6',7,.65);
+    });
+    player.meter=clamp(player.meter+Math.min(earned,31),0,100);
+    player.combo++;player.comboTimer=2.6;score+=targets.length*10;
+    hitStop=.037;sound(420,.08,'square',.035,-280);
+  }
  else sound(280,.06,'triangle',.025,-50);
 }
 function targetForThrow(){return enemies.filter(e=>e.hp>0&&e.dead<=0&&!e.grabbed&&!e.thrown&&e.getup<=0&&Math.abs(e.x-player.x)<87&&Math.abs(e.z-player.z)<48&&e.h<90).sort((a,b)=>dist(a,player)-dist(b,player))[0]||null;}
@@ -187,8 +213,8 @@ function throwHeld(direction){
  ring(e.x,e.z,'#ffbb57',14);burst(e.x,e.z,'#ffce76',17,1.1);hitStop=.045;label('THROW!',e.x,e.z,'#ffe38c',20);
 }
 function dodge(){if(state!=='playing'||player.dodgeCd>0)return;if(player.grabbed)cancelGrab();const dir=moveInput();let x=dir.x,z=dir.z;if(dir.m<.12){x=player.facing;z=0;}const n=Math.hypot(x,z)||1;player.dodgeVX=x/n*505;player.dodgeVZ=z/n*505;player.dodge=.23;player.inv=.39;player.dodgeCd=.85;burst(player.x,player.z,'#57dfff',8,.45);sound(450,.1,'sine',.04,-280);}
-function hurtPlayer(dmg,sourceX){if(player.inv>0||state!=='playing')return;if(player.grabbed)cancelGrab(true);player.hp=Math.max(0,player.hp-dmg);player.inv=.65;player.hitFlash=.28;flash=.11;player.combo=0;burst(player.x,player.z,'#f86e74',13,.7);ring(player.x,player.z,'#ff7381',15);label('-'+dmg,player.x,player.z,'#ff7d88',19);sound(100,.19,'sawtooth',.075,-55);vibrate(45);player.x=clamp(player.x+(player.x>sourceX?19:-19),ARENA.left,ARENA.right);if(player.hp<=0){showModal('over');}}
-function updateEnemy(e,dt){if(e.dead>0){e.dead-=dt;return;}if(e.grabbed){e.x=player.x+player.facing*32;e.z=player.z-1;e.h=5;e.vx=0;e.vz=0;e.vy=0;return;}e.anim+=dt;e.flash=Math.max(0,e.flash-dt);e.hitReact=Math.max(0,e.hitReact-dt);e.stun=Math.max(0,e.stun-dt);e.attackCd=Math.max(0,e.attackCd-dt);
+function hurtPlayer(dmg,sourceX){if(player.inv>0||state!=='playing')return;if(player.grabbed)cancelGrab(true);player.hp=Math.max(0,player.hp-dmg);player.inv=.65;player.hurtStun=.36;player.attackCd=Math.max(player.attackCd,.38);player.attackAnim=0;player.attackStep=0;player.hitFlash=.28;flash=.11;player.combo=0;burst(player.x,player.z,'#f86e74',13,.7);ring(player.x,player.z,'#ff7381',15);label('-'+dmg,player.x,player.z,'#ff7d88',19);sound(100,.19,'sawtooth',.075,-55);vibrate(45);player.x=clamp(player.x+(player.x>sourceX?19:-19),ARENA.left,ARENA.right);if(player.hp<=0){showModal('over');}}
+function updateEnemy(e,dt){if(e.dead>0){e.dead-=dt;return;}if(e.grabbed){e.x=player.x+player.facing*32;e.z=player.z-1;e.h=5;e.vx=0;e.vz=0;e.vy=0;return;}e.anim+=dt;e.flash=Math.max(0,e.flash-dt);e.hitReact=Math.max(0,e.hitReact-dt);e.stun=Math.max(0,e.stun-dt);e.staggerGuard=Math.max(0,e.staggerGuard-dt);e.attackCd=Math.max(0,e.attackCd-dt);
  if(e.thrown){e.flight-=dt;e.x+=e.vx*dt;e.z+=e.vz*dt;e.h+=e.vy*dt;e.vy-=790*dt;const friction=Math.pow(.978,dt*60);e.vx*=friction;e.vz*=friction;
    if(e.h<=0){e.h=0;if(e.vy< -90){e.vy=-e.vy*.24;burst(e.x,e.z,'#b6cbd4',5,.34);}else e.vy=0;}
    let hitWall=false;if(e.x<=ARENA.left||e.x>=ARENA.right){e.x=clamp(e.x,ARENA.left,ARENA.right);e.vx*=-.76;hitWall=true;}
@@ -248,8 +274,8 @@ function updateEnemy(e,dt){if(e.dead>0){e.dead-=dt;return;}if(e.grabbed){e.x=pla
   e.z=clamp(e.z+mz*e.speed*grabPressure*dt,ARENA.top,ARENA.bottom);
 }
 function update(dt){animTime+=dt;if(toastTime>0)toastTime-=dt;flash=Math.max(0,flash-dt);if(hitStop>0){hitStop=Math.max(0,hitStop-dt);return;}
- player.attackCd=Math.max(0,player.attackCd-dt);player.throwCd=Math.max(0,player.throwCd-dt);player.attackAnim=Math.max(0,player.attackAnim-dt);player.inv=Math.max(0,player.inv-dt);player.dodgeCd=Math.max(0,player.dodgeCd-dt);player.hitFlash=Math.max(0,player.hitFlash-dt);player.comboTimer=Math.max(0,player.comboTimer-dt);if(player.comboTimer===0)player.combo=0;
- const inp=moveInput();if(player.grabbed){player.grabTime+=dt;player.run=0;}else if(player.dodge>0){player.dodge=Math.max(0,player.dodge-dt);player.x+=player.dodgeVX*dt;player.z+=player.dodgeVZ*dt;}else{const speed=207*(player.attackAnim>0?.66:1);player.x+=inp.x*speed*dt;player.z+=inp.z*speed*dt;if(Math.abs(inp.x)>.15)player.facing=inp.x>0?1:-1;if(inp.m>.1)player.run+=dt*12;else player.run=0;}
+ player.attackCd=Math.max(0,player.attackCd-dt);player.hurtStun=Math.max(0,player.hurtStun-dt);player.throwCd=Math.max(0,player.throwCd-dt);player.attackAnim=Math.max(0,player.attackAnim-dt);player.inv=Math.max(0,player.inv-dt);player.dodgeCd=Math.max(0,player.dodgeCd-dt);player.hitFlash=Math.max(0,player.hitFlash-dt);player.comboTimer=Math.max(0,player.comboTimer-dt);if(player.comboTimer===0)player.combo=0;
+ const inp=moveInput();if(player.grabbed){player.grabTime+=dt;player.run=0;}else if(player.dodge>0){player.dodge=Math.max(0,player.dodge-dt);player.x+=player.dodgeVX*dt;player.z+=player.dodgeVZ*dt;}else{const speed=207*(player.attackAnim>0?.66:1)*(player.hurtStun>0?.35:1);player.x+=inp.x*speed*dt;player.z+=inp.z*speed*dt;if(Math.abs(inp.x)>.15)player.facing=inp.x>0?1:-1;if(inp.m>.1)player.run+=dt*12;else player.run=0;}
  player.x=clamp(player.x,ARENA.left+5,ARENA.right-5);player.z=clamp(player.z,ARENA.top+3,ARENA.bottom-3);if(held.hit&&!player.grabbed&&player.attackCd<=0)attack();
  for(const e of enemies)updateEnemy(e,dt);
  enemies=enemies.filter(e=>e.dead>0||e.hp>0);
