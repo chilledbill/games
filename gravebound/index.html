@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#15121b">
   <meta name="description" content="Lead an army of skeletons through the haunted abbey, rebuild after each fall, and raise defeated guardians as Champions.">
   <title>Gravebound</title>
-  <link rel="stylesheet" href="./style.css?v=7">
-  <script type="module" src="./game.mjs?v=7"></script>
+  <link rel="stylesheet" href="./style.css?v=8">
+  <script type="module" src="./game.mjs?v=8"></script>
 </head>
 <body>
   <header class="top">
@@ -32,7 +32,10 @@
       <section class="panel battlefield" aria-labelledby="battle-title">
         <div class="panel-head">
           <div><p class="eyebrow" id="battle-mode">Abbey Gate</p><h2 id="battle-title">Marching</h2></div>
-          <span class="tag" id="mode-pill">Run 1</span>
+          <div class="battle-status">
+            <span class="tag" id="mode-pill">Run 1</span>
+            <button id="hit-sound" aria-pressed="false" type="button">Sound off</button>
+          </div>
         </div>
         <canvas id="scene" width="480" height="288" role="img" aria-label="A top-down view follows your skeletons through the abbey. The map in the corner marks your position."></canvas>
         <div class="battle-controls">

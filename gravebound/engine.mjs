@@ -139,9 +139,10 @@ function makeEnemies(wave, primaryHealth, shield = 0) {
   }));
 }
 
-function victory(state) {
+function victory(state, effects) {
   const run = state.run;
   const foe = target(state);
+  const impact = { wave: run.wave, effects, positions: run.units.map(({ x, y, role }) => ({ x, y, role })) };
   state.dust += foe.dust;
   run.dust += foe.dust;
   state.best = Math.max(state.best, run.wave + 1);
@@ -170,9 +171,10 @@ function victory(state) {
   }
   if (soul) {
     const ending = complete ? 'The army will march again from the Abbey Gate.' : 'Raise this Champion in the crypt.';
-    return { text: `${foe.name} falls. +${foe.essence} Grave Essence. ${ending}` };
+    return { ...impact, text: `${foe.name} falls. +${foe.essence} Grave Essence. ${ending}` };
   }
-  return complete ? { text: `The run is clear. The army earned ${run.dust} Bone Dust and will march again.` } : null;
+  if (complete) impact.text = `The run is clear. The army earned ${run.dust} Bone Dust and will march again.`;
+  return impact;
 }
 
 function hitEnemy(run, index, amount, breakShield = false) {
@@ -185,14 +187,19 @@ function hitEnemy(run, index, amount, breakShield = false) {
   return hit;
 }
 
+function hitEffect(run, effect, amount, breakShield = false) {
+  const hit = hitEnemy(run, effect.index, amount, breakShield);
+  return { ...effect, hit, defeated: run.enemies[effect.index].hp === 0 };
+}
+
 export function castBolt(state) {
   const run = state.run;
   if (run.wait || run.result || run.cooldown || isMarching(state)) return null;
   const index = run.enemies.findIndex(foe => foe.hp > 0);
   run.cooldown = 6;
-  const hit = hitEnemy(run, index, 12 + state.levels.grimoire * 3, true);
-  if (run.enemies.every(foe => foe.hp === 0)) return victory(state);
-  return { effects: [{ kind: 'bolt', index, hit }] };
+  const effects = [hitEffect(run, { kind: 'bolt', index }, 12 + state.levels.grimoire * 3, true)];
+  if (run.enemies.every(foe => foe.hp === 0)) return victory(state, effects);
+  return { effects };
 }
 
 const distance = (first, second) => Math.hypot(first.x - second.x, first.y - second.y);
@@ -272,9 +279,9 @@ function combatTick(state, moving) {
   if (thirdRound && state.lineup.includes(1)) {
     const backline = run.enemies.findIndex((enemy, index) => enemy.hp > 0 && roster[index] === archer);
     const index = backline === -1 ? front : backline;
-    effects.push({ kind: 'hound', index, hit: hitEnemy(run, index, 20) });
+    effects.push(hitEffect(run, { kind: 'hound', index }, 20));
     front = run.enemies.findIndex(enemy => enemy.hp > 0);
-    if (front === -1) return victory(state);
+    if (front === -1) return victory(state, effects);
   }
 
   const frontPosition = enemyPosition(run.wave, front);
@@ -288,9 +295,8 @@ function combatTick(state, moving) {
     }, supportDamage(state));
     if (thirdRound && state.ritual === 'bloom') damage += 6;
     if (state.ritual === 'pact' && state.lineup.length) damage += 5;
-    const hit = hitEnemy(run, front, damage);
-    effects.push({ kind: 'strike', index: front, attackers: attackers.map(({ id }) => id), hit });
-    if (run.enemies.every(enemy => enemy.hp === 0)) return victory(state);
+    effects.push(hitEffect(run, { kind: 'strike', index: front, attackers: attackers.map(({ id }) => id) }, damage));
+    if (run.enemies.every(enemy => enemy.hp === 0)) return victory(state, effects);
   }
 
   for (const [index, enemy] of run.enemies.entries()) {
@@ -309,14 +315,14 @@ function combatTick(state, moving) {
     if (!ranged && victim.unit.role === 'shield') incoming = Math.max(0, incoming - 2);
     if (index === 0 && thirdRound && state.lineup.includes(2)) {
       incoming = Math.max(0, incoming - 10);
-      effects.push({ kind: 'ward', index, id: victim.id, hit: hitEnemy(run, index, 10, true) });
-      if (run.enemies.every(enemy => enemy.hp === 0)) return victory(state);
+      effects.push(hitEffect(run, { kind: 'ward', index, id: victim.id }, 10, true));
+      if (run.enemies.every(enemy => enemy.hp === 0)) return victory(state, effects);
       if (!enemy.hp) continue;
     }
     const hit = Math.min(victim.unit.hp, incoming);
     victim.unit.hp -= hit;
     if (victim.unit.hp === 0) victim.unit.fallenTo = attacker.name;
-    effects.push({ kind: ranged ? 'arrow' : 'enemy', id: victim.id, index, hit });
+    effects.push({ kind: ranged ? 'arrow' : 'enemy', id: victim.id, index, hit, fallen: victim.unit.hp === 0 });
     if (!livingSkeletons(state)) {
       run.result = 'fallen';
       run.wait = 4;

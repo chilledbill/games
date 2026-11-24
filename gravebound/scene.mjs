@@ -1,5 +1,6 @@
-import { encounters, isMarching, enemyPosition, opponents, skeletonHealth } from './engine.mjs?v=7';
+import { encounters, isMarching, enemyPosition, opponents, skeletonHealth } from './engine.mjs?v=8';
 import { TILE, WIDTH, HEIGHT, floorTiles, legs, marchPosition, skeletonPosition } from './dungeon.mjs?v=6';
+import { impactFrame, impactLength } from './impact.mjs';
 
 const stone = [
   ['#373343', '#443d4e', '#302c3b'],
@@ -188,11 +189,56 @@ function healthBar(ctx, health, max, x, y, color) {
   rect(ctx, color, x - 11, y + 1, Math.round(22 * health / max), 2);
 }
 
-function readout(ctx, text, x, y, color) {
-  ctx.font = 'bold 13px monospace';
+function impactText(ctx, text, x, y, color, power) {
+  ctx.font = `bold ${Math.round(14 * power)}px monospace`;
   ctx.textAlign = 'center';
+  ctx.strokeStyle = '#1a111d';
+  ctx.lineWidth = 3;
+  ctx.strokeText(text, x, y);
   ctx.fillStyle = color;
   ctx.fillText(text, x, y);
+}
+
+function trail(ctx, from, to, fraction, color, width) {
+  const x = from.x + (to.x - from.x) * fraction;
+  const y = from.y + (to.y - from.y) * fraction;
+  const tail = Math.max(0, fraction - .24);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.beginPath();
+  ctx.moveTo(from.x + (to.x - from.x) * tail, from.y + (to.y - from.y) * tail - 9);
+  ctx.lineTo(x, y - 9);
+  ctx.stroke();
+}
+
+function burst(ctx, x, y, age, color, power, seed) {
+  if (age < 0 || age > 300) return;
+  const t = age / 300;
+  ctx.save();
+  ctx.globalAlpha = (1 - t) ** 2;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 2;
+  for (let i = 0; i < Math.round(7 * power); i++) {
+    const angle = i * 2.4 + seed * .19;
+    const distance = 3 + t * (22 + (i % 4) * 6) * power;
+    const tail = distance + (1 - t) * (3 + i % 3 * 2);
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(angle) * distance, y + Math.sin(angle) * distance);
+    ctx.lineTo(x + Math.cos(angle) * tail, y + Math.sin(angle) * tail);
+    ctx.stroke();
+  }
+  ctx.beginPath();
+  ctx.arc(x, y, 4 + t * 19 * power, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.restore();
+}
+
+function recoilOffset(at, from, recoil) {
+  if (!from || !recoil) return { x: 0, y: 0 };
+  const dx = at.x - from.x;
+  const dy = at.y - from.y;
+  const length = Math.hypot(dx, dy) || 1;
+  return { x: 7 * recoil * dx / length, y: 7 * recoil * dy / length };
 }
 
 export function animateScene(canvas, state) {
@@ -206,7 +252,7 @@ export function animateScene(canvas, state) {
     if (area >= 0) rect(mini, '#75627f', x * 2, y * 2, 2, 2);
   }));
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
-  let feedback;
+  let feedback = [];
   let distance = state.run.travel;
   let lastRun;
   let lastWave;
@@ -234,46 +280,69 @@ export function animateScene(canvas, state) {
     camX = reset || still ? goalX : camX + (goalX - camX) * .20;
     camY = reset || still ? goalY : camY + (goalY - camY) * .20;
 
-    ctx.save();
-    ctx.translate(-Math.round(camX), -Math.round(camY));
-    ctx.drawImage(map.canvas, 0, 0);
     const walking = !run.wait && isMarching(state);
     const engaged = !isMarching(state);
-    const event = feedback?.wave === run.wave && feedback.run === run.number ? feedback : null;
-    const age = event ? (now - event.at) / 680 : 1;
-    const effects = age < 1 ? event.effects : [];
-    const lunge = still ? 0 : Math.sin(Math.PI * Math.min(age, 1));
+    const captain = marchPosition(run.wave, distance - 33);
+    feedback = feedback.filter(event => event.run === run.number && now - event.at < impactLength);
+    const effects = feedback.flatMap(event => event.effects.map(effect => ({
+      ...effect, wave: event.wave, positions: event.positions, elapsed: now - event.at,
+      ...impactFrame(effect, now - event.at, still),
+    })));
+    const contacts = effects.filter(effect => effect.hit && effect.kind !== 'heal' && effect.age >= 0 && effect.age < 145);
+    const shake = still ? 0 : Math.max(0, ...contacts.map(effect => (1 - effect.age / 145) * (effect.power > 1 ? 4 : 1.4)));
+    const impactPose = effects.find(effect => effect.wave !== run.wave)?.positions;
     const focus = effects.find(effect => effect.kind === 'strike');
     const hound = effects.find(effect => effect.kind === 'hound');
-    const captain = marchPosition(run.wave, distance - 33);
+
+    ctx.fillStyle = '#100e19';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.save();
+    ctx.translate(-Math.round(camX - Math.sin(now / 12) * shake), -Math.round(camY - Math.cos(now / 18) * shake));
+    ctx.drawImage(map.canvas, 0, 0);
+
     const unitPositions = run.units.map((unit, id) => {
       if (!unit.hp) return unit.x === null ? null : { x: unit.x, y: unit.y };
-      if (!engaged || unit.x === null) {
+      const closingPose = run.wait && impactPose?.[id];
+      let position;
+      if (closingPose && closingPose.x !== null) position = closingPose;
+      else if (!engaged || unit.x === null) {
         const rank = run.units.slice(0, id).filter(other => other.hp > 0).length;
-        return skeletonPosition(run.wave, distance, rank);
+        position = skeletonPosition(run.wave, distance, rank);
+      } else {
+        const previous = displayUnits[id] ?? unit;
+        const walking = !still && Math.hypot(unit.x - previous.x, unit.y - previous.y) > .8;
+        position = walking ? { x: previous.x + (unit.x - previous.x) * .48, y: previous.y + (unit.y - previous.y) * .48, walking } : unit;
+        displayUnits[id] = { x: position.x, y: position.y };
       }
-      const previous = displayUnits[id] ?? unit;
-      const walking = !still && Math.hypot(unit.x - previous.x, unit.y - previous.y) > .8;
-      const x = walking ? previous.x + (unit.x - previous.x) * .48 : unit.x;
-      const y = walking ? previous.y + (unit.y - previous.y) * .48 : unit.y;
-      displayUnits[id] = { x, y };
-      if (unit.role === 'bow' || !focus?.attackers.includes(id)) return { x, y, walking };
-      const foe = enemyPosition(run.wave, focus.index);
-      return { x: x + (foe.x - x) * lunge * .51, y: y + (foe.y - y) * lunge * .51, walking };
+      const { x, y } = position;
+      const incoming = effects.find(effect => effect.id === id && (effect.kind === 'enemy' || effect.kind === 'arrow'));
+      const push = incoming ? recoilOffset(position, enemyPosition(incoming.wave, incoming.index), incoming.recoil) : { x: 0, y: 0 };
+      if (unit.role === 'bow' || !focus?.attackers.includes(id)) return { x: x + push.x, y: y + push.y, walking: position.walking };
+      const foe = enemyPosition(focus.wave, focus.index);
+      return { x: x + push.x + (foe.x - x) * focus.reach * .58, y: y + push.y + (foe.y - y) * focus.reach * .58, walking: position.walking };
     });
 
     for (const [wave] of legs.slice(0, run.length).entries()) {
       opponents(wave).forEach((foe, index) => {
         const { x, y } = enemyPosition(wave, index);
         const active = wave === run.wave ? run.enemies[index] : null;
-        if (wave < run.wave || active?.hp === 0) {
+        const blow = effects.find(effect => effect.wave === wave && effect.index === index && ['strike', 'bolt', 'hound', 'ward'].includes(effect.kind));
+        const finishing = effects.find(effect => effect.wave === wave && effect.index === index && effect.defeated);
+        if ((wave < run.wave || active?.hp === 0) && (!finishing || finishing.age > 105)) {
           rect(ctx, '#28212c', x - 8, y + 1, 16, 4);
           rect(ctx, '#716277', x - 6, y, 5, 2);
           return;
         }
         const bob = still ? 0 : Math.sin(now / 240 + wave) * 1.5;
+        const origin = blow?.positions[blow.attackers?.[0] ?? blow.id] ?? captain;
+        const push = recoilOffset({ x, y }, origin.x === null ? captain : origin, blow?.recoil);
         ctx.save();
-        ctx.translate(x, y + bob);
+        ctx.translate(x + push.x, y + bob + push.y);
+        if (finishing && finishing.age > 35 && !still) {
+          ctx.rotate(.005 * (finishing.age - 35));
+          ctx.globalAlpha = 1 - (finishing.age - 35) / 100;
+        }
+        if (!still && blow?.age >= 0 && blow.age < 72) ctx.filter = 'brightness(2.7)';
         if (active?.shield) {
           ctx.strokeStyle = '#c9aeed';
           ctx.lineWidth = 2;
@@ -295,9 +364,9 @@ export function animateScene(canvas, state) {
         let x = escort.x + escort.dy * 17;
         let y = escort.y - escort.dx * 17;
         if (champion === 1 && hound) {
-          const target = enemyPosition(run.wave, hound.index);
-          x += (target.x - x) * lunge;
-          y += (target.y - y) * lunge - 12 * lunge;
+          const target = enemyPosition(hound.wave, hound.index);
+          x += (target.x - x) * hound.reach;
+          y += (target.y - y) * hound.reach - 11 * hound.reach;
         }
         ctx.save();
         ctx.translate(x, y);
@@ -310,17 +379,26 @@ export function animateScene(canvas, state) {
       if (!position) return;
       const { x, y } = position;
       const unit = run.units[id];
-      if (unit.hp === 0) {
+      const fall = effects.find(effect => effect.id === id && effect.fallen);
+      if (unit.hp === 0 && (!fall || fall.age > 100 || still)) {
         rect(ctx, '#a39596', x - 6, y, 10, 3);
         rect(ctx, '#615662', x - 2, y - 3, 7, 2);
         return;
       }
       const gait = (walking || position.walking) && !still ? Math.round(Math.sin(now / 85 + id) * 2) : 0;
       ctx.save();
-      ctx.translate(x, y);
+      if (fall && fall.age > 0 && !still) {
+        const push = recoilOffset(position, enemyPosition(fall.wave, fall.index), fall.recoil);
+        ctx.translate(x + push.x, y + push.y);
+        ctx.rotate(fall.age * .009);
+      } else {
+        ctx.translate(x, y);
+      }
+      const struck = effects.some(effect => effect.id === id && (effect.kind === 'enemy' || effect.kind === 'arrow') && effect.age >= 0 && effect.age < 80);
+      if (struck && !still) ctx.filter = 'brightness(2.2)';
       skeleton(ctx, gait, unit.role);
       ctx.restore();
-      if (engaged) {
+      if (engaged && unit.hp > 0) {
         healthBar(ctx, unit.hp, skeletonHealth(state, unit), x, y - 23, '#a1e8c7');
         ctx.font = '9px monospace';
         ctx.textAlign = 'center';
@@ -330,47 +408,48 @@ export function animateScene(canvas, state) {
     });
 
     for (const effect of effects) {
-      const foe = effect.index === undefined ? null : enemyPosition(run.wave, effect.index);
-      const unit = unitPositions[effect.id];
-      const rise = still ? 0 : age * 12;
-      if (effect.kind === 'arrow' && unit) {
-        const travel = still ? 1 : Math.min(1, age * 2);
-        const x = foe.x + (unit.x - foe.x) * travel;
-        const y = foe.y + (unit.y - foe.y) * travel - 9;
-        rect(ctx, '#f0b378', x - 3, y, 6, 2);
-      } else if (effect.kind === 'bolt') {
-        ctx.strokeStyle = '#b2ffd3';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(captain.x, captain.y - 18);
-        ctx.lineTo(foe.x, foe.y - 8);
-        ctx.stroke();
-      }
-      if (effect.kind === 'strike') {
-        const travel = still ? 1 : Math.min(1, age * 2.7);
-        for (const id of effect.attackers) {
-          const origin = unitPositions[id];
-          if (!origin || run.units[id].role !== 'bow') continue;
-          const x = origin.x + (foe.x - origin.x) * travel;
-          const y = origin.y + (foe.y - origin.y) * travel - 9;
-          rect(ctx, '#b2ffd3', x - 3, y, 6, 2);
+      const { kind, age, power, color, hit, travel } = effect;
+      const foe = effect.index === undefined ? null : enemyPosition(effect.wave, effect.index);
+      const unit = effect.positions[effect.id] ?? unitPositions[effect.id];
+      const incoming = kind === 'arrow' || kind === 'enemy';
+      const destination = incoming || kind === 'heal' ? unit : foe;
+      if (!destination || destination.x === null) continue;
+
+      if (!still && age < 80) {
+        if (kind === 'arrow' && unit) trail(ctx, foe, unit, travel, color, 2);
+        if (kind === 'bolt') trail(ctx, captain, foe, travel, color, 3);
+        if (kind === 'strike') {
+          for (const id of effect.attackers) {
+            const origin = effect.positions[id];
+            if (!origin || origin.x === null || origin.role !== 'bow') continue;
+            trail(ctx, origin, foe, travel, '#b2ffd3', 2);
+          }
         }
       }
-      if (effect.kind === 'ward' && unit) {
-        ctx.strokeStyle = '#d4b8ff';
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(unit.x, unit.y - 8, 14 + age * 6, 0, Math.PI * 2);
-        ctx.stroke();
-        continue;
+      if (age < 0) continue;
+      const healing = kind === 'heal';
+      if (!still) {
+        burst(ctx, destination.x, destination.y - 9, age, color, power, effect.index ?? effect.id);
+        if (kind === 'ward' && unit && age < 420) {
+          burst(ctx, unit.x, unit.y - 9, age * .71, color, 1.25, effect.id);
+        }
+        if ((kind === 'strike' || kind === 'hound') && age < 130) {
+          const source = effect.positions[effect.attackers?.[0]] ?? captain;
+          const angle = Math.atan2(destination.y - source.y, destination.x - source.x);
+          ctx.save();
+          ctx.globalAlpha = 1 - age / 130;
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 3;
+          ctx.beginPath();
+          ctx.arc(destination.x, destination.y - 10, 11 + age / 28, angle - 1, angle + 1.12);
+          ctx.stroke();
+          ctx.restore();
+        }
       }
-      const kind = effect.kind;
-      if (unit && (kind !== 'arrow' || age >= .4 || still)) {
-        readout(ctx, kind === 'heal' ? `+${effect.hit}` : effect.hit ? `−${effect.hit}` : 'BLOCK',
-          unit.x, unit.y - 29 - rise, kind === 'heal' ? '#b2ffd3' : '#ffa18e');
-      } else if (!unit && foe) {
-        readout(ctx, effect.hit || 'BLOCK', foe.x, foe.y - 45 - rise, kind === 'strike' ? '#fff0d2' : '#b2ffd3');
-      }
+      const offset = kind === 'hound' ? 10 : kind === 'heal' ? -9 : 0;
+      const rise = still ? 0 : Math.min(20, age * .041);
+      const label = healing ? `+${hit}` : hit ? `−${hit}` : 'BLOCK';
+      impactText(ctx, label, destination.x + offset, destination.y - (incoming || healing ? 29 : 43) - rise, color, power);
     }
     ctx.restore();
 
@@ -382,5 +461,8 @@ export function animateScene(canvas, state) {
   }
 
   requestAnimationFrame(render);
-  return event => { feedback = { ...event, at: performance.now(), run: state.run.number, wave: state.run.wave }; };
+  return event => feedback.push({
+    ...event, at: performance.now(), run: state.run.number, wave: event.wave ?? state.run.wave,
+    positions: event.positions ?? state.run.units.map(({ x, y, role }) => ({ x, y, role })),
+  });
 }

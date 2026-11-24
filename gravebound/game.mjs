@@ -1,8 +1,9 @@
 import {
   champions, encounters, championSlots, upgrades, rituals, initialState, skeletonHealth, damage, livingSkeletons, upgradeCost, opponents, skeletonClasses, squadSize, squadClass, setSquadClass,
   target, buyUpgrade, raiseChampion, toggleChampion, castBolt, step, stepMs, isMarching,
-} from './engine.mjs?v=7';
-import { animateScene, drawChampionPortrait } from './scene.mjs?v=7';
+} from './engine.mjs?v=8';
+import { animateScene, drawChampionPortrait } from './scene.mjs?v=8';
+import { setupHitSound } from './impact.mjs';
 
 const ACTIVE_SAVE_KEY = 'gravebound:active-save';
 const DEFAULT_SAVE_KEY = 'gravebound:v3';
@@ -45,11 +46,15 @@ function updateSaveNote() {
 }
 
 const hitEffect = animateScene(find('scene'), state);
+const hitSound = setupHitSound(find('hit-sound'));
 
 function eventFeedback(event) {
   if (!event) return;
   if (event.text) announce(event.text);
-  if (event.effects?.length) hitEffect(event);
+  if (event.effects?.length) {
+    hitEffect(event);
+    hitSound(event.effects);
+  }
 }
 
 const championButtons = champions.map((foe, index) => {
