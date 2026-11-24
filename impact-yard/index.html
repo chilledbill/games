@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <meta name="theme-color" content="#0a1020" />
-<title>IMPACT YARD — Spacing Tactics v6</title>
+<title>IMPACT YARD — Shorter Throws v7</title>
 <style>
 :root{color-scheme:dark;--ink:#eef5ff;--muted:#aab6ca;--cyan:#62e9ff;--orange:#ffba59;--red:#ff6677}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070b14;touch-action:none;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);user-select:none;-webkit-user-select:none}
@@ -182,7 +182,7 @@ function throwHeld(direction){
  const vectors={right:[1,0],left:[-1,0],up:[player.facing*.14,-1],down:[player.facing*.14,1]};
  const v=vectors[direction]||vectors.right,len=Math.hypot(v[0],v[1]),dx=v[0]/len,dz=v[1]/len;
  if(Math.abs(dx)>.7)player.facing=dx>0?1:-1;
- player.meter-=THROW_COST;e.down=0;e.downMax=0;e.getup=0;e.thrown=true;e.flight=1.3;e.flightHits=new Set();e.wallBounces=0;e.vx=dx*(e.type==='heavy'?530:680);e.vz=dz*(e.type==='heavy'?430:540);e.h=22;e.vy=255;e.stun=1.8;e.windup=0;e.attackMode='';e.chargeTime=0;e.poise=0;e.flash=.2;
+ player.meter-=THROW_COST;e.down=0;e.downMax=0;e.getup=0;e.thrown=true;e.flight=1.3;e.flightHits=new Set();e.wallBounces=0;e.vx=dx*(e.type==='heavy'?360:460);e.vz=dz*(e.type==='heavy'?290:365);e.h=22;e.vy=255;e.stun=1.8;e.windup=0;e.attackMode='';e.chargeTime=0;e.poise=0;e.flash=.2;
  player.throwCd=.27;player.attackCd=.21;player.attackAnim=.24;player.combo++;player.comboTimer=2.8;score+=30;
  ring(e.x,e.z,'#ffbb57',14);burst(e.x,e.z,'#ffce76',17,1.1);hitStop=.045;label('THROW!',e.x,e.z,'#ffe38c',20);
 }
