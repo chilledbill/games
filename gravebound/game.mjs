@@ -1,7 +1,7 @@
 import {
   encounters, upgrades, rituals, initialState, maxHealth, damage, income, upgradeCost,
-  target, collectOffline, buyUpgrade, raiseChampion, toggleChampion, challenge, castBolt, tick,
-} from './engine.mjs';
+  target, collectOffline, buyUpgrade, raiseChampion, toggleChampion, canChallenge, challenge, retreat, castBolt, tick,
+} from './engine.mjs?v=2';
 import { animateScene } from './scene.mjs';
 
 const SAVE_KEY = 'gravebound:v1';
@@ -14,6 +14,7 @@ try {
   const saved = localStorage.getItem(SAVE_KEY);
   if (saved) {
     Object.assign(state, JSON.parse(saved));
+    if (state.fight) state.fight.enemy = Math.min(state.fight.enemy, target(state).hp);
     restored = true;
   }
 } catch {
@@ -99,6 +100,7 @@ const ritualButtons = Object.entries(rituals).map(([key, ritual]) => {
 
 const bolt = find('bolt');
 const challengeButton = find('challenge');
+const retreatButton = find('retreat');
 const fightHints = [
   'The Bellkeeper recovers health every third round. Time Grave Bolt to finish him.',
   'The Ash Hound lunges every third round. The Bellkeeper can heal your army.',
@@ -120,29 +122,39 @@ function render() {
   const foe = target(state);
   const { fight, cleared, attempted, cooldown, lineup } = state;
   const complete = cleared === encounters.length;
+  const ready = canChallenge(state);
+  const farming = ready && !complete;
+  const dustPerSecond = income(state);
   const canRaise = encounters.some((entry, i) => i < cleared && !state.raised.includes(i) && state.essence >= entry.cost);
   setText(find('dust'), number.format(state.dust));
   setText(find('essence'), number.format(state.essence));
-  setText(find('battle-mode'), fight ? foe.kind : complete ? 'Abbey conquered' : attempted ? 'Regrouping' : 'Patrol');
-  setText(find('battle-title'), fight ? foe.name : foe.zone);
-  setText(find('mode-pill'), fight ? 'Auto battle' : `+${income(state)} dust / sec`);
+  setText(find('battle-mode'), fight ? foe.kind : complete ? 'Abbey conquered' : farming ? 'Farming' : 'Patrol');
+  setText(find('battle-title'), fight || farming ? foe.name : foe.zone);
+  setText(find('mode-pill'), `+${dustPerSecond} dust / sec`);
   setText(find('dps'), `${damage(state)} base dmg / round`);
   setText(find('lineup-count'), `${lineup.length} / 3 deployed`);
   find('summon-link').hidden = !canRaise;
   meter('army-hp', fight?.army ?? maxHealth(state), maxHealth(state));
   meter('foe-hp', fight?.enemy ?? (complete ? cleared : state.patrol), fight ? foe.hp : complete ? encounters.length : foe.patrol);
-  setText(find('foe-label'), fight ? (fight.shield ? `Enemy HP · ${fight.shield} shield` : 'Enemy health') : complete ? 'Guardians defeated' : 'Patrol progress');
+  setText(find('foe-label'), fight ? (fight.shield ? `Enemy HP · ${fight.shield} shield` : 'Enemy health') : complete ? 'Guardians defeated' : farming ? 'Patrol complete' : 'Patrol progress');
   bolt.hidden = !fight;
   bolt.disabled = !fight || cooldown > 0;
   setText(bolt, cooldown ? `Grave Bolt · ${cooldown}s` : 'Cast Grave Bolt');
-  challengeButton.hidden = Boolean(fight) || !(complete || attempted);
-  setText(challengeButton, complete ? 'Challenge the Abbot Reborn' : 'Retry fight');
+  challengeButton.hidden = !ready;
+  retreatButton.hidden = !fight;
+  find('upgrade-link').hidden = !farming;
+  setText(challengeButton, complete ? 'Challenge the Abbot Reborn' : attempted ? 'Retry fight' : 'Challenge the Iron Abbot');
+  const cheapestUpgrade = Math.min(...Object.keys(upgrades).map(key => upgradeCost(state, key)));
+  const secondsToUpgrade = Math.ceil((cheapestUpgrade - state.dust) / dustPerSecond);
+  const upgradeStatus = secondsToUpgrade <= 0 ? 'An upgrade is available now.'
+    : Number.isFinite(secondsToUpgrade) ? `Next upgrade affordable in ${secondsToUpgrade}s.` : '';
   const endgameHint = state.rematches
     ? 'The Abbot Reborn has fallen. Challenge him again for 180 Bone Dust.'
     : 'The abbey is yours. Raise the Iron Abbot, then test your full lineup against his reborn form.';
   const hint = fight ? fightHints[Math.min(cleared, 2)]
     : complete ? endgameHint
-    : attempted ? `Farming Bone Dust after retreating. Upgrade your army before retrying ${foe.name}.`
+    : farming ? `Your army farms Bone Dust here until you challenge the guardian. ${upgradeStatus}`
+    : foe.kind === 'Boss' ? 'Your army scouts the sanctuary. Bone Armor helps it survive the Abbot’s heavy hits.'
     : `The army fights automatically. Upgrade your army before ${foe.name} arrives.`;
   setText(find('battle-hint'), hint);
 
@@ -193,6 +205,10 @@ bolt.addEventListener('click', () => {
 });
 challengeButton.addEventListener('click', () => {
   if (challenge(state)) announce(`${target(state).name} enters the battlefield.`);
+  saveAndRender();
+});
+retreatButton.addEventListener('click', () => {
+  if (retreat(state)) announce('Your army withdraws to farm Bone Dust.');
   saveAndRender();
 });
 

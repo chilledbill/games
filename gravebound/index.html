@@ -7,7 +7,7 @@
   <meta name="description" content="Gravebound is a necromancer idle RPG. Defeat the abbey's guardians and raise them as your Champions.">
   <title>Gravebound</title>
   <link rel="stylesheet" href="./style.css">
-  <script type="module" src="./game.mjs"></script>
+  <script type="module" src="./game.mjs?v=2"></script>
 </head>
 <body>
   <header class="top">
@@ -46,6 +46,8 @@
           <div class="actions">
             <button id="bolt" class="primary" disabled>Grave Bolt</button>
             <button id="challenge" hidden>Retry fight</button>
+            <button id="retreat" hidden>Retreat to farm</button>
+            <a id="upgrade-link" class="action-link" href="#forge-title" hidden>Army upgrades</a>
             <a id="summon-link" class="action-link" href="#crypt-title" hidden>Raise a Champion</a>
           </div>
           <p class="hint" id="battle-hint">The army fights automatically. Spend Bone Dust on upgrades before the Bellkeeper arrives.</p>

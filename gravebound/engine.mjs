@@ -1,7 +1,7 @@
 export const encounters = [
   { name: 'The Bellkeeper', zone: 'Abbey Gate', kind: 'Miniboss', hp: 66, attack: 5, patrol: 28, essence: 2, cost: 2, dust: 32, skill: 'Last Toll', boon: 'Restores 9 army health every fourth round.' },
   { name: 'The Ash Hound', zone: 'Cinder Cloister', kind: 'Miniboss', hp: 148, attack: 9, patrol: 55, essence: 3, cost: 3, dust: 65, skill: 'Cinder Leap', boon: 'Deals 13 bonus damage every third round.' },
-  { name: 'The Iron Abbot', zone: 'Broken Sanctuary', kind: 'Boss', hp: 270, attack: 14, patrol: 86, essence: 5, cost: 5, dust: 105, skill: 'Glass Aegis', boon: 'Absorbs up to 8 damage every third round, then hits for 8.' },
+  { name: 'The Iron Abbot', zone: 'Broken Sanctuary', kind: 'Boss', hp: 245, attack: 12, patrol: 86, essence: 5, cost: 5, dust: 105, skill: 'Glass Aegis', boon: 'Absorbs up to 8 damage every third round, then hits for 8.' },
 ];
 
 export const upgrades = {
@@ -23,7 +23,7 @@ export const initialState = (now = Date.now()) => ({
 
 export const maxHealth = state => 60 + state.levels.armor * 15;
 export const damage = state => 4 + state.levels.skeletons * 2 + state.levels.grimoire * 3 + state.lineup.length * 3;
-export const income = state => [2, 3, 5, 8][state.cleared];
+export const income = state => [2, 3, 7, 8][state.cleared];
 export const upgradeCost = (state, key) => Math.ceil(upgrades[key].base * 1.58 ** state.levels[key]);
 export const rematch = { ...encounters[2], name: 'The Iron Abbot Reborn', hp: 470, attack: 20 };
 
@@ -64,9 +64,20 @@ export function toggleChampion(state, index) {
     : [...state.lineup, index];
 }
 
+export function canChallenge(state) {
+  return !state.fight && (state.cleared === encounters.length || state.patrol >= target(state).patrol);
+}
+
 export function challenge(state) {
-  if (state.fight || (state.cleared < encounters.length && state.patrol < target(state).patrol)) return false;
+  if (!canChallenge(state)) return false;
   state.fight = { enemy: target(state).hp, army: maxHealth(state), round: 0, shield: 0 };
+  state.attempted = true;
+  return true;
+}
+
+export function retreat(state) {
+  if (!state.fight) return false;
+  state.fight = null;
   state.attempted = true;
   return true;
 }
@@ -103,11 +114,11 @@ export function tick(state) {
   state.cooldown = Math.max(0, state.cooldown - 1);
   const foe = target(state);
   const fight = state.fight;
+  state.dust += income(state);
   if (!fight) {
-    state.dust += income(state);
     if (state.cleared < encounters.length) {
       state.patrol = Math.min(foe.patrol, state.patrol + damage(state));
-      if (!state.attempted && challenge(state)) {
+      if (foe.kind === 'Miniboss' && !state.attempted && challenge(state)) {
         return { type: 'challenge', text: `${foe.name} enters the battlefield.` };
       }
     }
@@ -121,7 +132,6 @@ export function tick(state) {
   if (state.ritual === 'pact' && state.lineup.length) hit += 5;
   if (thirdRound && state.lineup.includes(1)) hit += 13;
   if (state.cleared === 0 && thirdRound) fight.enemy = Math.min(foe.hp, fight.enemy + 5);
-  if (state.cleared >= 2 && thirdRound) fight.shield = 10;
   const blocked = Math.min(hit, fight.shield);
   fight.shield -= blocked;
   fight.enemy -= hit - blocked;
@@ -138,8 +148,9 @@ export function tick(state) {
   }
   fight.army -= incoming;
   if (fight.army <= 0) {
-    state.fight = null;
-    return { type: 'defeat', text: 'The army retreats and resumes farming. Upgrade your army or change the lineup before retrying.' };
+    retreat(state);
+    return { type: 'defeat', text: 'The army retreats to the last cleared area and keeps farming Bone Dust.' };
   }
+  if (state.cleared >= 2 && thirdRound) fight.shield = 10;
   return { type: 'round', hit: hit - blocked };
 }
