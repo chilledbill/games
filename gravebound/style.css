@@ -61,6 +61,14 @@ h3 { font-size: 1.15rem; line-height: 1.15; }
 .tag { flex-shrink: 0; border: 1px solid var(--line); border-radius: 4px; color: var(--mint); font-size: .875rem; padding: .25rem .45rem; }
 #scene { display: block; width: 100%; height: auto; image-rendering: pixelated; background: #1a1726; border-block: 1px solid var(--line); }
 .battle-controls { padding: .9rem 1rem 1rem; }
+.route { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem .75rem; margin-bottom: .9rem; color: var(--muted); font-size: .875rem; }
+.route > span { font-variant-numeric: tabular-nums; }
+#run-dust { color: var(--gold); }
+#wave-track { display: flex; flex: 1 1 5rem; gap: .25rem; }
+.wave { flex: 1; height: .38rem; background: #574461; border-radius: 2px; }
+.wave.cleared { background: #83cdae; }
+.wave.current { background: var(--gold); }
+.wave.guardian { height: .6rem; margin-block: -.11rem; }
 .meters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .8rem; }
 .meter > div { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .2rem .45rem; color: var(--muted); font-size: .875rem; }
 .meter span { color: var(--text); font-variant-numeric: tabular-nums; }

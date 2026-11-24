@@ -1,3 +1,5 @@
+import { livingSkeletons, target } from './engine.mjs?v=3';
+
 const palettes = [
   ['#211c35', '#342944', '#4e3954', '#e5ad94'],
   ['#2c1c31', '#432942', '#603847', '#f6a477'],
@@ -123,6 +125,25 @@ function guardian(ctx, x, y, id, spirit) {
   }
 }
 
+function minorFoe(ctx, x, y, wave, area) {
+  if (wave === 0) {
+    polygon(ctx, '#a18a97', [[x - 20, y - 6], [x - 13, y - 13], [x - 12, y - 21], [x - 7, y - 16], [x + 15, y - 16], [x + 24, y - 7], [x + 14, y - 2], [x - 15, y - 2]]);
+    ctx.fillStyle = '#c79b9b';
+    ctx.fillRect(x + 21, y - 6, 14, 2);
+    ctx.fillRect(x - 15, y - 13, 3, 2);
+    return;
+  }
+  const cloak = ['#736078', '#a45354', '#626e91'][area];
+  polygon(ctx, cloak, [[x - 16, y], [x - 11, y - 26], [x - 6, y - 39], [x + 8, y - 41], [x + 13, y - 23], [x + 17, y]]);
+  ctx.fillStyle = '#221a2c';
+  ctx.fillRect(x - 7, y - 35, 13, 7);
+  ctx.fillStyle = '#ffd4a1';
+  ctx.fillRect(x - 6, y - 33, 4, 2);
+  ctx.fillStyle = '#a8a7ae';
+  ctx.fillRect(x - 19, y - 34, 3, 25);
+  ctx.fillRect(x - 23, y - 16, 11, 3);
+}
+
 export function animateScene(canvas, state) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return () => {};
@@ -141,13 +162,13 @@ export function animateScene(canvas, state) {
     requestAnimationFrame(render);
     if (now - lastDraw < 40 || document.hidden) return;
     lastDraw = now;
-    const { cleared, fight, lineup, levels } = state;
+    const { run, lineup } = state;
+    const foe = target(state);
     const time = motion.matches ? 0 : now;
-    const index = Math.min(cleared, 2);
     const bob = Math.round(Math.sin(time / 220) * 2);
-    const flash = feedback && now - feedback.at < 560;
+    const flash = feedback && feedback.run === run.number && feedback.wave === run.wave && now - feedback.at < 560;
     const enemyX = 371 + (flash && !motion.matches ? 3 * Math.round(Math.sin(now / 16)) : 0);
-    ctx.drawImage(scenery[index], 0, 0);
+    ctx.drawImage(scenery[foe.area], 0, 0);
     for (let i = 0; i < 20; i++) {
       const x = (i * 53 + time * (.008 + (i % 3) * .005)) % canvas.width;
       const y = (i * 17 + time * .009) % 104 + 92;
@@ -155,31 +176,28 @@ export function animateScene(canvas, state) {
       ctx.fillRect(Math.round(x), Math.round(y), i % 4 ? 1 : 2, 1);
     }
     necromancer(ctx, 75, 200 + bob);
-    for (let i = 0; i < Math.min(1 + levels.skeletons, 6); i++) {
-      skeleton(ctx, 113 + i * 21, 196 + (i % 2) * 10 + bob * (i % 2 ? 1 : -1));
+    const advancing = flash && feedback.type === 'round' && !motion.matches
+      ? Math.round(Math.sin(Math.PI * (now - feedback.at) / 560) * 26) : 0;
+    for (let i = 0; i < Math.min(livingSkeletons(state), 6); i++) {
+      skeleton(ctx, 113 + i * 18 + advancing, 196 + (i % 2) * 12 + bob * (i % 2 ? 1 : -1));
     }
-    lineup.forEach((champion, slot) => {
-      ctx.save();
-      ctx.translate(190 + slot * 47, 184 + (slot % 2) * 11);
-      ctx.scale(-.68, .68);
-      guardian(ctx, 0, -bob, champion, true);
-      ctx.restore();
-    });
-    if (fight) {
-      if (fight.shield) {
+    if (run.army > 0) {
+      lineup.forEach((champion, slot) => {
+        ctx.save();
+        ctx.translate(254 + slot * 42, 184 + (slot % 2) * 11);
+        ctx.scale(-.68, .68);
+        guardian(ctx, 0, -bob, champion, true);
+        ctx.restore();
+      });
+    }
+    if (run.enemy > 0) {
+      if (run.shield) {
         ctx.strokeStyle = '#cdb1f1';
         ctx.lineWidth = 2;
         ctx.strokeRect(enemyX - 39, 124, 78, 78);
       }
-      guardian(ctx, enemyX, 199 - bob, index, false);
-    } else if (cleared < 3) {
-      for (let i = 0; i < 3; i++) {
-        const x = 340 + i * 28 - Math.round(time / 180 % 14);
-        const y = 191 + i % 2 * 8;
-        polygon(ctx, '#171222', [[x - 9, y], [x - 5, y - 25], [x + 4, y - 27], [x + 10, y]]);
-        ctx.fillStyle = '#edac91';
-        ctx.fillRect(x - 4, y - 21, 4, 2);
-      }
+      if (foe.guardian === undefined) minorFoe(ctx, enemyX, 199 - bob, run.wave, foe.area);
+      else guardian(ctx, enemyX, 199 - bob, foe.guardian, false);
     }
     if (flash) {
       const age = (now - feedback.at) / 560;
@@ -194,5 +212,5 @@ export function animateScene(canvas, state) {
     }
   }
   requestAnimationFrame(render);
-  return event => { feedback = { ...event, at: performance.now() }; };
+  return event => { feedback = { ...event, at: performance.now(), run: state.run.number, wave: state.run.wave }; };
 }

@@ -4,17 +4,17 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#15121b">
-  <meta name="description" content="Gravebound is a necromancer idle RPG. Defeat the abbey's guardians and raise them as your Champions.">
+  <meta name="description" content="Lead an army of skeletons through the haunted abbey, rebuild after each fall, and raise defeated guardians as Champions.">
   <title>Gravebound</title>
-  <link rel="stylesheet" href="./style.css">
-  <script type="module" src="./game.mjs?v=2"></script>
+  <link rel="stylesheet" href="./style.css?v=3">
+  <script type="module" src="./game.mjs?v=3"></script>
 </head>
 <body>
   <header class="top">
     <div class="top-inner">
       <a class="back" href="../">‹ All games</a>
       <div class="wallet" aria-label="Resources">
-        <div><span class="resource-icon dust" aria-hidden="true">✧</span><span>Bone Dust</span><strong id="dust">12</strong></div>
+        <div><span class="resource-icon dust" aria-hidden="true">✧</span><span>Bone Dust</span><strong id="dust">0</strong></div>
         <div><span class="resource-icon essence" aria-hidden="true">◆</span><span>Grave Essence</span><strong id="essence">0</strong></div>
       </div>
     </div>
@@ -23,34 +23,37 @@
     <header class="title">
       <p class="eyebrow">⚜ &nbsp; The Haunted Abbey</p>
       <h1>Gravebound</h1>
-      <p>Defeat the abbey’s guardians. Raise them as your Champions.</p>
+      <p>Fight through the abbey. When your army falls, raise it and try again.</p>
     </header>
     <div class="layout">
       <section class="panel battlefield" aria-labelledby="battle-title">
         <div class="panel-head">
-          <div><p class="eyebrow" id="battle-mode">Patrol</p><h2 id="battle-title">Abbey Gate</h2></div>
-          <span class="tag" id="mode-pill">Auto battle</span>
+          <div><p class="eyebrow" id="battle-mode">Abbey Gate</p><h2 id="battle-title">Grave Rat</h2></div>
+          <span class="tag" id="mode-pill">Run 1</span>
         </div>
         <canvas id="scene" width="480" height="236" aria-hidden="true"></canvas>
         <div class="battle-controls">
+          <div class="route">
+            <span id="wave-number">Wave 1 / 7</span>
+            <div id="wave-track" aria-hidden="true"></div>
+            <span id="run-dust">0 dust this run</span>
+          </div>
           <div class="meters">
             <div class="meter">
-              <div><label for="army-hp">Undead army</label><span id="army-number">60 / 60</span></div>
+              <div><label for="army-hp" id="army-label">2 skeletons</label><span id="army-number">60 / 60</span></div>
               <progress id="army-hp" class="army-hp" value="60" max="60"></progress>
             </div>
             <div class="meter">
-              <div><label for="foe-hp" id="foe-label">Patrol progress</label><span id="foe-number">0 / 28</span></div>
-              <progress id="foe-hp" value="0" max="28"></progress>
+              <div><label for="foe-hp" id="foe-label">Enemy health</label><span id="foe-number">10 / 10</span></div>
+              <progress id="foe-hp" value="10" max="10"></progress>
             </div>
           </div>
           <div class="actions">
             <button id="bolt" class="primary" disabled>Grave Bolt</button>
-            <button id="challenge" hidden>Retry fight</button>
-            <button id="retreat" hidden>Retreat to farm</button>
-            <a id="upgrade-link" class="action-link" href="#forge-title" hidden>Army upgrades</a>
+            <a class="action-link" href="#forge-title">Army upgrades</a>
             <a id="summon-link" class="action-link" href="#crypt-title" hidden>Raise a Champion</a>
           </div>
-          <p class="hint" id="battle-hint">The army fights automatically. Spend Bone Dust on upgrades before the Bellkeeper arrives.</p>
+          <p class="hint" id="battle-hint">Your two skeletons are rising at the Abbey Gate.</p>
         </div>
       </section>
       <section class="panel forge" aria-labelledby="forge-title">
@@ -63,9 +66,9 @@
       <section class="panel crypt" aria-labelledby="crypt-title">
         <div class="panel-head">
           <div><p class="eyebrow">Champion roster</p><h2 id="crypt-title">The Crypt</h2></div>
-          <span class="tag" id="lineup-count">0 / 3 deployed</span>
+          <span class="tag" id="lineup-count">0 / 2 deployed</span>
         </div>
-        <p class="section-note">Defeat a guardian, then spend Grave Essence to raise it permanently.</p>
+        <p class="section-note">Raise defeated guardians with Grave Essence. Recall a Champion to free a slot.</p>
         <div id="champions" class="list"></div>
       </section>
       <section class="panel rituals" aria-labelledby="ritual-title">
@@ -75,11 +78,11 @@
         <div id="rituals" class="list" role="group" aria-label="Choose an active ritual"></div>
       </section>
       <section class="panel journal" aria-labelledby="journal-title">
-        <div class="panel-head"><h2 id="journal-title">Battle Journal</h2></div>
+        <div class="panel-head"><h2 id="journal-title">Battle Journal</h2><span class="tag" id="best-run">Best run · 0 waves cleared</span></div>
         <ol id="journal" aria-live="polite" aria-relevant="additions"></ol>
       </section>
     </div>
-    <footer id="save-note">Progress saves in this browser. Your army farms Bone Dust for up to 8 hours away.</footer>
+    <footer id="save-note">Progress saves in this browser. Runs pause when you leave the game.</footer>
   </main>
 </body>
 </html>

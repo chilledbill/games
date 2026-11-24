@@ -1,25 +1,21 @@
 import {
-  encounters, upgrades, rituals, initialState, maxHealth, damage, income, upgradeCost,
-  target, collectOffline, buyUpgrade, raiseChampion, toggleChampion, canChallenge, challenge, retreat, castBolt, tick,
-} from './engine.mjs?v=2';
-import { animateScene } from './scene.mjs';
+  champions, encounters, championSlots, upgrades, rituals, initialState, maxHealth, damage, livingSkeletons, upgradeCost,
+  target, buyUpgrade, raiseChampion, toggleChampion, castBolt, tick,
+} from './engine.mjs?v=3';
+import { animateScene } from './scene.mjs?v=3';
 
-const SAVE_KEY = 'gravebound:v1';
+const SAVE_KEY = 'gravebound:v2';
 const find = id => document.getElementById(id);
 const number = new Intl.NumberFormat();
-const state = initialState();
-let restored = false;
+let previous;
 let storageAvailable = true;
 try {
-  const saved = localStorage.getItem(SAVE_KEY);
-  if (saved) {
-    Object.assign(state, JSON.parse(saved));
-    if (state.fight) state.fight.enemy = Math.min(state.fight.enemy, target(state).hp);
-    restored = true;
-  }
+  const saved = localStorage.getItem(SAVE_KEY) ?? localStorage.getItem('gravebound:v1');
+  if (saved) previous = JSON.parse(saved);
 } catch {
   storageAvailable = false;
 }
+const state = initialState(previous ?? {});
 
 const announce = text => {
   const item = document.createElement('li');
@@ -30,7 +26,6 @@ const announce = text => {
 };
 
 function save() {
-  state.savedAt = Date.now();
   if (!storageAvailable) return;
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify(state));
@@ -51,7 +46,7 @@ function eventFeedback(event) {
   if (event.type === 'round' || event.type === 'bolt') hitEffect(event);
 }
 
-const championButtons = encounters.map((foe, index) => {
+const championButtons = champions.map((foe, index) => {
   const row = document.createElement('article');
   row.className = 'row champion';
   row.innerHTML = `<span class="portrait" aria-hidden="true">${['♜', '✦', '⬢'][index]}</span>
@@ -60,10 +55,11 @@ const championButtons = encounters.map((foe, index) => {
   const button = row.querySelector('button');
   button.addEventListener('click', () => {
     if (state.raised.includes(index)) {
-      toggleChampion(state, index);
-      announce(`${foe.name} ${state.lineup.includes(index) ? 'joins the army.' : 'returns to the crypt.'}`);
+      if (toggleChampion(state, index)) {
+        announce(`${foe.name} ${state.lineup.includes(index) ? 'joins the army.' : 'returns to the crypt.'}`);
+      }
     } else if (raiseChampion(state, index)) {
-      announce(`${foe.name} rises and joins your army.`);
+      announce(`${foe.name} ${state.lineup.includes(index) ? 'rises and joins your army.' : 'rises and waits in the crypt.'}`);
     }
     saveAndRender();
   });
@@ -99,13 +95,13 @@ const ritualButtons = Object.entries(rituals).map(([key, ritual]) => {
 });
 
 const bolt = find('bolt');
-const challengeButton = find('challenge');
-const retreatButton = find('retreat');
-const fightHints = [
-  'The Bellkeeper recovers health every third round. Time Grave Bolt to finish him.',
-  'The Ash Hound lunges every third round. The Bellkeeper can heal your army.',
-  'The Abbot raises a glass shield every third round. Break it with Grave Bolt.',
-];
+const waveTrack = find('wave-track');
+const waveMarkers = encounters.map(foe => {
+  const marker = document.createElement('span');
+  marker.className = foe.guardian === undefined ? 'wave' : 'wave guardian';
+  waveTrack.append(marker);
+  return marker;
+});
 
 function setText(element, text) {
   if (element.textContent !== text) element.textContent = text;
@@ -120,53 +116,48 @@ function meter(id, value, max) {
 
 function render() {
   const foe = target(state);
-  const { fight, cleared, attempted, cooldown, lineup } = state;
-  const complete = cleared === encounters.length;
-  const ready = canChallenge(state);
-  const farming = ready && !complete;
-  const dustPerSecond = income(state);
-  const canRaise = encounters.some((entry, i) => i < cleared && !state.raised.includes(i) && state.essence >= entry.cost);
+  const { run, lineup } = state;
+  const skeletons = livingSkeletons(state);
+  const canRaise = champions.some((entry, index) => index < state.cleared && !state.raised.includes(index) && state.essence >= entry.essence);
   setText(find('dust'), number.format(state.dust));
   setText(find('essence'), number.format(state.essence));
-  setText(find('battle-mode'), fight ? foe.kind : complete ? 'Abbey conquered' : farming ? 'Farming' : 'Patrol');
-  setText(find('battle-title'), fight || farming ? foe.name : foe.zone);
-  setText(find('mode-pill'), `+${dustPerSecond} dust / sec`);
+  setText(find('battle-mode'), foe.zone);
+  setText(find('battle-title'), foe.name);
+  setText(find('mode-pill'), `Run ${number.format(run.number)}`);
+  setText(find('wave-number'), `Wave ${run.wave + 1} / ${run.length}`);
+  setText(find('run-dust'), `+${number.format(run.dust)} dust this run`);
+  setText(find('best-run'), `Best run · ${state.best} ${state.best === 1 ? 'wave' : 'waves'} cleared`);
+  waveMarkers.forEach((marker, index) => {
+    marker.hidden = index >= run.length;
+    marker.classList.toggle('cleared', index < run.wave || (index === run.wave && run.result === 'cleared'));
+    marker.classList.toggle('current', index === run.wave && run.result !== 'cleared');
+  });
   setText(find('dps'), `${damage(state)} base dmg / round`);
-  setText(find('lineup-count'), `${lineup.length} / 3 deployed`);
+  setText(find('lineup-count'), `${lineup.length} / ${championSlots} deployed`);
+  setText(find('army-label'), `${skeletons} ${skeletons === 1 ? 'skeleton' : 'skeletons'}`);
+  setText(find('foe-label'), run.shield ? `Enemy HP · ${run.shield} shield` : 'Enemy health');
   find('summon-link').hidden = !canRaise;
-  meter('army-hp', fight?.army ?? maxHealth(state), maxHealth(state));
-  meter('foe-hp', fight?.enemy ?? (complete ? cleared : state.patrol), fight ? foe.hp : complete ? encounters.length : foe.patrol);
-  setText(find('foe-label'), fight ? (fight.shield ? `Enemy HP · ${fight.shield} shield` : 'Enemy health') : complete ? 'Guardians defeated' : farming ? 'Patrol complete' : 'Patrol progress');
-  bolt.hidden = !fight;
-  bolt.disabled = !fight || cooldown > 0;
-  setText(bolt, cooldown ? `Grave Bolt · ${cooldown}s` : 'Cast Grave Bolt');
-  challengeButton.hidden = !ready;
-  retreatButton.hidden = !fight;
-  find('upgrade-link').hidden = !farming;
-  setText(challengeButton, complete ? 'Challenge the Abbot Reborn' : attempted ? 'Retry fight' : 'Challenge the Iron Abbot');
-  const cheapestUpgrade = Math.min(...Object.keys(upgrades).map(key => upgradeCost(state, key)));
-  const secondsToUpgrade = Math.ceil((cheapestUpgrade - state.dust) / dustPerSecond);
-  const upgradeStatus = secondsToUpgrade <= 0 ? 'An upgrade is available now.'
-    : Number.isFinite(secondsToUpgrade) ? `Next upgrade affordable in ${secondsToUpgrade}s.` : '';
-  const endgameHint = state.rematches
-    ? 'The Abbot Reborn has fallen. Challenge him again for 180 Bone Dust.'
-    : 'The abbey is yours. Raise the Iron Abbot, then test your full lineup against his reborn form.';
-  const hint = fight ? fightHints[Math.min(cleared, 2)]
-    : complete ? endgameHint
-    : farming ? `Your army farms Bone Dust here until you challenge the guardian. ${upgradeStatus}`
-    : foe.kind === 'Boss' ? 'Your army scouts the sanctuary. Bone Armor helps it survive the Abbot’s heavy hits.'
-    : `The army fights automatically. Upgrade your army before ${foe.name} arrives.`;
+  meter('army-hp', run.army, maxHealth(state));
+  meter('foe-hp', run.enemy, foe.hp);
+  bolt.disabled = Boolean(run.wait || run.result || run.cooldown);
+  setText(bolt, run.cooldown ? `Grave Bolt · ${run.cooldown}s` : 'Cast Grave Bolt');
+  const hint = run.result === 'fallen' ? `Your army fell. Rising at the Abbey Gate in ${run.wait}s.`
+    : run.result === 'cleared' ? `Run cleared. The next march starts in ${run.wait}s.`
+    : run.wave === 0 && run.wait ? 'Your skeletons are rising at the Abbey Gate.'
+    : foe.hint ?? 'Your army attacks automatically. Defeat foes to earn Bone Dust.';
   setText(find('battle-hint'), hint);
 
   championButtons.forEach(({ row, button }, index) => {
-    const foe = encounters[index];
+    const foe = champions[index];
     const raised = state.raised.includes(index);
     const deployed = lineup.includes(index);
-    const defeated = index < cleared;
+    const defeated = index < state.cleared;
+    const full = lineup.length >= championSlots;
     row.classList.toggle('active', deployed);
-    button.disabled = !defeated || (!raised && state.essence < foe.cost);
+    button.disabled = !defeated || (raised ? !deployed && full : state.essence < foe.essence);
     button.dataset.state = defeated && !raised ? 'available' : '';
-    const label = raised ? (deployed ? 'Recall' : 'Deploy') : defeated ? `Raise · ${foe.cost} essence` : 'Defeat to unlock';
+    const label = raised ? (deployed ? 'Recall' : full ? 'Lineup full' : 'Deploy')
+      : defeated ? `Raise · ${foe.essence} essence` : 'Defeat to unlock';
     setText(button, label);
     button.setAttribute('aria-label', `${label} · ${foe.name}`);
   });
@@ -193,56 +184,28 @@ function saveAndRender() {
   render();
 }
 
-function resume(now) {
-  const earned = collectOffline(state, now);
-  if (earned) announce(`While you were away, your army gathered ${number.format(earned)} Bone Dust.`);
-  saveAndRender();
-}
-
 bolt.addEventListener('click', () => {
   eventFeedback(castBolt(state));
   saveAndRender();
 });
-challengeButton.addEventListener('click', () => {
-  if (challenge(state)) announce(`${target(state).name} enters the battlefield.`);
-  saveAndRender();
-});
-retreatButton.addEventListener('click', () => {
-  if (retreat(state)) announce('Your army withdraws to farm Bone Dust.');
-  saveAndRender();
-});
 
-announce(restored ? 'Your march through the abbey resumes.' : 'Your skeletons begin their patrol at the Abbey Gate.');
-resume(Date.now());
+if (previous && !previous.run) {
+  announce('Your upgrades and Champions carry over. A new run begins at the Abbey Gate.');
+} else if (!previous) {
+  announce('Two skeletons rise and begin their first march.');
+}
+saveAndRender();
 
-let lastTick = Date.now();
-let hiddenSince = document.hidden ? lastTick : null;
-setInterval(() => {
-  if (hiddenSince !== null) return;
-  const now = Date.now();
-  const elapsed = Math.floor((now - lastTick) / 1000);
-  if (elapsed < 1) return;
-  if (elapsed > 5) {
-    lastTick = now;
-    collectOffline(state, now);
-  } else {
-    lastTick += elapsed * 1000;
-    for (let i = 0; i < elapsed; i++) eventFeedback(tick(state));
+let timer;
+function syncTimer() {
+  clearInterval(timer);
+  if (!document.hidden) {
+    timer = setInterval(() => {
+      if (document.hidden) return;
+      eventFeedback(tick(state));
+      saveAndRender();
+    }, 1000);
   }
-  saveAndRender();
-}, 200);
-
-document.addEventListener('visibilitychange', () => {
-  const now = Date.now();
-  if (document.hidden) {
-    hiddenSince = now;
-    save();
-  } else if (hiddenSince !== null) {
-    hiddenSince = null;
-    lastTick = now;
-    resume(now);
-  }
-});
-window.addEventListener('pagehide', () => {
-  if (hiddenSince === null) save();
-});
+}
+document.addEventListener('visibilitychange', syncTimer);
+syncTimer();
