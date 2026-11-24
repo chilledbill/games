@@ -1,8 +1,8 @@
 import {
-  champions, encounters, championSlots, upgrades, rituals, initialState, maxHealth, damage, livingSkeletons, upgradeCost,
+  champions, encounters, championSlots, upgrades, rituals, initialState, skeletonHealth, damage, livingSkeletons, upgradeCost, opponents,
   target, buyUpgrade, raiseChampion, toggleChampion, castBolt, step, stepMs, isMarching,
-} from './engine.mjs?v=5';
-import { animateScene } from './scene.mjs?v=5';
+} from './engine.mjs?v=6';
+import { animateScene } from './scene.mjs?v=6';
 
 const ACTIVE_SAVE_KEY = 'gravebound:active-save';
 const DEFAULT_SAVE_KEY = 'gravebound:v3';
@@ -49,7 +49,7 @@ const hitEffect = animateScene(find('scene'), state);
 function eventFeedback(event) {
   if (!event) return;
   if (event.text) announce(event.text);
-  if (event.type === 'round' || event.type === 'bolt') hitEffect(event);
+  if (event.effects?.length) hitEffect(event);
 }
 
 const championButtons = champions.map((foe, index) => {
@@ -114,23 +114,38 @@ function setText(element, text) {
   if (element.textContent !== text) element.textContent = text;
 }
 
-function meter(id, value, max) {
-  const bar = find(id);
-  bar.max = max;
-  bar.value = value;
-  setText(find(id.replace('-hp', '-number')), `${value} / ${max}`);
+function renderMeters(container, entries, allied = false) {
+  while (container.children.length > entries.length) container.lastElementChild.remove();
+  entries.forEach(({ name, health, max, shield, fallenTo }, index) => {
+    let row = container.children[index];
+    if (!row) {
+      row = document.createElement('div');
+      row.className = 'meter';
+      const id = `${container.id}-${index}`;
+      row.innerHTML = `<div><label for="${id}"></label><span></span></div><progress id="${id}"></progress>`;
+      container.append(row);
+    }
+    const bar = row.querySelector('progress');
+    bar.classList.toggle('army-hp', allied);
+    bar.max = max;
+    bar.value = health;
+    row.classList.toggle('fallen', health === 0);
+    setText(row.querySelector('label'), shield ? `${name} · ${shield} shield` : name);
+    setText(row.querySelector('span'), health > 0 ? `${health} / ${max}` : fallenTo ? `Fell to ${fallenTo}` : 'Fallen');
+  });
 }
 
 function render() {
   const foe = target(state);
   const { run, lineup } = state;
   const marching = isMarching(state);
+  const roster = opponents(run.wave);
   const skeletons = livingSkeletons(state);
   const canRaise = champions.some((entry, index) => index < state.cleared && !state.raised.includes(index) && state.essence >= entry.essence);
   setText(find('dust'), number.format(state.dust));
   setText(find('essence'), number.format(state.essence));
   setText(find('battle-mode'), foe.zone);
-  setText(find('battle-title'), marching ? 'Marching' : foe.name);
+  setText(find('battle-title'), marching ? 'Marching' : roster.length > 1 ? 'Sentinel & Archer' : foe.name);
   setText(find('mode-pill'), `Run ${number.format(run.number)}`);
   setText(find('wave-number'), `Encounter ${run.wave + 1} / ${run.length}`);
   setText(find('run-dust'), `+${number.format(run.dust)} dust this run`);
@@ -142,17 +157,20 @@ function render() {
   });
   setText(find('dps'), `${damage(state)} base dmg / round`);
   setText(find('lineup-count'), `${lineup.length} / ${championSlots} deployed`);
-  setText(find('army-label'), `${skeletons} ${skeletons === 1 ? 'skeleton' : 'skeletons'}`);
-  setText(find('foe-label'), run.shield ? `Enemy HP · ${run.shield} shield` : 'Enemy health');
+  setText(find('army-label'), `${skeletons} / ${run.units.length} skeletons`);
   find('summon-link').hidden = !canRaise;
-  meter('army-hp', run.army, maxHealth(state));
-  meter('foe-hp', run.enemy, foe.hp);
+  renderMeters(find('skeleton-meters'), run.units.map((unit, id) => ({
+    name: `Skeleton ${id + 1}`, health: unit.hp, max: skeletonHealth(state), fallenTo: unit.fallenTo,
+  })), true);
+  renderMeters(find('enemy-meters'), run.enemies.map((enemy, index) => ({
+    name: roster[index].name, health: enemy.hp, max: roster[index].hp, shield: enemy.shield,
+  })));
   bolt.disabled = Boolean(run.wait || run.result || run.cooldown || marching);
   setText(bolt, run.cooldown ? `Grave Bolt · ${run.cooldown}s` : 'Cast Grave Bolt');
   const hint = run.result === 'fallen' ? `Your army fell. Rising at the Abbey Gate in ${run.wait}s.`
     : run.result === 'cleared' ? `Run cleared. The next march starts in ${run.wait}s.`
     : run.wave === 0 && run.wait ? 'Your skeletons are rising at the Abbey Gate.'
-    : marching ? `Up ahead: ${foe.name}. The skeletons will stop and fight when they reach it.`
+    : marching ? `Up ahead: ${roster.map(enemy => enemy.name).join(' and ')}.`
     : foe.hint ?? 'Your army attacks automatically. Defeat foes to earn Bone Dust.';
   setText(find('battle-hint'), hint);
 

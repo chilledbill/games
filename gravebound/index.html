@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#15121b">
   <meta name="description" content="Lead an army of skeletons through the haunted abbey, rebuild after each fall, and raise defeated guardians as Champions.">
   <title>Gravebound</title>
-  <link rel="stylesheet" href="./style.css?v=5">
-  <script type="module" src="./game.mjs?v=5"></script>
+  <link rel="stylesheet" href="./style.css?v=6">
+  <script type="module" src="./game.mjs?v=6"></script>
 </head>
 <body>
   <header class="top">
@@ -42,13 +42,13 @@
             <span id="run-dust">0 dust this run</span>
           </div>
           <div class="meters">
-            <div class="meter">
-              <div><label for="army-hp" id="army-label">2 skeletons</label><span id="army-number">60 / 60</span></div>
-              <progress id="army-hp" class="army-hp" value="60" max="60"></progress>
+            <div>
+              <p class="meter-title" id="army-label">2 / 2 skeletons</p>
+              <div id="skeleton-meters" class="meter-list" role="group" aria-labelledby="army-label"></div>
             </div>
-            <div class="meter">
-              <div><label for="foe-hp" id="foe-label">Enemy health</label><span id="foe-number">10 / 10</span></div>
-              <progress id="foe-hp" value="10" max="10"></progress>
+            <div>
+              <p class="meter-title" id="enemy-label">Enemies</p>
+              <div id="enemy-meters" class="meter-list" role="group" aria-labelledby="enemy-label"></div>
             </div>
           </div>
           <div class="actions">

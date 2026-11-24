@@ -21,12 +21,12 @@ const route = [
   { through: [[16, 25], [16, 16], [15, 16]], enemy: [15, 15] },
   { through: [[23, 16]], enemy: [24, 16] },
   { through: [[26, 16], [26, 8]], enemy: [26, 7] },
-  { through: [[18, 8]], enemy: [17, 8] },
+  { through: [[18, 8]], enemy: [17, 8], backline: [14, 7] },
   { through: [[8, 8]], enemy: [7, 8] },
   { through: [[7, 8], [7, 16]], enemy: [7, 17] },
 ];
 
-export const legs = route.map(({ through, enemy }, index) => {
+export const legs = route.map(({ through, enemy, backline }, index) => {
   const tiles = [route[index - 1]?.through.at(-1) ?? entrance, ...through];
   const points = tiles.map(center);
   const segments = points.slice(1).map((end, i) => {
@@ -34,7 +34,7 @@ export const legs = route.map(({ through, enemy }, index) => {
     const length = Math.hypot(end.x - start.x, end.y - start.y);
     return { start, length, dx: (end.x - start.x) / length, dy: (end.y - start.y) / length };
   });
-  return { tiles, segments, length: segments.reduce((sum, segment) => sum + segment.length, 0), enemy: center(enemy) };
+  return { tiles, segments, length: segments.reduce((sum, segment) => sum + segment.length, 0), enemy: center(enemy), backline: backline && center(backline) };
 });
 
 export function marchPosition(wave, distance) {
@@ -51,6 +51,12 @@ export function marchPosition(wave, distance) {
     }
     distance -= length;
   }
+}
+
+export function skeletonPosition(wave, distance, rank) {
+  const { x, y, dx, dy } = marchPosition(wave, distance - Math.floor(rank / 2) * 12);
+  const side = rank % 2 ? 8 : -8;
+  return { x: x + dy * side, y: y - dx * side };
 }
 
 export function floorTiles() {

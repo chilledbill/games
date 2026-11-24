@@ -1,5 +1,5 @@
-import { encounters, isMarching, livingSkeletons } from './engine.mjs?v=5';
-import { TILE, WIDTH, HEIGHT, floorTiles, legs, marchPosition } from './dungeon.mjs';
+import { encounters, isMarching, enemyPosition, opponents, skeletonHealth } from './engine.mjs?v=6';
+import { TILE, WIDTH, HEIGHT, floorTiles, legs, marchPosition, skeletonPosition } from './dungeon.mjs?v=6';
 
 const stone = [
   ['#373343', '#443d4e', '#302c3b'],
@@ -106,6 +106,19 @@ function enemySprite(ctx, foe, index, ally = false) {
   const fur = ally ? '#8fd8b8' : ['#d6a270', '#c17467', '#9ca6bd'][foe.area];
   const cloth = ally ? '#497c6b' : ['#77566c', '#823f51', '#59627b'][foe.area];
   const eye = ally ? '#caffd6' : '#ffcd91';
+  if (foe.kind === 'Archer') {
+    shadow(ctx, 10);
+    rect(ctx, '#8e5547', -7, -20, 14, 21);
+    rect(ctx, '#d9a17e', -4, -16, 8, 7);
+    rect(ctx, '#ffe0a2', 1, -14, 3, 2);
+    ctx.strokeStyle = '#eda975';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(12, -9, 7, -Math.PI / 2, Math.PI / 2);
+    ctx.stroke();
+    rect(ctx, '#ecd8c0', 11, -16, 1, 14);
+    return;
+  }
   if (index === 0 || foe.guardian === 1) {
     const wide = index === 0 ? 9 : 17;
     shadow(ctx, wide);
@@ -132,10 +145,22 @@ function enemySprite(ctx, foe, index, ally = false) {
   rect(ctx, eye, 2, -tall + 9, 2, 2);
   if (foe.guardian === 0) rect(ctx, fur, 10, -10, 9, 9);
   else rect(ctx, fur, 11, -tall + 4, 3, tall - 2);
-  if (boss) {
-    rect(ctx, '#c2aed7', -19, -15, 10, 13);
+  if (boss || foe.kind === 'Shield guard') {
+    rect(ctx, boss ? '#c2aed7' : '#dcbb83', -19, -15, 10, 13);
     rect(ctx, cloth, -17, -13, 6, 9);
   }
+}
+
+function healthBar(ctx, health, max, x, y, color) {
+  rect(ctx, '#171120', x - 12, y, 24, 4);
+  rect(ctx, color, x - 11, y + 1, Math.round(22 * health / max), 2);
+}
+
+function readout(ctx, text, x, y, color) {
+  ctx.font = 'bold 13px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = color;
+  ctx.fillText(text, x, y);
 }
 
 export function animateScene(canvas, state) {
@@ -153,6 +178,7 @@ export function animateScene(canvas, state) {
   let distance = state.run.travel;
   let lastRun;
   let lastWave;
+  let displayUnits = [];
   let camX = 0;
   let camY = 0;
   let lastDraw = -100;
@@ -164,6 +190,7 @@ export function animateScene(canvas, state) {
     const { run, lineup } = state;
     const reset = lastRun !== run.number;
     const newWave = lastWave !== run.wave;
+    if (reset || newWave) displayUnits = [];
     const still = motion.matches;
     if (reset || newWave || still) distance = run.travel;
     else distance += (run.travel - distance) * .38;
@@ -179,71 +206,122 @@ export function animateScene(canvas, state) {
     ctx.translate(-Math.round(camX), -Math.round(camY));
     ctx.drawImage(map.canvas, 0, 0);
     const walking = !run.wait && isMarching(state);
+    const engaged = !isMarching(state);
     const event = feedback?.wave === run.wave && feedback.run === run.number ? feedback : null;
-    const age = event ? (now - event.at) / 550 : 1;
-    const flash = age < 1;
-    const foePosition = legs[run.wave].enemy;
-    const strike = flash && event.type === 'round' && !still ? Math.sin(Math.PI * age) * .66 : 0;
+    const age = event ? (now - event.at) / 680 : 1;
+    const effects = age < 1 ? event.effects : [];
+    const lunge = still ? 0 : Math.sin(Math.PI * Math.min(age, 1));
+    const focus = effects.find(effect => effect.kind === 'strike');
+    const hound = effects.find(effect => effect.kind === 'hound');
+    const max = skeletonHealth(state);
+    const captain = marchPosition(run.wave, distance - 33);
+    const unitPositions = run.units.map((unit, id) => {
+      if (!unit.hp) return unit.x === null ? null : { x: unit.x, y: unit.y };
+      if (!engaged || unit.x === null) {
+        const rank = run.units.slice(0, id).filter(other => other.hp > 0).length;
+        return skeletonPosition(run.wave, distance, rank);
+      }
+      const previous = displayUnits[id] ?? unit;
+      const walking = !still && Math.hypot(unit.x - previous.x, unit.y - previous.y) > .8;
+      const x = walking ? previous.x + (unit.x - previous.x) * .48 : unit.x;
+      const y = walking ? previous.y + (unit.y - previous.y) * .48 : unit.y;
+      displayUnits[id] = { x, y };
+      if (!focus?.attackers.includes(id)) return { x, y, walking };
+      const foe = enemyPosition(run.wave, focus.index);
+      return { x: x + (foe.x - x) * lunge * .51, y: y + (foe.y - y) * lunge * .51, walking };
+    });
 
-    legs.slice(0, run.length).forEach(({ enemy }, index) => {
-      if (index < run.wave || (index === run.wave && !run.enemy)) {
-        rect(ctx, '#28212c', enemy.x - 8, enemy.y + 1, 16, 4);
-        rect(ctx, '#716277', enemy.x - 6, enemy.y, 5, 2);
-      } else {
+    for (const [wave] of legs.slice(0, run.length).entries()) {
+      opponents(wave).forEach((foe, index) => {
+        const { x, y } = enemyPosition(wave, index);
+        const active = wave === run.wave ? run.enemies[index] : null;
+        if (wave < run.wave || active?.hp === 0) {
+          rect(ctx, '#28212c', x - 8, y + 1, 16, 4);
+          rect(ctx, '#716277', x - 6, y, 5, 2);
+          return;
+        }
+        const bob = still ? 0 : Math.sin(now / 240 + wave) * 1.5;
         ctx.save();
-        ctx.translate(enemy.x, enemy.y + (still ? 0 : Math.sin(now / 240 + index) * 1.5));
-        if (index === run.wave && run.shield) {
+        ctx.translate(x, y + bob);
+        if (active?.shield) {
           ctx.strokeStyle = '#c9aeed';
           ctx.lineWidth = 2;
           ctx.strokeRect(-22, -34, 44, 40);
         }
-        enemySprite(ctx, encounters[index], index);
+        enemySprite(ctx, foe, wave);
         ctx.restore();
-      }
-    });
+        if (active && engaged) healthBar(ctx, active.hp, foe.hp, x, y - 40, '#f4a18c');
+      });
+    }
 
-    const captain = marchPosition(run.wave, distance - 33);
     ctx.save();
     ctx.translate(captain.x + captain.dy * 7, captain.y - captain.dx * 7);
     necromancer(ctx);
     ctx.restore();
-    const survivors = livingSkeletons(state);
-    if (survivors) {
+    if (run.units.some(unit => unit.hp > 0)) {
       lineup.forEach((champion, slot) => {
         const escort = marchPosition(run.wave, distance - 16 - slot * 10);
+        let x = escort.x + escort.dy * 17;
+        let y = escort.y - escort.dx * 17;
+        if (champion === 1 && hound) {
+          const target = enemyPosition(run.wave, hound.index);
+          x += (target.x - x) * lunge;
+          y += (target.y - y) * lunge - 12 * lunge;
+        }
         ctx.save();
-        ctx.translate(escort.x + escort.dy * 17, escort.y - escort.dx * 17);
+        ctx.translate(x, y);
         ctx.scale(.76, .76);
         enemySprite(ctx, encounters.find(foe => foe.guardian === champion), -1, true);
         ctx.restore();
       });
-      for (let index = Math.min(survivors, 8) - 1; index >= 0; index--) {
-        const minion = marchPosition(run.wave, distance - Math.floor(index / 2) * 12);
-        const side = index % 2 ? 8 : -8;
-        const gait = walking && !still ? Math.round(Math.sin(now / 85 + index) * 2) : 0;
-        ctx.save();
-        ctx.translate(
-          minion.x + minion.dy * side + (foePosition.x - lead.x) * strike,
-          minion.y - minion.dx * side + (foePosition.y - lead.y) * strike,
-        );
-        skeleton(ctx, gait);
-        ctx.restore();
-      }
     }
+    unitPositions.forEach((position, id) => {
+      if (!position) return;
+      const { x, y } = position;
+      const unit = run.units[id];
+      if (unit.hp === 0) {
+        rect(ctx, '#a39596', x - 6, y, 10, 3);
+        rect(ctx, '#615662', x - 2, y - 3, 7, 2);
+        return;
+      }
+      const gait = (walking || position.walking) && !still ? Math.round(Math.sin(now / 85 + id) * 2) : 0;
+      ctx.save();
+      ctx.translate(x, y);
+      skeleton(ctx, gait);
+      ctx.restore();
+      if (engaged) {
+        healthBar(ctx, unit.hp, max, x, y - 23, '#a1e8c7');
+        ctx.font = '9px monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = '#c3baaf';
+        ctx.fillText(id + 1, x, y + 13);
+      }
+    });
 
-    if (flash) {
-      if (event.type === 'bolt') {
+    for (const effect of effects) {
+      const foe = effect.index === undefined ? null : enemyPosition(run.wave, effect.index);
+      const unit = unitPositions[effect.id];
+      const rise = still ? 0 : age * 12;
+      if (effect.kind === 'arrow' && unit) {
+        const travel = still ? 1 : Math.min(1, age * 2);
+        const x = foe.x + (unit.x - foe.x) * travel;
+        const y = foe.y + (unit.y - foe.y) * travel - 9;
+        rect(ctx, '#f0b378', x - 3, y, 6, 2);
+      } else if (effect.kind === 'bolt') {
         ctx.strokeStyle = '#b2ffd3';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.moveTo(captain.x, captain.y - 18);
-        ctx.lineTo(foePosition.x, foePosition.y - 8);
+        ctx.lineTo(foe.x, foe.y - 8);
         ctx.stroke();
       }
-      ctx.font = 'bold 15px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillStyle = event.type === 'bolt' ? '#b2ffd3' : '#fff0d2';
-      ctx.fillText(event.hit || 'BLOCK', foePosition.x, foePosition.y - 28 - (still ? 0 : age * 13));
+      const kind = effect.kind;
+      if (unit && (kind !== 'arrow' || age >= .4 || still)) {
+        readout(ctx, kind === 'heal' ? `+${effect.hit}` : `−${effect.hit}`,
+          unit.x, unit.y - 29 - rise, kind === 'heal' ? '#b2ffd3' : '#ffa18e');
+      } else if (!unit && foe) {
+        readout(ctx, effect.hit || 'BLOCK', foe.x, foe.y - 45 - rise, kind === 'strike' ? '#fff0d2' : '#b2ffd3');
+      }
     }
     ctx.restore();
 
