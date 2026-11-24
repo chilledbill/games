@@ -40,8 +40,15 @@ button.primary:hover:not(:disabled) { background: #bcf3dc; }
 .top { background: #15121bea; border-bottom: 1px solid var(--line); }
 .top-inner, main { width: min(100% - 2rem, 70rem); margin-inline: auto; }
 .top-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .25rem 1rem; padding-block: .5rem; }
+.top-links { display: flex; align-items: center; gap: .7rem; }
 .back { display: inline-flex; align-items: center; min-height: 44px; text-decoration: none; font-weight: 650; font-size: .875rem; }
 .back:hover { color: var(--mint); }
+.start-over { background: transparent; border-color: transparent; color: var(--muted); }
+#reset-dialog { width: min(calc(100% - 2rem), 26rem); background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 1.25rem; }
+#reset-dialog::backdrop { background: #120d19c9; }
+#reset-details, #reset-error { margin-top: .75rem; color: var(--muted); }
+button.danger { background: #643142; border-color: #b77b8d; }
+button.danger:hover { background: #783c50; }
 .wallet { display: flex; flex-wrap: wrap; gap: .35rem; }
 .wallet div { display: flex; align-items: center; gap: .35rem; border: 1px solid var(--line); border-radius: 5px; padding: .35rem .5rem; font-size: .875rem; color: var(--muted); }
 .wallet strong { color: var(--text); font-variant-numeric: tabular-nums; }

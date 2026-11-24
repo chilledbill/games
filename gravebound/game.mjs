@@ -4,13 +4,19 @@ import {
 } from './engine.mjs?v=3';
 import { animateScene } from './scene.mjs?v=3';
 
-const SAVE_KEY = 'gravebound:v2';
+const ACTIVE_SAVE_KEY = 'gravebound:active-save';
+const DEFAULT_SAVE_KEY = 'gravebound:v3';
 const find = id => document.getElementById(id);
 const number = new Intl.NumberFormat();
 let previous;
+let saveKey = DEFAULT_SAVE_KEY;
 let storageAvailable = true;
 try {
-  const saved = localStorage.getItem(SAVE_KEY) ?? localStorage.getItem('gravebound:v1');
+  const activeSave = localStorage.getItem(ACTIVE_SAVE_KEY);
+  if (activeSave) saveKey = activeSave;
+  const saved = activeSave
+    ? localStorage.getItem(saveKey)
+    : localStorage.getItem(saveKey) ?? localStorage.getItem('gravebound:v2') ?? localStorage.getItem('gravebound:v1');
   if (saved) previous = JSON.parse(saved);
 } catch {
   storageAvailable = false;
@@ -28,7 +34,7 @@ const announce = text => {
 function save() {
   if (!storageAvailable) return;
   try {
-    localStorage.setItem(SAVE_KEY, JSON.stringify(state));
+    localStorage.setItem(saveKey, JSON.stringify(state));
   } catch {
     storageAvailable = false;
   }
@@ -95,6 +101,7 @@ const ritualButtons = Object.entries(rituals).map(([key, ritual]) => {
 });
 
 const bolt = find('bolt');
+const resetDialog = find('reset-dialog');
 const waveTrack = find('wave-track');
 const waveMarkers = encounters.map(foe => {
   const marker = document.createElement('span');
@@ -189,6 +196,38 @@ bolt.addEventListener('click', () => {
   saveAndRender();
 });
 
+find('start-over').addEventListener('click', () => {
+  find('reset-error').hidden = true;
+  resetDialog.showModal();
+  syncTimer();
+});
+resetDialog.addEventListener('close', syncTimer);
+find('confirm-reset').addEventListener('click', () => {
+  const fresh = initialState();
+  if (storageAvailable) {
+    const nextSaveKey = `gravebound:run:${crypto.randomUUID()}`;
+    try {
+      localStorage.setItem(nextSaveKey, JSON.stringify(fresh));
+      localStorage.setItem(ACTIVE_SAVE_KEY, nextSaveKey);
+    } catch {
+      find('reset-error').hidden = false;
+      return;
+    }
+    const previousSaveKey = saveKey;
+    saveKey = nextSaveKey;
+    try {
+      localStorage.removeItem(previousSaveKey);
+    } catch {
+      // The active save already points to the new game.
+    }
+  }
+  Object.assign(state, fresh);
+  find('journal').replaceChildren();
+  announce('Progress reset. Two skeletons rise at the Abbey Gate.');
+  resetDialog.close();
+  render();
+});
+
 if (previous && !previous.run) {
   announce('Your upgrades and Champions carry over. A new run begins at the Abbey Gate.');
 } else if (!previous) {
@@ -199,13 +238,16 @@ saveAndRender();
 let timer;
 function syncTimer() {
   clearInterval(timer);
-  if (!document.hidden) {
+  if (!document.hidden && !resetDialog.open) {
     timer = setInterval(() => {
-      if (document.hidden) return;
+      if (document.hidden || resetDialog.open) return;
       eventFeedback(tick(state));
       saveAndRender();
     }, 1000);
   }
 }
 document.addEventListener('visibilitychange', syncTimer);
+window.addEventListener('storage', event => {
+  if (event.key === ACTIVE_SAVE_KEY && event.newValue && event.newValue !== saveKey) window.location.reload();
+});
 syncTimer();

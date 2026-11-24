@@ -6,13 +6,16 @@
   <meta name="theme-color" content="#15121b">
   <meta name="description" content="Lead an army of skeletons through the haunted abbey, rebuild after each fall, and raise defeated guardians as Champions.">
   <title>Gravebound</title>
-  <link rel="stylesheet" href="./style.css?v=3">
-  <script type="module" src="./game.mjs?v=3"></script>
+  <link rel="stylesheet" href="./style.css?v=4">
+  <script type="module" src="./game.mjs?v=4"></script>
 </head>
 <body>
   <header class="top">
     <div class="top-inner">
-      <a class="back" href="../">‹ All games</a>
+      <nav class="top-links" aria-label="Game navigation">
+        <a class="back" href="../">‹ All games</a>
+        <button id="start-over" class="start-over" type="button">Start over</button>
+      </nav>
       <div class="wallet" aria-label="Resources">
         <div><span class="resource-icon dust" aria-hidden="true">✧</span><span>Bone Dust</span><strong id="dust">0</strong></div>
         <div><span class="resource-icon essence" aria-hidden="true">◆</span><span>Grave Essence</span><strong id="essence">0</strong></div>
@@ -84,5 +87,14 @@
     </div>
     <footer id="save-note">Progress saves in this browser. Runs pause when you leave the game.</footer>
   </main>
+  <dialog id="reset-dialog" aria-labelledby="reset-title" aria-describedby="reset-details">
+    <h2 id="reset-title">Start a new game?</h2>
+    <p id="reset-details">This resets your Bone Dust, Grave Essence, upgrades, Champions, and run records. You’ll start at the Abbey Gate with two skeletons.</p>
+    <p id="reset-error" role="alert" hidden>Couldn’t save the reset. Your current progress is still active.</p>
+    <form class="actions" method="dialog">
+      <button autofocus>Cancel</button>
+      <button id="confirm-reset" class="danger" type="button">Reset progress</button>
+    </form>
+  </dialog>
 </body>
 </html>
