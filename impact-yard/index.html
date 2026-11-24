@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <meta name="theme-color" content="#0a1020" />
-<title>IMPACT YARD — Directional Grab v4</title>
+<title>IMPACT YARD — Crowd Pressure v5</title>
 <style>
 :root{color-scheme:dark;--ink:#eef5ff;--muted:#aab6ca;--cyan:#62e9ff;--orange:#ffba59;--red:#ff6677}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070b14;touch-action:none;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);user-select:none;-webkit-user-select:none}
@@ -73,7 +73,7 @@ h1 em{font-style:normal;color:var(--orange)}
    <button class="action" id="dodgeBtn" aria-label="Dodge"><span>DODGE</span><small>EVADE</small></button>
   </div>
   <div id="throwPicker" aria-label="Choose a throw direction">
-   <div id="throwPickerTitle">CHOOSE THROW</div>
+   <div id="throwPickerTitle">THROW FAST · FOES ATTACK</div>
    <button class="throwDir" id="throwUp" data-throw-dir="up" aria-label="Throw toward the back of the arena">↑</button>
    <button class="throwDir" id="throwLeft" data-throw-dir="left" aria-label="Throw left">←</button>
    <button class="throwDir" id="throwRight" data-throw-dir="right" aria-label="Throw right">→</button>
@@ -84,11 +84,11 @@ h1 em{font-style:normal;color:var(--orange)}
  <div id="modal">
   <div class="panel"><div class="eyebrow" id="modalEyebrow">PLAYABLE COMBAT TEST // 01</div>
    <h1 id="modalTitle">IMPACT <em>YARD</em></h1>
-   <p class="sub" id="modalText">One fighter. A whole crowd. <b>Hit enemies to charge your meter.</b> Tap <b>GRAB</b> near a foe to hold them, then tap a direction to throw them into the crowd. Throws cost 25 meter; store up to four.</p>
+   <p class="sub" id="modalText">One fighter. A whole crowd. <b>Hit enemies to charge your meter.</b> Tap <b>GRAB</b> near a foe to hold them, then tap a direction to throw them into the crowd. Throws cost 25 meter; store up to four. <b>Choose quickly: enemies keep attacking and can break your grab.</b></p>
    <div class="mechanics" id="modalMechanics">
     <div class="mechanic"><strong>01 / HIT</strong><span>Hits build meter; third strike knocks foes down.</span></div>
     <div class="mechanic"><strong>02 / GRAB</strong><span>Grab first, then choose a direction to throw. Costs 25 on release.</span></div>
-    <div class="mechanic"><strong>03 / REPEAT</strong><span>Bank 4 throws; pick up downed enemies. Cancel a grab for free.</span></div>
+    <div class="mechanic"><strong>03 / PRESSURE</strong><span>Foes close in and can break grabs. Throw fast, or dodge out.</span></div>
    </div>
    <button id="startBtn">START FIGHT →</button>
    <div class="note" id="modalNote">Touch: HIT → GRAB → tap an arrow. Keyboard: WASD move / choose throw, J hit, K grab, L dodge, P pause.</div>
@@ -110,8 +110,8 @@ addEventListener('resize',resize);resize();
 function initAudio(){if(!soundOn)return;try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==='suspended')audioCtx.resume()}catch(e){soundOn=false;}}
 function sound(freq=300,dur=.08,type='triangle',vol=.055,slide=0){if(!audioCtx||!soundOn)return;try{const o=audioCtx.createOscillator(),g=audioCtx.createGain(),n=audioCtx.currentTime;o.type=type;o.frequency.setValueAtTime(freq,n);if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(35,freq+slide),n+dur);g.gain.setValueAtTime(vol,n);g.gain.exponentialRampToValueAtTime(.0001,n+dur);o.connect(g);g.connect(audioCtx.destination);o.start(n);o.stop(n+dur+.01)}catch(e){}}
 function vibrate(ms){try{navigator.vibrate?.(ms)}catch(e){}}
-function reset(){state='playing';enemies=[];particles=[];labels=[];slashes=[];rings=[];keys.clear();held.hit=false;app.classList.remove('grabMode');score=0;wave=0;waveDelay=-1;nextId=1;kills=0;collisionKills=0;hitStop=0;flash=0;player={x:475,z:391,hp:100,maxHp:100,meter:0,facing:1,attackCd:0,attackStep:0,attackAnim:0,throwCd:0,inv:0,dodgeCd:0,dodge:0,dodgeVX:0,dodgeVZ:0,run:0,hitFlash:0,combo:0,comboTimer:0,grabbed:null};setStick(0,0);spawnWave();ui.modal.classList.add('hidden');ui.pause.textContent='Ⅱ';initAudio();}
-function makeEnemy(type,x,z){const heavy=type==='heavy',runner=type==='runner',hp=heavy?108:runner?42:56;return{id:nextId++,type,x,z,h:0,vy:0,vx:0,vz:0,hp,maxHp:hp,r:heavy?23:runner?15:18,mass:heavy?1.85:runner?.78:1,speed:heavy?54:runner?116:77,face:x<player.x?1:-1,stun:0,attackCd:rand(.3,1.1),windup:0,attackMode:'',chargeTime:0,chargeDX:0,chargeDZ:0,chargeHit:new Set(),flight:0,thrown:false,flightHits:new Set(),wallBounces:0,flash:0,dead:0,anim:rand(0,10),poise:0,down:0,downMax:0,getup:0,hitReact:0,grabbed:false};}
+function reset(){state='playing';enemies=[];particles=[];labels=[];slashes=[];rings=[];keys.clear();held.hit=false;app.classList.remove('grabMode');score=0;wave=0;waveDelay=-1;nextId=1;kills=0;collisionKills=0;hitStop=0;flash=0;player={x:475,z:391,hp:100,maxHp:100,meter:0,grabTime:0,facing:1,attackCd:0,attackStep:0,attackAnim:0,throwCd:0,inv:0,dodgeCd:0,dodge:0,dodgeVX:0,dodgeVZ:0,run:0,hitFlash:0,combo:0,comboTimer:0,grabbed:null};setStick(0,0);spawnWave();ui.modal.classList.add('hidden');ui.pause.textContent='Ⅱ';initAudio();}
+function makeEnemy(type,x,z){const heavy=type==='heavy',runner=type==='runner',hp=heavy?108:runner?42:56;return{id:nextId++,type,x,z,h:0,vy:0,vx:0,vz:0,hp,maxHp:hp,r:heavy?23:runner?15:18,mass:heavy?1.85:runner?.78:1,speed:heavy?70:runner?128:91,face:x<player.x?1:-1,stun:0,attackCd:rand(.3,1.1),windup:0,attackMode:'',chargeTime:0,chargeDX:0,chargeDZ:0,chargeHit:new Set(),flight:0,thrown:false,flightHits:new Set(),wallBounces:0,flash:0,dead:0,anim:rand(0,10),poise:0,down:0,downMax:0,getup:0,hitReact:0,grabbed:false};}
 function spawnWave(){wave++;waveDelay=-1;const kinds=wave===1?['grunt','grunt','grunt','grunt','runner','grunt']:wave===2?['grunt','runner','grunt','heavy','grunt','runner','grunt']:['heavy','runner','grunt','grunt','heavy','grunt','runner','grunt'];
  kinds.forEach((type,i)=>{let x,z;for(let j=0;j<12;j++){x=i%2===0?rand(90,280):rand(665,866);z=rand(318,449);if(Math.hypot(x-player.x,z-player.z)>150)break;}enemies.push(makeEnemy(type,x,z));});
  toast=`WAVE ${wave} / ${finalWave}`;toastTime=2.0;player.hp=Math.min(100,player.hp+(wave>1?18:0));if(wave>1)player.meter=Math.min(100,player.meter+20);sound(170,.25,'sawtooth',.025,180);}
@@ -156,18 +156,19 @@ function startGrab(){
  if(player.meter<THROW_COST){notify(`NEED ${THROW_COST} METER`,player.x,player.z,'#ffc376');return;}
  const e=targetForThrow();if(!e){notify('MOVE CLOSER',player.x,player.z,'#def8ff');return;}
  if(e.type==='heavy'&&e.down<=0&&e.stun<=.02&&e.poise<2){notify('STAGGER HEAVY FIRST',e.x,e.z,'#ffcf80');ring(e.x,e.z,'#ffaf57',18);return;}
- player.grabbed=e;e.grabbed=true;e.down=0;e.downMax=0;e.getup=0;e.thrown=false;e.stun=1;e.windup=0;e.attackMode='';e.chargeTime=0;e.vx=0;e.vz=0;e.vy=0;e.h=4;held.hit=false;
+ player.grabbed=e;player.grabTime=0;e.grabbed=true;e.down=0;e.downMax=0;e.getup=0;e.thrown=false;e.stun=1;e.windup=0;e.attackMode='';e.chargeTime=0;e.vx=0;e.vz=0;e.vy=0;e.h=4;held.hit=false;
  player.attackAnim=0;player.run=0;keys.clear();setStick(0,0);app.classList.add('grabMode');
  label('GRABBED',e.x,e.z,'#ffe8a0',15);ring(e.x,e.z,'#ffd18b',16);
 }
-function cancelGrab(){
+function cancelGrab(broken=false){
  if(!player||!player.grabbed)return;
- const e=player.grabbed;player.grabbed=null;e.grabbed=false;e.h=0;e.vy=0;e.vx=player.facing*35;e.stun=Math.max(e.stun,.55);
+ const e=player.grabbed;player.grabbed=null;player.grabTime=0;e.grabbed=false;e.h=0;e.vy=0;e.vx=player.facing*(broken?110:35);e.stun=Math.max(e.stun,broken?.9:.55);
  app.classList.remove('grabMode');setStick(0,0);
+ if(broken){label('GRAB BROKEN!',player.x,player.z,'#ff9c8e',17);ring(player.x,player.z,'#ff7582',24);}
 }
 function throwHeld(direction){
  if(state!=='playing'||!player.grabbed||player.meter<THROW_COST)return;
- const e=player.grabbed;player.grabbed=null;e.grabbed=false;app.classList.remove('grabMode');setStick(0,0);
+ const e=player.grabbed;player.grabbed=null;player.grabTime=0;e.grabbed=false;app.classList.remove('grabMode');setStick(0,0);
  // Cardinal throws target the ground plane; vertical arrows move through the arena's depth lanes.
  const vectors={right:[1,0],left:[-1,0],up:[player.facing*.14,-1],down:[player.facing*.14,1]};
  const v=vectors[direction]||vectors.right,len=Math.hypot(v[0],v[1]),dx=v[0]/len,dz=v[1]/len;
@@ -177,14 +178,14 @@ function throwHeld(direction){
  ring(e.x,e.z,'#ffbb57',14);burst(e.x,e.z,'#ffce76',17,1.1);hitStop=.045;label('THROW!',e.x,e.z,'#ffe38c',20);
 }
 function dodge(){if(state!=='playing'||player.dodgeCd>0)return;if(player.grabbed)cancelGrab();const dir=moveInput();let x=dir.x,z=dir.z;if(dir.m<.12){x=player.facing;z=0;}const n=Math.hypot(x,z)||1;player.dodgeVX=x/n*505;player.dodgeVZ=z/n*505;player.dodge=.23;player.inv=.39;player.dodgeCd=.85;burst(player.x,player.z,'#57dfff',8,.45);sound(450,.1,'sine',.04,-280);}
-function hurtPlayer(dmg,sourceX){if(player.inv>0||state!=='playing')return;player.hp=Math.max(0,player.hp-dmg);player.inv=.65;player.hitFlash=.28;flash=.11;player.combo=0;burst(player.x,player.z,'#f86e74',13,.7);ring(player.x,player.z,'#ff7381',15);label('-'+dmg,player.x,player.z,'#ff7d88',19);sound(100,.19,'sawtooth',.075,-55);vibrate(45);player.x=clamp(player.x+(player.x>sourceX?19:-19),ARENA.left,ARENA.right);if(player.hp<=0){showModal('over');}}
+function hurtPlayer(dmg,sourceX){if(player.inv>0||state!=='playing')return;if(player.grabbed)cancelGrab(true);player.hp=Math.max(0,player.hp-dmg);player.inv=.65;player.hitFlash=.28;flash=.11;player.combo=0;burst(player.x,player.z,'#f86e74',13,.7);ring(player.x,player.z,'#ff7381',15);label('-'+dmg,player.x,player.z,'#ff7d88',19);sound(100,.19,'sawtooth',.075,-55);vibrate(45);player.x=clamp(player.x+(player.x>sourceX?19:-19),ARENA.left,ARENA.right);if(player.hp<=0){showModal('over');}}
 function updateEnemy(e,dt){if(e.dead>0){e.dead-=dt;return;}if(e.grabbed){e.x=player.x+player.facing*32;e.z=player.z-1;e.h=5;e.vx=0;e.vz=0;e.vy=0;return;}e.anim+=dt;e.flash=Math.max(0,e.flash-dt);e.hitReact=Math.max(0,e.hitReact-dt);e.stun=Math.max(0,e.stun-dt);e.attackCd=Math.max(0,e.attackCd-dt);
  if(e.thrown){e.flight-=dt;e.x+=e.vx*dt;e.z+=e.vz*dt;e.h+=e.vy*dt;e.vy-=790*dt;const friction=Math.pow(.978,dt*60);e.vx*=friction;e.vz*=friction;
    if(e.h<=0){e.h=0;if(e.vy< -90){e.vy=-e.vy*.24;burst(e.x,e.z,'#b6cbd4',5,.34);}else e.vy=0;}
    let hitWall=false;if(e.x<=ARENA.left||e.x>=ARENA.right){e.x=clamp(e.x,ARENA.left,ARENA.right);e.vx*=-.76;hitWall=true;}
    if(e.z<=ARENA.top||e.z>=ARENA.bottom){e.z=clamp(e.z,ARENA.top,ARENA.bottom);e.vz*=-.72;hitWall=true;}
    if(hitWall&&e.wallBounces<2){e.wallBounces++;e.h=Math.max(e.h,24);e.vy=Math.max(e.vy,190);damageEnemy(e,7,'wall');ring(e.x,e.z,'#ffb45e',25);burst(e.x,e.z,'#ffbc67',15,.75);label('WALL BOUNCE',e.x,e.z,'#ffd18b',13);}
-   for(const o of enemies){if(o===e||o.hp<=0||o.dead>0||e.flightHits.has(o.id))continue;const dx=o.x-e.x,dz=o.z-e.z;const close=Math.abs(dx)<(e.r+o.r+4)&&Math.abs(dz)<(e.r+o.r+10);if(close&&e.h<95){e.flightHits.add(o.id);const speed=Math.hypot(e.vx,e.vz);const impact=clamp(speed/620,.55,1.25);damageEnemy(o,Math.round((e.type==='heavy'?37:29)*impact),'collision');if(o.hp>0){o.vx=(Math.abs(e.vx)>80?Math.sign(e.vx):Math.sign(dx)||1)*(e.type==='heavy'?220:135);o.vz=e.vz*.26;o.h=Math.max(o.h,13);o.vy=145;o.poise+=2;knockDown(o,e.type==='heavy'?1.95:1.65,true,false);}damageEnemy(e,4,'collision');e.vx*=.85;e.vz*=.85;ring(o.x,o.z,'#ffe18a',21);burst(o.x,o.z,'#ffd47b',16,.9);label('CRASH!',o.x,o.z,'#ffe287',17);player.meter=clamp(player.meter+5,0,100);score+=35;hitStop=.06;}}
+   for(const o of enemies){if(o===e||o.hp<=0||o.dead>0||o.grabbed||e.flightHits.has(o.id))continue;const dx=o.x-e.x,dz=o.z-e.z;const close=Math.abs(dx)<(e.r+o.r+4)&&Math.abs(dz)<(e.r+o.r+10);if(close&&e.h<95){e.flightHits.add(o.id);const speed=Math.hypot(e.vx,e.vz);const impact=clamp(speed/620,.55,1.25);damageEnemy(o,Math.round((e.type==='heavy'?37:29)*impact),'collision');if(o.hp>0){o.vx=(Math.abs(e.vx)>80?Math.sign(e.vx):Math.sign(dx)||1)*(e.type==='heavy'?220:135);o.vz=e.vz*.26;o.h=Math.max(o.h,13);o.vy=145;o.poise+=2;knockDown(o,e.type==='heavy'?1.95:1.65,true,false);}damageEnemy(e,4,'collision');e.vx*=.85;e.vz*=.85;ring(o.x,o.z,'#ffe18a',21);burst(o.x,o.z,'#ffd47b',16,.9);label('CRASH!',o.x,o.z,'#ffe287',17);player.meter=clamp(player.meter+5,0,100);score+=35;hitStop=.06;}}
    if(e.flight<=0||(Math.hypot(e.vx,e.vz)<85&&e.h===0)){e.thrown=false;e.h=0;e.vy=0;e.vx*=.28;e.vz*=.28;knockDown(e,1.55,true,false);}
    return;
  }
@@ -195,22 +196,26 @@ function updateEnemy(e,dt){if(e.dead>0){e.dead-=dt;return;}if(e.grabbed){e.x=pla
  if(e.down>0){e.down=Math.max(0,e.down-dt);if(e.down===0){e.getup=GETUP_TIME;e.stun=Math.max(e.stun,GETUP_TIME);}return;}
  if(e.getup>0){e.getup=Math.max(0,e.getup-dt);return;}
  if(e.stun>0)return;
- if(e.chargeTime>0){const oldX=e.x;e.x=clamp(e.x+e.chargeDX*dt*375,ARENA.left,ARENA.right);e.z=clamp(e.z+e.chargeDZ*dt*375,ARENA.top,ARENA.bottom);e.chargeTime-=dt;const dx=Math.abs(player.x-e.x),dz=Math.abs(player.z-e.z);if(dx<43&&dz<29&&!e.chargeHit.has('p')){e.chargeHit.add('p');hurtPlayer(11,e.x);}for(const o of enemies){if(o===e||o.hp<=0||e.chargeHit.has(o.id))continue;if(Math.abs(o.x-e.x)<e.r+o.r&&Math.abs(o.z-e.z)<e.r+o.r){e.chargeHit.add(o.id);damageEnemy(o,10,'collision');o.stun=.6;o.vx=e.chargeDX*190;o.vz=e.chargeDZ*150;ring(o.x,o.z,'#ed8bed',13);}}if(Math.abs(oldX-e.x)<.3)e.chargeTime=0;return;}
+ if(e.chargeTime>0){const oldX=e.x;e.x=clamp(e.x+e.chargeDX*dt*375,ARENA.left,ARENA.right);e.z=clamp(e.z+e.chargeDZ*dt*375,ARENA.top,ARENA.bottom);e.chargeTime-=dt;const dx=Math.abs(player.x-e.x),dz=Math.abs(player.z-e.z);if(dx<43&&dz<29&&!e.chargeHit.has('p')){e.chargeHit.add('p');hurtPlayer(11,e.x);}for(const o of enemies){if(o===e||o.hp<=0||o.grabbed||e.chargeHit.has(o.id))continue;if(Math.abs(o.x-e.x)<e.r+o.r&&Math.abs(o.z-e.z)<e.r+o.r){e.chargeHit.add(o.id);damageEnemy(o,10,'collision');o.stun=.6;o.vx=e.chargeDX*190;o.vz=e.chargeDZ*150;ring(o.x,o.z,'#ed8bed',13);}}if(Math.abs(oldX-e.x)<.3)e.chargeTime=0;return;}
  if(e.windup>0){e.windup-=dt;if(e.windup<=0){if(e.attackMode==='charge'){const dx=player.x-e.x,dz=player.z-e.z,len=Math.hypot(dx,dz)||1;e.chargeDX=dx/len;e.chargeDZ=dz/len;e.chargeTime=.53;e.chargeHit=new Set();e.attackCd=2.8;ring(e.x,e.z,'#ec87ed',15);sound(260,.15,'sawtooth',.037,150);}else if(Math.abs(e.x-player.x)<(e.type==='heavy'?69:56)&&Math.abs(e.z-player.z)<32){hurtPlayer(e.type==='heavy'?13:8,e.x);e.attackCd=e.type==='heavy'?1.8:1.35;}else e.attackCd=.5;e.attackMode='';}return;}
  let dx=player.x-e.x,dz=player.z-e.z,range=Math.hypot(dx,dz);e.face=dx>=0?1:-1;
  if(e.type==='runner'&&range>145&&range<275&&e.attackCd<=0){e.windup=.47;e.attackMode='charge';e.attackCd=2.8;return;}
- if(Math.abs(dx)<(e.type==='heavy'?67:54)&&Math.abs(dz)<(e.type==='heavy'?38:30)&&e.attackCd<=0){const active=enemies.filter(o=>o!==e&&(o.windup>0||o.chargeTime>0)).length;if(active<2){e.windup=e.type==='heavy'?.6:e.type==='runner'?.31:.43;e.attackMode='melee';return;}}
+ if(Math.abs(dx)<(e.type==='heavy'?67:54)&&Math.abs(dz)<(e.type==='heavy'?38:30)&&e.attackCd<=0){const active=enemies.filter(o=>o!==e&&(o.windup>0||o.chargeTime>0)).length;if(active<2){e.windup=e.type==='heavy'?.6:e.type==='runner'?.34:.46;e.attackMode=player.grabbed?'break':'melee';return;}}
  // Crowd pressure and separation. Enemies try to approach from several lanes.
  let gx=dx,gz=dz*.9;
  if(Math.abs(dx)<66&&Math.abs(dz)<23){gx*=.15;gz+=(e.id%2?1:-1)*20;}
  for(const o of enemies){if(o===e||o.hp<=0||o.dead>0)continue;const sx=e.x-o.x,sz=e.z-o.z,dd=sx*sx+sz*sz;if(dd>1&&dd<1700){const rep=(1700-dd)/1700;gx+=sx*rep*.75;gz+=sz*rep*1.2;}}
- const l=Math.hypot(gx,gz)||1;const approach=range>44?1:.25;e.x=clamp(e.x+gx/l*e.speed*approach*dt,ARENA.left,ARENA.right);e.z=clamp(e.z+gz/l*e.speed*approach*dt,ARENA.top,ARENA.bottom);
+ const l=Math.hypot(gx,gz)||1;const approach=range>44?1:.35;
+ // The crowd continues acting at full simulation speed while the player chooses a throw.
+ // Nearby attackers close the gap faster, creating a reason to throw or cancel promptly.
+ const pressure=player.grabbed&&range<245?1.25:1;
+ e.x=clamp(e.x+gx/l*e.speed*approach*pressure*dt,ARENA.left,ARENA.right);e.z=clamp(e.z+gz/l*e.speed*approach*pressure*dt,ARENA.top,ARENA.bottom);
 }
 function update(dt){animTime+=dt;if(toastTime>0)toastTime-=dt;flash=Math.max(0,flash-dt);if(hitStop>0){hitStop=Math.max(0,hitStop-dt);return;}
  player.attackCd=Math.max(0,player.attackCd-dt);player.throwCd=Math.max(0,player.throwCd-dt);player.attackAnim=Math.max(0,player.attackAnim-dt);player.inv=Math.max(0,player.inv-dt);player.dodgeCd=Math.max(0,player.dodgeCd-dt);player.hitFlash=Math.max(0,player.hitFlash-dt);player.comboTimer=Math.max(0,player.comboTimer-dt);if(player.comboTimer===0)player.combo=0;
- const inp=moveInput();if(player.grabbed){player.run=0;}else if(player.dodge>0){player.dodge=Math.max(0,player.dodge-dt);player.x+=player.dodgeVX*dt;player.z+=player.dodgeVZ*dt;}else{const speed=207*(player.attackAnim>0?.66:1);player.x+=inp.x*speed*dt;player.z+=inp.z*speed*dt;if(Math.abs(inp.x)>.15)player.facing=inp.x>0?1:-1;if(inp.m>.1)player.run+=dt*12;else player.run=0;}
+ const inp=moveInput();if(player.grabbed){player.grabTime+=dt;player.run=0;}else if(player.dodge>0){player.dodge=Math.max(0,player.dodge-dt);player.x+=player.dodgeVX*dt;player.z+=player.dodgeVZ*dt;}else{const speed=207*(player.attackAnim>0?.66:1);player.x+=inp.x*speed*dt;player.z+=inp.z*speed*dt;if(Math.abs(inp.x)>.15)player.facing=inp.x>0?1:-1;if(inp.m>.1)player.run+=dt*12;else player.run=0;}
  player.x=clamp(player.x,ARENA.left+5,ARENA.right-5);player.z=clamp(player.z,ARENA.top+3,ARENA.bottom-3);if(held.hit&&!player.grabbed&&player.attackCd<=0)attack();
- for(const e of enemies)updateEnemy(e,player.grabbed&&!e.grabbed?dt*.22:dt);
+ for(const e of enemies)updateEnemy(e,dt);
  enemies=enemies.filter(e=>e.dead>0||e.hp>0);
  for(const p of particles){p.life-=dt;p.x+=p.vx*dt;p.z+=p.vz*dt;p.h+=p.vy*dt;p.vy-=690*dt;p.vx*=.96;}
  particles=particles.filter(p=>p.life>0);
@@ -293,7 +298,7 @@ if((isPlayer&&player.inv>0&&Math.floor(animTime*19)%2===0)){ctx.globalAlpha=.44;
  ctx.strokeStyle=outline;ctx.lineWidth=12;ctx.beginPath();ctx.moveTo(11,-46);ctx.lineTo(19+strike*19,-35-strike*9);ctx.stroke();ctx.strokeStyle=isPlayer?'#87e8ee':primary;ctx.lineWidth=8;ctx.stroke();ctx.fillStyle=isPlayer?'#f0d38d':skin;ctx.beginPath();ctx.arc(20+strike*19,-34-strike*9,6,0,Math.PI*2);ctx.fill();ctx.lineWidth=2;ctx.strokeStyle=outline;ctx.stroke();
  if(isPlayer&&player.grabbed){ctx.strokeStyle='#ffd58a';ctx.lineWidth=7;ctx.beginPath();ctx.moveTo(12,-45);ctx.lineTo(34,-38);ctx.stroke();}if(isPlayer){ctx.fillStyle='#fff1a9';ctx.fillRect(-13,-47,5,15);ctx.fillStyle='#85eff5';ctx.fillRect(-15,-54,29,4);}else if(heavy){ctx.fillStyle='#ddc085';ctx.fillRect(-18,-47,8,12);ctx.fillRect(10,-47,8,12);}else if(runner){ctx.fillStyle='#ede1ff';ctx.fillRect(-18,-42,5,12);}
  ctx.restore();if(!isPlayer&&e.grabbed){write('HELD',x,z-h-96,13,'#ffe19f',1000,'center');}if(!isPlayer&&e.hp>0&&e.hp<e.maxHp){roundRect(x-24,z-h-86,48,5,2,'#192030');roundRect(x-24,z-h-86,48*e.hp/e.maxHp,5,2,heavy?'#f9c771':'#ff7b84');}
- if(!isPlayer&&e.windup>0){const color=e.attackMode==='charge'?'#e8a0ff':'#ff6d7b';ctx.strokeStyle=color;ctx.lineWidth=3;ctx.setLineDash([5,3]);ctx.beginPath();ctx.ellipse(x,z+2,e.type==='heavy'?35:28,16,0,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);write('!',x,z-h-92,17,color,1000,'center');}
+ if(!isPlayer&&e.windup>0){const color=e.attackMode==='charge'?'#e8a0ff':e.attackMode==='break'?'#ffd269':'#ff6d7b';ctx.strokeStyle=color;ctx.lineWidth=3;ctx.setLineDash([5,3]);ctx.beginPath();ctx.ellipse(x,z+2,e.type==='heavy'?35:28,16,0,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);write(e.attackMode==='break'?'BREAK!':'!',x,z-h-92,e.attackMode==='break'?13:17,color,1000,'center');}
  if(!isPlayer&&e.chargeTime>0){ctx.strokeStyle='#f39afe';ctx.lineWidth=4;ctx.beginPath();ctx.moveTo(x-e.chargeDX*25,z-e.chargeDZ*25-26);ctx.lineTo(x-e.chargeDX*67,z-e.chargeDZ*67-26);ctx.stroke();}
 }
 function drawEffects(){for(const r of rings){ctx.save();ctx.globalAlpha=1-r.t/.42;ctx.strokeStyle=r.color;ctx.lineWidth=3.5-r.t*4;ctx.beginPath();ctx.ellipse(r.x,r.z,r.r+r.t*92,(r.r+r.t*92)*.48,0,0,Math.PI*2);ctx.stroke();ctx.restore();}
@@ -306,6 +311,7 @@ function drawHUD(){ctx.save();const x=18,y=16;
  roundRect(348,18,264,59,13,'#091524d4','#52718355');write('IMPACT YARD',480,42,19,'#eaf6ff',1000,'center');write(`WAVE ${wave} / ${finalWave}  ·  ${enemies.filter(e=>e.hp>0).length} HOSTILES`,480,64,11,'#9ec7d8',850,'center');
  roundRect(678,15,175,62,13,'#091524cb','#52718355');write('SCORE',694,35,10,'#9db8c9',900);write(score.toLocaleString(),694,61,22,'#f5e8d2',1000);
  if(player.combo>1&&player.comboTimer>0){write(`${player.combo} HIT CHAIN`,480,102,15,'#ffdf8d',950,'center');}
+ if(player.grabbed){write('THROW QUICKLY — ENEMIES CAN BREAK YOUR GRAB',480,120,13,'#ffd179',950,'center');}
  if(toastTime>0){ctx.save();ctx.globalAlpha=Math.min(1,toastTime/.4);write(toast,480,183,29,'#ffffff',1000,'center');write(wave===1?'HIT TO CHARGE  ·  GRAB TO PICK THROW DIRECTION':'KEEP THE CROWD MOVING',480,207,12,'#bde7f7',850,'center');ctx.restore();}
  // Current throwable target reticle.
  if(player.meter>=THROW_COST&&state==='playing'&&!player.grabbed){const tgt=targetForThrow();if(tgt){ctx.strokeStyle='#ffe49c';ctx.lineWidth=2.5;ctx.setLineDash([6,4]);ctx.beginPath();ctx.ellipse(tgt.x,tgt.z+2,tgt.r+10,15,0,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);write(tgt.down>0?'GRAB DOWNED FOE':'GRAB READY',tgt.x,tgt.z-tgt.h-(tgt.down>0?54:103),10,'#ffdc93',950,'center');}}
