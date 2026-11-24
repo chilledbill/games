@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#15121b">
   <meta name="description" content="Lead an army of skeletons through the haunted abbey, rebuild after each fall, and raise defeated guardians as Champions.">
   <title>Gravebound</title>
-  <link rel="stylesheet" href="./style.css?v=4">
-  <script type="module" src="./game.mjs?v=4"></script>
+  <link rel="stylesheet" href="./style.css?v=5">
+  <script type="module" src="./game.mjs?v=5"></script>
 </head>
 <body>
   <header class="top">
@@ -26,18 +26,18 @@
     <header class="title">
       <p class="eyebrow">⚜ &nbsp; The Haunted Abbey</p>
       <h1>Gravebound</h1>
-      <p>Fight through the abbey. When your army falls, raise it and try again.</p>
+      <p>Lead your skeletons through the abbey’s rooms, one fight at a time.</p>
     </header>
     <div class="layout">
       <section class="panel battlefield" aria-labelledby="battle-title">
         <div class="panel-head">
-          <div><p class="eyebrow" id="battle-mode">Abbey Gate</p><h2 id="battle-title">Grave Rat</h2></div>
+          <div><p class="eyebrow" id="battle-mode">Abbey Gate</p><h2 id="battle-title">Marching</h2></div>
           <span class="tag" id="mode-pill">Run 1</span>
         </div>
-        <canvas id="scene" width="480" height="236" aria-hidden="true"></canvas>
+        <canvas id="scene" width="480" height="288" role="img" aria-label="A top-down view follows your skeletons through the abbey. The map in the corner marks your position."></canvas>
         <div class="battle-controls">
           <div class="route">
-            <span id="wave-number">Wave 1 / 7</span>
+            <span id="wave-number">Encounter 1 / 7</span>
             <div id="wave-track" aria-hidden="true"></div>
             <span id="run-dust">0 dust this run</span>
           </div>

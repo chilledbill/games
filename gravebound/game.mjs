@@ -1,8 +1,8 @@
 import {
   champions, encounters, championSlots, upgrades, rituals, initialState, maxHealth, damage, livingSkeletons, upgradeCost,
-  target, buyUpgrade, raiseChampion, toggleChampion, castBolt, tick,
-} from './engine.mjs?v=3';
-import { animateScene } from './scene.mjs?v=3';
+  target, buyUpgrade, raiseChampion, toggleChampion, castBolt, step, stepMs, isMarching,
+} from './engine.mjs?v=5';
+import { animateScene } from './scene.mjs?v=5';
 
 const ACTIVE_SAVE_KEY = 'gravebound:active-save';
 const DEFAULT_SAVE_KEY = 'gravebound:v3';
@@ -124,14 +124,15 @@ function meter(id, value, max) {
 function render() {
   const foe = target(state);
   const { run, lineup } = state;
+  const marching = isMarching(state);
   const skeletons = livingSkeletons(state);
   const canRaise = champions.some((entry, index) => index < state.cleared && !state.raised.includes(index) && state.essence >= entry.essence);
   setText(find('dust'), number.format(state.dust));
   setText(find('essence'), number.format(state.essence));
   setText(find('battle-mode'), foe.zone);
-  setText(find('battle-title'), foe.name);
+  setText(find('battle-title'), marching ? 'Marching' : foe.name);
   setText(find('mode-pill'), `Run ${number.format(run.number)}`);
-  setText(find('wave-number'), `Wave ${run.wave + 1} / ${run.length}`);
+  setText(find('wave-number'), `Encounter ${run.wave + 1} / ${run.length}`);
   setText(find('run-dust'), `+${number.format(run.dust)} dust this run`);
   setText(find('best-run'), `Best run · ${state.best} ${state.best === 1 ? 'wave' : 'waves'} cleared`);
   waveMarkers.forEach((marker, index) => {
@@ -146,11 +147,12 @@ function render() {
   find('summon-link').hidden = !canRaise;
   meter('army-hp', run.army, maxHealth(state));
   meter('foe-hp', run.enemy, foe.hp);
-  bolt.disabled = Boolean(run.wait || run.result || run.cooldown);
+  bolt.disabled = Boolean(run.wait || run.result || run.cooldown || marching);
   setText(bolt, run.cooldown ? `Grave Bolt · ${run.cooldown}s` : 'Cast Grave Bolt');
   const hint = run.result === 'fallen' ? `Your army fell. Rising at the Abbey Gate in ${run.wait}s.`
     : run.result === 'cleared' ? `Run cleared. The next march starts in ${run.wait}s.`
     : run.wave === 0 && run.wait ? 'Your skeletons are rising at the Abbey Gate.'
+    : marching ? `Up ahead: ${foe.name}. The skeletons will stop and fight when they reach it.`
     : foe.hint ?? 'Your army attacks automatically. Defeat foes to earn Bone Dust.';
   setText(find('battle-hint'), hint);
 
@@ -241,12 +243,17 @@ function syncTimer() {
   if (!document.hidden && !resetDialog.open) {
     timer = setInterval(() => {
       if (document.hidden || resetDialog.open) return;
-      eventFeedback(tick(state));
-      saveAndRender();
-    }, 1000);
+      const marching = isMarching(state);
+      eventFeedback(step(state));
+      if (state.run.frame === 0) saveAndRender();
+      else if (marching !== isMarching(state)) render();
+    }, stepMs);
   }
 }
-document.addEventListener('visibilitychange', syncTimer);
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) save();
+  syncTimer();
+});
 window.addEventListener('storage', event => {
   if (event.key === ACTIVE_SAVE_KEY && event.newValue && event.newValue !== saveKey) window.location.reload();
 });

@@ -1,3 +1,5 @@
+import { legs } from './dungeon.mjs';
+
 export const champions = [
   { name: 'The Bellkeeper', kind: 'Miniboss', essence: 2, skill: 'Last Toll', boon: 'Restores 9 army health every fourth combat round and can revive fallen skeletons.' },
   { name: 'The Ash Hound', kind: 'Miniboss', essence: 3, skill: 'Cinder Leap', boon: 'Deals 13 bonus damage every third combat round.' },
@@ -33,13 +35,15 @@ export const livingSkeletons = state => Math.ceil(state.run.army / skeletonHealt
 export const damage = state => 2 * livingSkeletons(state) + state.levels.grimoire * 3 + state.lineup.length * 3;
 export const upgradeCost = (state, key) => Math.ceil(upgrades[key].base * 1.58 ** state.levels[key]);
 export const target = state => encounters[state.run.wave];
+export const stepMs = 125;
+export const isMarching = ({ run }) => !run.result && run.travel < legs[run.wave].length;
 
 function startRun(state, number) {
   const squad = 2 + state.levels.skeletons;
   state.run = {
     number, wave: 0, length: state.cleared === champions.length ? encounters.length : encounters.length - 1,
     squad, army: squad * skeletonHealth(state), enemy: encounters[0].hp, shield: 0, dust: 0,
-    round: 0, totalRounds: 0, cooldown: 0, wait: 2, result: null,
+    round: 0, totalRounds: 0, cooldown: 0, wait: 2, result: null, travel: 0, frame: 0,
   };
 }
 
@@ -51,7 +55,11 @@ export function initialState(previous = {}) {
     lineup: (previous.lineup ?? []).slice(0, championSlots),
     best: previous.best ?? 0,
   };
-  if (previous.run) state.run = { ...previous.run };
+  if (previous.run) {
+    const { run } = previous;
+    const nearEntrance = run.wave === 0 && run.round === 0 && run.wait > 0 && !run.result;
+    state.run = { travel: nearEntrance ? 0 : legs[run.wave].length, frame: 0, ...run };
+  }
   else startRun(state, 1);
   return state;
 }
@@ -104,6 +112,7 @@ function victory(state) {
     run.wait = 4;
   } else {
     run.wave++;
+    run.travel = 0;
     run.enemy = target(state).hp;
     run.shield = 0;
     run.round = 0;
@@ -118,7 +127,7 @@ function victory(state) {
 
 export function castBolt(state) {
   const run = state.run;
-  if (run.wait || run.result || run.cooldown) return null;
+  if (run.wait || run.result || run.cooldown || isMarching(state)) return null;
   run.cooldown = 6;
   const hit = 12 + state.levels.grimoire * 3;
   run.enemy -= hit;
@@ -127,7 +136,15 @@ export function castBolt(state) {
   return { type: 'bolt', hit };
 }
 
-export function tick(state) {
+export function step(state) {
+  const run = state.run;
+  const moving = !run.wait && isMarching(state);
+  if (moving) run.travel = Math.min(legs[run.wave].length, run.travel + 12);
+  run.frame = (run.frame + 1) % (1000 / stepMs);
+  return run.frame === 0 ? combatTick(state, moving) : null;
+}
+
+function combatTick(state, moving) {
   const run = state.run;
   run.cooldown = Math.max(0, run.cooldown - 1);
   if (run.wait) {
@@ -135,6 +152,7 @@ export function tick(state) {
     if (run.result && run.wait === 0) startRun(state, run.number + 1);
     return null;
   }
+  if (moving) return null;
 
   const foe = target(state);
   run.round++;
