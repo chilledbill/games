@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
 <meta name="theme-color" content="#0a1020" />
-<title>IMPACT YARD — Crowd Pressure v5</title>
+<title>IMPACT YARD — Spacing Tactics v6</title>
 <style>
 :root{color-scheme:dark;--ink:#eef5ff;--muted:#aab6ca;--cyan:#62e9ff;--orange:#ffba59;--red:#ff6677}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#070b14;touch-action:none;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:var(--ink);user-select:none;-webkit-user-select:none}
@@ -88,7 +88,7 @@ h1 em{font-style:normal;color:var(--orange)}
    <div class="mechanics" id="modalMechanics">
     <div class="mechanic"><strong>01 / HIT</strong><span>Hits build meter; third strike knocks foes down.</span></div>
     <div class="mechanic"><strong>02 / GRAB</strong><span>Grab first, then choose a direction to throw. Costs 25 on release.</span></div>
-    <div class="mechanic"><strong>03 / PRESSURE</strong><span>Foes close in and can break grabs. Throw fast, or dodge out.</span></div>
+    <div class="mechanic"><strong>03 / FORMATIONS</strong><span>Enemies spread, flank and surge. Line up a throw to hit multiple foes.</span></div>
    </div>
    <button id="startBtn">START FIGHT →</button>
    <div class="note" id="modalNote">Touch: HIT → GRAB → tap an arrow. Keyboard: WASD move / choose throw, J hit, K grab, L dodge, P pause.</div>
@@ -98,6 +98,15 @@ h1 em{font-style:normal;color:var(--orange)}
 <script>
 (()=>{'use strict';
 const VW=960,VH=540,ARENA={left:61,right:900,top:286,bottom:478},THROW_COST=25,MAX_METER=100,GETUP_TIME=.3;
+// Tactical slots prevent a swarm from choosing one identical destination.
+// Two front-line slots maintain pressure, while flanks, reserves and periodic lunges
+// make the player change position to find multi-target throws.
+const FORMATION=[
+ {x:-45,z:-7,role:'pressure'},{x:47,z:9,role:'pressure'},
+ {x:-142,z:-57,role:'flank'},{x:143,z:57,role:'flank'},
+ {x:-187,z:52,role:'reserve'},{x:190,z:-55,role:'reserve'},
+ {x:-125,z:67,role:'flank'},{x:127,z:-68,role:'flank'}
+];
 const app=document.getElementById('app'),canvas=document.getElementById('game'),ctx=canvas.getContext('2d',{alpha:false});
 const ui={modal:document.getElementById('modal'),eyebrow:document.getElementById('modalEyebrow'),title:document.getElementById('modalTitle'),text:document.getElementById('modalText'),mechanics:document.getElementById('modalMechanics'),note:document.getElementById('modalNote'),start:document.getElementById('startBtn'),throwBtn:document.getElementById('throwBtn'),pause:document.getElementById('pauseBtn'),sound:document.getElementById('soundBtn')};
 let state='menu',enemies=[],particles=[],labels=[],slashes=[],rings=[],player,score=0,wave=0,finalWave=3,waveDelay=-1,nextId=1,animTime=0,hitStop=0,flash=0,toast='',toastTime=0, kills=0,collisionKills=0;
@@ -111,7 +120,7 @@ function initAudio(){if(!soundOn)return;try{audioCtx=audioCtx||new (window.Audio
 function sound(freq=300,dur=.08,type='triangle',vol=.055,slide=0){if(!audioCtx||!soundOn)return;try{const o=audioCtx.createOscillator(),g=audioCtx.createGain(),n=audioCtx.currentTime;o.type=type;o.frequency.setValueAtTime(freq,n);if(slide)o.frequency.exponentialRampToValueAtTime(Math.max(35,freq+slide),n+dur);g.gain.setValueAtTime(vol,n);g.gain.exponentialRampToValueAtTime(.0001,n+dur);o.connect(g);g.connect(audioCtx.destination);o.start(n);o.stop(n+dur+.01)}catch(e){}}
 function vibrate(ms){try{navigator.vibrate?.(ms)}catch(e){}}
 function reset(){state='playing';enemies=[];particles=[];labels=[];slashes=[];rings=[];keys.clear();held.hit=false;app.classList.remove('grabMode');score=0;wave=0;waveDelay=-1;nextId=1;kills=0;collisionKills=0;hitStop=0;flash=0;player={x:475,z:391,hp:100,maxHp:100,meter:0,grabTime:0,facing:1,attackCd:0,attackStep:0,attackAnim:0,throwCd:0,inv:0,dodgeCd:0,dodge:0,dodgeVX:0,dodgeVZ:0,run:0,hitFlash:0,combo:0,comboTimer:0,grabbed:null};setStick(0,0);spawnWave();ui.modal.classList.add('hidden');ui.pause.textContent='Ⅱ';initAudio();}
-function makeEnemy(type,x,z){const heavy=type==='heavy',runner=type==='runner',hp=heavy?108:runner?42:56;return{id:nextId++,type,x,z,h:0,vy:0,vx:0,vz:0,hp,maxHp:hp,r:heavy?23:runner?15:18,mass:heavy?1.85:runner?.78:1,speed:heavy?70:runner?128:91,face:x<player.x?1:-1,stun:0,attackCd:rand(.3,1.1),windup:0,attackMode:'',chargeTime:0,chargeDX:0,chargeDZ:0,chargeHit:new Set(),flight:0,thrown:false,flightHits:new Set(),wallBounces:0,flash:0,dead:0,anim:rand(0,10),poise:0,down:0,downMax:0,getup:0,hitReact:0,grabbed:false};}
+function makeEnemy(type,x,z){const heavy=type==='heavy',runner=type==='runner',hp=heavy?108:runner?42:56,id=nextId++;return{id,type,slot:(id-1)%FORMATION.length,x,z,h:0,vy:0,vx:0,vz:0,hp,maxHp:hp,r:heavy?23:runner?15:18,mass:heavy?1.85:runner?.78:1,speed:heavy?70:runner?128:91,face:x<player.x?1:-1,stun:0,attackCd:rand(.3,1.1),windup:0,attackMode:'',chargeTime:0,chargeDX:0,chargeDZ:0,chargeHit:new Set(),flight:0,thrown:false,flightHits:new Set(),wallBounces:0,flash:0,dead:0,anim:rand(0,10),poise:0,down:0,downMax:0,getup:0,hitReact:0,grabbed:false};}
 function spawnWave(){wave++;waveDelay=-1;const kinds=wave===1?['grunt','grunt','grunt','grunt','runner','grunt']:wave===2?['grunt','runner','grunt','heavy','grunt','runner','grunt']:['heavy','runner','grunt','grunt','heavy','grunt','runner','grunt'];
  kinds.forEach((type,i)=>{let x,z;for(let j=0;j<12;j++){x=i%2===0?rand(90,280):rand(665,866);z=rand(318,449);if(Math.hypot(x-player.x,z-player.z)>150)break;}enemies.push(makeEnemy(type,x,z));});
  toast=`WAVE ${wave} / ${finalWave}`;toastTime=2.0;player.hp=Math.min(100,player.hp+(wave>1?18:0));if(wave>1)player.meter=Math.min(100,player.meter+20);sound(170,.25,'sawtooth',.025,180);}
@@ -201,15 +210,42 @@ function updateEnemy(e,dt){if(e.dead>0){e.dead-=dt;return;}if(e.grabbed){e.x=pla
  let dx=player.x-e.x,dz=player.z-e.z,range=Math.hypot(dx,dz);e.face=dx>=0?1:-1;
  if(e.type==='runner'&&range>145&&range<275&&e.attackCd<=0){e.windup=.47;e.attackMode='charge';e.attackCd=2.8;return;}
  if(Math.abs(dx)<(e.type==='heavy'?67:54)&&Math.abs(dz)<(e.type==='heavy'?38:30)&&e.attackCd<=0){const active=enemies.filter(o=>o!==e&&(o.windup>0||o.chargeTime>0)).length;if(active<2){e.windup=e.type==='heavy'?.6:e.type==='runner'?.34:.46;e.attackMode=player.grabbed?'break':'melee';return;}}
- // Crowd pressure and separation. Enemies try to approach from several lanes.
- let gx=dx,gz=dz*.9;
- if(Math.abs(dx)<66&&Math.abs(dz)<23){gx*=.15;gz+=(e.id%2?1:-1)*20;}
- for(const o of enemies){if(o===e||o.hp<=0||o.dead>0)continue;const sx=e.x-o.x,sz=e.z-o.z,dd=sx*sx+sz*sz;if(dd>1&&dd<1700){const rep=(1700-dd)/1700;gx+=sx*rep*.75;gz+=sz*rep*1.2;}}
- const l=Math.hypot(gx,gz)||1;const approach=range>44?1:.35;
- // The crowd continues acting at full simulation speed while the player chooses a throw.
- // Nearby attackers close the gap faster, creating a reason to throw or cancel promptly.
- const pressure=player.grabbed&&range<245?1.25:1;
- e.x=clamp(e.x+gx/l*e.speed*approach*pressure*dt,ARENA.left,ARENA.right);e.z=clamp(e.z+gz/l*e.speed*approach*pressure*dt,ARENA.top,ARENA.bottom);
+ // Fixed formation slots break up permanent crowds; staggered flanks periodically
+  // surge toward the player, rather than either idling forever or dogpiling.
+  const slot=FORMATION[e.slot],phase=(animTime+e.slot*1.32)%6.4;
+  const surge=slot.role==='flank'&&phase<1.65;
+  const assistGrab=player.grabbed&&slot.role==='flank'&&e.slot===2&&range<230;
+  const pressure=slot.role==='pressure'||surge||assistGrab;
+  const recovering=slot.role==='pressure'&&e.attackCd>.45&&!player.grabbed;
+  let idealX=pressure?(recovering?Math.sign(slot.x)*103:Math.sign(slot.x)*44):slot.x;
+  let idealZ=pressure?Math.sign(slot.z)*9:slot.z;
+  // Near arena edges, a desired slot may lie behind a wall. Mirror it
+  // into the usable side at a different distance instead of clamping
+  // multiple enemies onto exactly the same unreachable position.
+  if(idealX<0&&player.x+idealX<ARENA.left+36)idealX=-idealX+75+e.slot*6;
+  else if(idealX>0&&player.x+idealX>ARENA.right-36)idealX=-idealX-75-e.slot*6;
+  if(idealZ<0&&player.z+idealZ<ARENA.top+22)idealZ=-idealZ*.85+20+(e.slot%3)*9;
+  else if(idealZ>0&&player.z+idealZ>ARENA.bottom-22)idealZ=-idealZ*.85-20-(e.slot%3)*9;
+  const tx=clamp(player.x+idealX,ARENA.left+22,ARENA.right-22);
+  const tz=clamp(player.z+idealZ,ARENA.top+15,ARENA.bottom-15);
+  // Steering is measured in speed units instead of comparing an enormous player
+  // distance with tiny repulsion numbers (the old reason foes piled together).
+  let mx=clamp((tx-e.x)/55,-1,1),mz=clamp((tz-e.z)/45,-1,1);
+  for(const o of enemies){
+   if(o===e||o.hp<=0||o.dead>0||o.grabbed||o.thrown)continue;
+   const sx=e.x-o.x,sz=e.z-o.z,dist=Math.hypot(sx,sz*1.2);
+   const nearWall=player.x<ARENA.left+215||player.x>ARENA.right-215;
+   const space=e.r+o.r+(nearWall?43:27);
+   if(dist>0.01&&dist<space){const force=(space-dist)/space*(nearWall?3.4:2.65);mx+=sx/dist*force;mz+=sz*1.2/dist*force;}
+   else if(dist<=.01){mx+=(e.id<o.id?-1:1)*.6;}
+  }
+  // Stay out of the player's body without preventing close-range attacks.
+  const px=e.x-player.x,pz=e.z-player.z,pr=Math.hypot(px,pz*1.2);
+  if(pr>0&&pr<32){const force=(32-pr)/32*.75;mx+=px/pr*force;mz+=pz/pr*force;}
+  const m=Math.hypot(mx,mz);if(m>1){mx/=m;mz/=m;}
+  const grabPressure=player.grabbed&&pressure&&range<235?1.18:1;
+  e.x=clamp(e.x+mx*e.speed*grabPressure*dt,ARENA.left,ARENA.right);
+  e.z=clamp(e.z+mz*e.speed*grabPressure*dt,ARENA.top,ARENA.bottom);
 }
 function update(dt){animTime+=dt;if(toastTime>0)toastTime-=dt;flash=Math.max(0,flash-dt);if(hitStop>0){hitStop=Math.max(0,hitStop-dt);return;}
  player.attackCd=Math.max(0,player.attackCd-dt);player.throwCd=Math.max(0,player.throwCd-dt);player.attackAnim=Math.max(0,player.attackAnim-dt);player.inv=Math.max(0,player.inv-dt);player.dodgeCd=Math.max(0,player.dodgeCd-dt);player.hitFlash=Math.max(0,player.hitFlash-dt);player.comboTimer=Math.max(0,player.comboTimer-dt);if(player.comboTimer===0)player.combo=0;
