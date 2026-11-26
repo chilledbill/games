@@ -1,5 +1,12 @@
 # Holdfast changelog
 
+## v0.5 — Separate Light / Heavy
+- Three buttons: Guard, Light, Heavy. Light fires on tap/press; hold does not repeat. Heavy requires 0.30s charge then release; early release cancels. Perfect charge window and overcharge preserved. Keyboard Z/C/X.
+- Light has a three-strike chain, short 0.12s animation link after first two strikes (no attack cooldown), third strike 0.65s recovery with +8 damage on a completed unblocked combo. Whiffs advance chain to preserve third-strike commitment. Single buffered next input during light animation; finisher buffer only in last 0.10s.
+- Charged heavy ends a chain early or acts alone; 0.80s normal, 0.50s perfect, 1.20s overcharge. Removed separate Armor Breaker / Riposte recipe bonuses to simplify; normal heavy still breaks shields and parry still creates opening. Guard and damage cancel queued inputs; guard may cancel charging or light links.
+- Enemy stats, healing, parry and anti-stunlock rule unchanged. Guard Endurance still planned. Export records heavy taps and chain enders.
+- 29 deterministic DOM-stub checks passed; live Pages and touch feel not verified.
+
 ## v0.4 — Combo flow
 - Quick starters and second strikes recover in 0.25s; Triple Slash 0.65s, Armor Breaker 0.90s, Riposte 0.60s. Regular heavy/perfect/overcharge remain 0.80/0.50/1.20s. Overcharge retains 1.20s even as a finisher; whiffed non-finisher quick attacks retain 0.45s.
 - Single input buffer in final 0.10s of attack recovery; held input starts charging only after recovery, released input queues a quick attack. Guard or damage cancels queued attack. No early execution.
