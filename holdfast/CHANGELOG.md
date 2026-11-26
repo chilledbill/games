@@ -1,5 +1,12 @@
 # Holdfast changelog
 
+## v0.4 — Combo flow
+- Quick starters and second strikes recover in 0.25s; Triple Slash 0.65s, Armor Breaker 0.90s, Riposte 0.60s. Regular heavy/perfect/overcharge remain 0.80/0.50/1.20s. Overcharge retains 1.20s even as a finisher; whiffed non-finisher quick attacks retain 0.45s.
+- Single input buffer in final 0.10s of attack recovery; held input starts charging only after recovery, released input queues a quick attack. Guard or damage cancels queued attack. No early execution.
+- Relaxed combo continuation window to 1.0s after recovery; riposte window 1.0s after prompt guard release. Finishers reset chain. Damage, guard, miss, timeout reset chain; committed finisher recovery is not shortened by interruption.
+- HUD shows queued input; export tracks accepted/executed/canceled buffers and recovery per attack. Enemy stats, healing, parry and anti-stunlock rules unchanged; Guard Endurance still planned.
+- 23 deterministic DOM-stub checks passed; live deployment and mobile feel not yet verified.
+
 ## v0.3 — Player combos
 - Quick → Quick → Quick: +8 damage on unblocked final hit.
 - Quick → Quick → any charged release: +5 damage and stronger stagger (0.8s when stagger is allowed); shield contacts can build the chain.
