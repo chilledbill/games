@@ -1,5 +1,11 @@
 # Holdfast changelog
 
+## v0.6 — Enemy posture
+- Gold posture meter fills from light 8, light finisher 15, shielded light 5, heavy 24, perfect 32, overcharge 36, parry 32. Enemy maxima: swordsman 42, shield 50, assassin 34, berserker 60, duelist 46, captain 95. Decay 9/s after 1.5s without posture hits.
+- Full posture cancels current enemy action, including armored windup, and creates a 2.2s broken state. Light damage continues but does not extend the opening or build posture. First charged heavy hit in the window receives +25 damage (capped by remaining HP), consumes opening, resets posture. Normal heavy cooldown remains. A heavy that causes the break is not itself a punish. Unused opening expires and resets posture. Shield temporarily exposed while broken; a heavy punish removes shield.
+- Added kneeling pose, gold ground ring, break/finish impact, sound, countdown meter, Heavy button highlight, posture telemetry by source and enemy, break/punish counts and expired openings. Existing health, healing, attack inputs and enemy moves unchanged. Guard Endurance not implemented.
+- 27 deterministic DOM-stub checks passed; live mobile feel and Pages not verified.
+
 ## v0.5 — Separate Light / Heavy
 - Three buttons: Guard, Light, Heavy. Light fires on tap/press; hold does not repeat. Heavy requires 0.30s charge then release; early release cancels. Perfect charge window and overcharge preserved. Keyboard Z/C/X.
 - Light has a three-strike chain, short 0.12s animation link after first two strikes (no attack cooldown), third strike 0.65s recovery with +8 damage on a completed unblocked combo. Whiffs advance chain to preserve third-strike commitment. Single buffered next input during light animation; finisher buffer only in last 0.10s.
