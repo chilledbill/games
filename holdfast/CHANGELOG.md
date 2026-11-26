@@ -1,5 +1,10 @@
 # Holdfast changelog
 
+## v0.7 — Half player health damage
+- All outgoing health damage multiplied by 0.5 after opening, combo, shield and posture bonuses. Exact half HP increments retained; telemetry reports actual scaled damage and bonus contributions. Light 13→6.5, shielded light 3→1.5, perfect 39→19.5, overcharge 45→22.5, triple bonus 8→4, posture punish bonus 25→12.5.
+- All posture damage, decay, break duration, enemy HP, incoming damage, healing, controls and attack recovery unchanged. Isolate whether enemies survive long enough to exploit posture.
+- 13 deterministic DOM-stub checks passed; mobile feel and live Pages not verified.
+
 ## v0.6 — Enemy posture
 - Gold posture meter fills from light 8, light finisher 15, shielded light 5, heavy 24, perfect 32, overcharge 36, parry 32. Enemy maxima: swordsman 42, shield 50, assassin 34, berserker 60, duelist 46, captain 95. Decay 9/s after 1.5s without posture hits.
 - Full posture cancels current enemy action, including armored windup, and creates a 2.2s broken state. Light damage continues but does not extend the opening or build posture. First charged heavy hit in the window receives +25 damage (capped by remaining HP), consumes opening, resets posture. Normal heavy cooldown remains. A heavy that causes the break is not itself a punish. Unused opening expires and resets posture. Shield temporarily exposed while broken; a heavy punish removes shield.
