@@ -1,5 +1,10 @@
 # Holdfast changelog
 
+## v0.8 — Surrounded arena
+- Separate versioned arena; v0.7 remains playable. Fixed central player, 3 enemies in distinct positions, tap living enemy to select/facing (PC 1/2/3). Committed swings lock their victim; next attacks follow selection, including light combos across targets. Guard/parry only covers selected enemy; switch while guarding without refreshing parry timing. Auto-select living enemy after kill. Kill cancels buffered attacks.
+- Independent HP, posture, stagger, shield and enemy attack timers. Up to two simultaneous windups; prospective impacts spaced by >=0.70s. Clear all three to spawn next group after 0.8s. Mixed and basic practice modes. Prior v0.7 health damage, healing, posture and recovery preserved. No skills yet; no player movement.
+- Overhead arena, facing arrow, selected ring, enemy-local health/posture, windup lines and countdown, threat cue. Export tracks target switches, off-target hits, waves and max simultaneous windups, enemy IDs on events. 18 DOM-stub checks passed. Mobile controls and actual browser visual rendering not verified.
+
 ## v0.7 — Half player health damage
 - All outgoing health damage multiplied by 0.5 after opening, combo, shield and posture bonuses. Exact half HP increments retained; telemetry reports actual scaled damage and bonus contributions. Light 13→6.5, shielded light 3→1.5, perfect 39→19.5, overcharge 45→22.5, triple bonus 8→4, posture punish bonus 25→12.5.
 - All posture damage, decay, break duration, enemy HP, incoming damage, healing, controls and attack recovery unchanged. Isolate whether enemies survive long enough to exploit posture.
