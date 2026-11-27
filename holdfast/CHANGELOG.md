@@ -1,5 +1,9 @@
 # Holdfast changelog
 
+## v0.9 — Mobile pacing
+- v0.8 feedback: too aggressive to switch targets on mobile. Only one active windup at once, 1.50s minimum telegraph and 1.55x original windup duration (heavy 1.922s, feint 2.2165s). Global 1.4s breathing room after any attack resolves, is interrupted, or its attacker dies; eligible attackers rotate through slots. Initial wave grace 0.9s. No immediate replacement attack after stagger/parry/kill. Larger nearest-enemy touch radius (min 50px).
+- Three enemies, directional guard, combos, posture, half damage, healing, parry timing and player cooldowns unchanged. No skill added. 15 deterministic DOM-stub checks passed, including sustained minimum spacing, rotated attacks, and parry after switching. Actual phone feel and Pages deployment not verified.
+
 ## v0.8 — Surrounded arena
 - Separate versioned arena; v0.7 remains playable. Fixed central player, 3 enemies in distinct positions, tap living enemy to select/facing (PC 1/2/3). Committed swings lock their victim; next attacks follow selection, including light combos across targets. Guard/parry only covers selected enemy; switch while guarding without refreshing parry timing. Auto-select living enemy after kill. Kill cancels buffered attacks.
 - Independent HP, posture, stagger, shield and enemy attack timers. Up to two simultaneous windups; prospective impacts spaced by >=0.70s. Clear all three to spawn next group after 0.8s. Mixed and basic practice modes. Prior v0.7 health damage, healing, posture and recovery preserved. No skills yet; no player movement.
