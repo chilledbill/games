@@ -8,6 +8,30 @@ Numbered copies of each build live in `D:\claudegames\0ClosingFantasy` as `Closi
   - The user couldn't find a slider for it: nothing is labelled as the light slash. The controls are under **✨ New juice (v0.6)**: *Smear frame length / strength / duration / on light swings*.
   - Fix to discuss with the user: make the heavy read bigger than the light (for example a bigger, longer heavy trail, or a separate smear size for light and heavy), and give these sliders labels the user will recognise, such as "Light slash size".
 
+## v0.29 · Portrait combat
+- Numerical player HP stays inside a strip above the arena. Regular enemy HP sits above each fighter, with a gold border for the selected target. The Iron Warden has a full-width health bar with a thin gold poise bar below it.
+- Back and Menu occupy the arena corners. The menu holds fullscreen, settings, tuning, indicators, retry and exports. The target row appears only for multiple opponents. The existing dodge/parry and attack rows retain their artwork and keyboard shortcuts on PC.
+- The portrait arena scales proportionally within the available viewport and accounts for safe-area insets. Fullscreen uses the browser API and reports when unavailable.
+- Checked 320×568, 390×844 and 430×932 in Chrome with fullscreen on and off. Checked target cycling, tuning and export access, arena aspect ratio, HP placement and button visibility. Boss scenarios, corner checks and regular full-map clears passed with effects on and off. Physical-device comfort and browser-specific safe areas remain for playtesting.
+
+## v0.28 · Arena boundaries
+- Arena movement reserves room for heads, bodies and feet. Enemy spawns, dodge landings and blocked pushback respect the same floor limits. Warden repulsion angles along a wall when the straight path is too short.
+- Hit shake, zoom and visible recoil stay within the camera framing. The defeat screen returns to the neutral camera.
+- Chrome passed both dodge directions at every corner, all four corner repulsions and defeat frames, boss combat, and regular full-map clears with effects on and off. Check the available fighting space on a phone.
+
+## v0.27 · Warden sword grip
+- Replaced the detached arena-space sword and generic blade with one faceted sword drawn in the Warden’s gauntlet. Shoulder, elbow, wrist and grip share the character’s facing and recoil transforms.
+- Crowned steel helmet, layered breastplate and asymmetric leather and metal shoulders use the existing character art style.
+- Inspected frozen cleave, left/right sweep, power and delayed poses. Chrome passed the boss scenarios and regular full-map checks with effects on and off. Judge the silhouette at phone size.
+
+## v0.26 · The Iron Warden
+- Boss Fight opens a standalone duel. Retry resets combat and retains tuning. Export Boss Fight JSON captures separate attempts in this page session, including live fights, with settings and a combat timeline.
+- Armored cleaves, directional sweeps, a two-strike chain, delayed windups and an interruptible power charge. Dodge toward the leather-bound shoulder for weak-spot damage and use Heavy to interrupt a charge. Sword parries and landed attacks wear down poise.
+- Repulsion starts an accelerating projectile rally. Light reflects it without auto-approach. Three returns earn damage and an extended opening.
+- Defaults include 32 HP, 10 poise, 110 degrees/s tracking through 55% of windup, 0.95 s sword windup, 1.15 s recovery and 2.4 s extended openings. Boss settings include 23 sliders and five independent indicators, initially off.
+- Headless Chrome verified directional hits and misses, weak-side interrupt, three-return rally, poise break, retry, defeat, victory and JSON download. Regular parry-led and dodge-led full-map checks passed with effects on and off.
+- Phone playtest needed for weapon-side readability, combo recognition and rally timing with the default indicators off.
+
 ## v0.25 · Dodge and enemy tracking
 - Dodge movement takes 150 ms. You can then attack, while your next dodge or parry unlocks 450 ms after the step began. Amber telegraphs turn toward you at up to 180°/s during the first 65% of windup. Red marks the locked strike. The Defender turns behind his shield and holds his facing through exposed recovery. Adjust all four values under Gameplay.
 - Verified in headless Chrome: attack and defense unlock thresholds, early dodge caught, bounded turns and locked directions on all four enemies, Defender guard and exposure, arrows from a secondary attacker, and both dodge directions at all four corners. Parry-led and dodge-led full-map clears passed with effects on and off.
