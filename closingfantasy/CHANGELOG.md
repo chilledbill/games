@@ -8,6 +8,11 @@ Numbered copies of each build live in `D:\claudegames\0ClosingFantasy` as `Closi
   - The user couldn't find a slider for it: nothing is labelled as the light slash. The controls are under **✨ New juice (v0.6)**: *Smear frame length / strength / duration / on light swings*.
   - Fix to discuss with the user: make the heavy read bigger than the light (for example a bigger, longer heavy trail, or a separate smear size for light and heavy), and give these sliders labels the user will recognise, such as "Light slash size".
 
+## v0.30 · Final stand
+- Sword or rally damage that would leave the Iron Warden at 1 HP or less triggers a single invulnerable flurry. The red flame aura signals the phase. Defend alternating sweeps followed by a cleave. Once the fire goes out the boss slumps and stays exposed until the player lands the finishing sword hit.
+- Boss tuning adds strike count (5), follow-up windup (0.65 s) and flame intensity (1×). Windup respects defensive recovery. Flames have a separate isolation layer. The playtest timeline records the finale and the final stagger.
+- Chrome verified sword and rally triggers, damage and poise immunity, five consecutive parries, a stagger that waits for manual input, victory and clean retry. Boss regressions and regular full-map clears passed with effects on and off. Check flurry cadence on a phone.
+
 ## v0.29 · Portrait combat
 - Numerical player HP stays inside a strip above the arena. Regular enemy HP sits above each fighter, with a gold border for the selected target. The Iron Warden has a full-width health bar with a thin gold poise bar below it.
 - Back and Menu occupy the arena corners. The menu holds fullscreen, settings, tuning, indicators, retry and exports. The target row appears only for multiple opponents. The existing dodge/parry and attack rows retain their artwork and keyboard shortcuts on PC.
