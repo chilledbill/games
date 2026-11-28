@@ -3,6 +3,16 @@
 Newest first. Every build also has the same notes in the in-game **Build notes** panel (left side).
 Numbered copies of each build live in `D:\claudegames\0ClosingFantasy` as `ClosingFantasy_vNN_Name.html`.
 
+## Open issues (from the user, not yet fixed)
+- **Light attack slash looks bigger than the heavy (reported after v0.24).** The big pale fan on light swings is the **smear frame** (v0.6): user values `smearSize` 70, `smearAlpha` 0.65, `smearTime` 160 ms, on for light (`smearOnLight` 1) and off for heavy (`smearOnHeavy` 0, since v0.22). The heavy shows only the sword trail (`trailWHeavy` 20, `trailMaxR` 85), so it reads smaller.
+  - The user couldn't find a slider for it: nothing is labelled as the light slash. The controls are under **✨ New juice (v0.6)**: *Smear frame length / strength / duration / on light swings*.
+  - Fix to discuss with the user: make the heavy read bigger than the light (for example a bigger, longer heavy trail, or a separate smear size for light and heavy), and give these sliders labels the user will recognise, such as "Light slash size".
+
+## v0.25 · Dodge and enemy tracking
+- Dodge movement takes 150 ms. You can then attack, while your next dodge or parry unlocks 450 ms after the step began. Amber telegraphs turn toward you at up to 180°/s during the first 65% of windup. Red marks the locked strike. The Defender turns behind his shield and holds his facing through exposed recovery. Adjust all four values under Gameplay.
+- Verified in headless Chrome: attack and defense unlock thresholds, early dodge caught, bounded turns and locked directions on all four enemies, Defender guard and exposure, arrows from a secondary attacker, and both dodge directions at all four corners. Parry-led and dodge-led full-map clears passed with effects on and off.
+- Human playtest: judge the amber-to-red transition and 180°/s tracking on a phone, especially against the Berserker.
+
 ## v0.24 · Defensive gameplay
 - Parry inputs cannot refresh an active window. A miss leaves 0.25 s of vulnerable recovery. A successful targeted parry grants a 1.00 s opening for a manual counter. Both recovery values are adjustable in Gameplay. Attacking or evading cancels the active window.
 - Evades use the earliest committed attack that currently covers the player. At arena edges they try available directions. Melee attackers finish recovery before pursuing. Switching targets during a swing keeps the original contact target.
