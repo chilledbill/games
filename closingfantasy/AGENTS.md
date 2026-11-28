@@ -8,7 +8,7 @@ Instructions for AI agents working on this project. **Two agents share it**, so 
   - On a small tactical map, you click an enemy to approach it.
   - That opens a separate battle arena.
   - There are four enemies: Grunt, Archer, Defender and Berserker.
-- **Current focus: game feel** (juice: hit feedback, parry, dodge). **Gameplay systems are out of scope** unless the user asks for them.
+- **Current focus: defensive gameplay** (timed parries, positional dodges and readable enemy commitments). Preserve the tuned game feel.
 
 ## Where things live
 | What | Path | Role |

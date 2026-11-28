@@ -3,6 +3,12 @@
 Newest first. Every build also has the same notes in the in-game **Build notes** panel (left side).
 Numbered copies of each build live in `D:\claudegames\0ClosingFantasy` as `ClosingFantasy_vNN_Name.html`.
 
+## v0.24 · Defensive gameplay
+- Parry inputs cannot refresh an active window. A miss leaves 0.25 s of vulnerable recovery. A successful targeted parry grants a 1.00 s opening for a manual counter. Both recovery values are adjustable in Gameplay. Attacking or evading cancels the active window.
+- Evades use the earliest committed attack that currently covers the player. At arena edges they try available directions. Melee attackers finish recovery before pursuing. Switching targets during a swing keeps the original contact target.
+- Headless Chrome passed parry-led and dodge-led full-map clears with effects on and off, repeated parry inputs, secondary Archer and melee threats, arrow reflection, three-light Grunt kills, both evade inputs at all four corners, and guarded and exposed Defender hits.
+- Playtest next on a phone to judge secondary attack readability and the feel of an evade redirected along a wall.
+
 ## v0.23 · Your tuning as defaults
 - The user's second tuning export (193 values) is now the built-in default set.
 - Settings added after that export keep their own defaults: trail cut on guard, dull block, blocked knockback and push-back, smear on/off per swing.
